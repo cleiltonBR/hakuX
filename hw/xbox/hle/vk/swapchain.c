@@ -1320,6 +1320,7 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
         }
     }
     bool nis_done = false;
+    bool nis_sharpen_only = false;
     nis_status(1, nis ? 1 : 0);
     nis_status(2, 0);
     nis_status(3, 0);
@@ -1331,38 +1332,43 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
     if (g_ps.have && nis) {
         const float nw = sx * (float)ww, nh = sy * (float)wh;
         const uint32_t target_w = (uint32_t)(nw + 0.5f), target_h = (uint32_t)(nh + 0.5f);
-        /* NIS supports upscaling by at most 2x per axis. For larger display
-         * scales, let NIS produce a 2x intermediate image; the existing
-         * presentation pass then performs only the final enlargement. */
-        const uint32_t nis_w = MIN(target_w, g_ps.f.w * 2u);
-        const uint32_t nis_h = MIN(target_h, g_ps.f.h * 2u);
-        const float nrx = (float)g_ps.f.w / (float)nis_w;
-        const float nry = (float)g_ps.f.h / (float)nis_h;
-        nis_status(6, (int)nis_w);
-        nis_status(7, (int)nis_h);
-        if (nis_w >= g_ps.f.w && nis_h >= g_ps.f.h &&
-            nrx >= 0.5f && nrx <= 1.0f && nry >= 0.5f && nry <= 1.0f) {
-            if (nis_dispatch(cb, f, src, g_ps.f.w, g_ps.f.h, nis_w, nis_h, nis_sharpness)) {
+        const bool requires_downscale = target_w < g_ps.f.w || target_h < g_ps.f.h;
+        if (requires_downscale) {
+            /* NVScaler at 1:1 performs the SDK's adaptive sharpening without
+             * requesting an unsupported reduction. The normal area pass
+             * remains responsible for the final downscale/aspect mapping. */
+            nis_status(6, (int)g_ps.f.w);
+            nis_status(7, (int)g_ps.f.h);
+            if (nis_dispatch(cb, f, src, g_ps.f.w, g_ps.f.h,
+                             g_ps.f.w, g_ps.f.h, nis_sharpness)) {
                 src = g_ps.nis_out_view;
                 nis_done = true;
-                if (nis_w != target_w || nis_h != target_h) {
-                    static uint32_t last_target_w, last_target_h, last_nis_w, last_nis_h;
-                    if (target_w != last_target_w || target_h != last_target_h ||
-                        nis_w != last_nis_w || nis_h != last_nis_h) {
-                        hle_log("hakuX-hle-back", "NIS two-stage upscale: %ux%u -> %ux%u (final presentation %ux%u)",
-                                g_ps.f.w, g_ps.f.h, nis_w, nis_h, target_w, target_h);
-                        last_target_w = target_w; last_target_h = target_h;
-                        last_nis_w = nis_w; last_nis_h = nis_h;
-                    }
-                }
+                nis_sharpen_only = true;
             }
         } else {
-            nis_status(3, 5);
-            static bool reported_scale_range;
-            if (!reported_scale_range) {
-                hle_log("hakuX-hle-back", "NIS dispatch skipped: no supported upscale stage for target %ux%u from %ux%u",
-                        target_w, target_h, g_ps.f.w, g_ps.f.h);
-                reported_scale_range = true;
+            /* NIS supports upscaling by at most 2x per axis. For larger
+             * display scales, render a <=2x intermediate and let final
+             * presentation perform the remaining enlargement. */
+            const uint32_t nis_w = MIN(target_w, g_ps.f.w * 2u);
+            const uint32_t nis_h = MIN(target_h, g_ps.f.h * 2u);
+            const float nrx = (float)g_ps.f.w / (float)nis_w;
+            const float nry = (float)g_ps.f.h / (float)nis_h;
+            nis_status(6, (int)nis_w);
+            nis_status(7, (int)nis_h);
+            if (nis_w >= g_ps.f.w && nis_h >= g_ps.f.h &&
+                nrx >= 0.5f && nrx <= 1.0f && nry >= 0.5f && nry <= 1.0f) {
+                if (nis_dispatch(cb, f, src, g_ps.f.w, g_ps.f.h, nis_w, nis_h, nis_sharpness)) {
+                    src = g_ps.nis_out_view;
+                    nis_done = true;
+                }
+            } else {
+                nis_status(3, 5);
+                static bool reported_scale_range;
+                if (!reported_scale_range) {
+                    hle_log("hakuX-hle-back", "NIS dispatch skipped: unsupported upscale target %ux%u from %ux%u",
+                            target_w, target_h, g_ps.f.w, g_ps.f.h);
+                    reported_scale_range = true;
+                }
             }
         }
     }
@@ -1378,7 +1384,7 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
         const float rx = (float)g_ps.f.w / vw, ry = (float)g_ps.f.h / vh;
         unsigned p = P_BILINEAR;
         float pc[12] = { -sx, -sy, sx, sy, 0.0f, 0.0f, 0.0f, 0.0f, g_ps.rot[0], g_ps.rot[1], g_ps.rot[2], g_ps.rot[3] };
-        if (!nis_done && (rx > 1.01f || ry > 1.01f) && average && g_ps.pipe[P_AREA]) {
+        if ((!nis_done || nis_sharpen_only) && (rx > 1.01f || ry > 1.01f) && average && g_ps.pipe[P_AREA]) {
             p = P_AREA;
             pc[4] = rx;
             pc[5] = ry;
@@ -1390,7 +1396,7 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
             pc[7] = (float)g_ps.f.h;
         }
         quad(cb, f, 0, g_ps.pipe[p], src, pc, iw, ih);
-        nis_status(8, nis_done ? 3 : p == P_AREA ? 1 : p == P_SGSR ? 2 : 0);
+        nis_status(8, nis_done ? (nis_sharpen_only ? 4 : 3) : p == P_AREA ? 1 : p == P_SGSR ? 2 : 0);
         log_path(p, fxaa_done, nis_done, (uint32_t)(vw + 0.5f), (uint32_t)(vh + 0.5f));
     }
     T.vkCmdEndRendering(cb);
