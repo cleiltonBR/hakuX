@@ -1332,11 +1332,11 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
     if (g_ps.have && nis) {
         const float nw = sx * (float)ww, nh = sy * (float)wh;
         const uint32_t target_w = (uint32_t)(nw + 0.5f), target_h = (uint32_t)(nh + 0.5f);
-        const bool requires_downscale = target_w < g_ps.f.w || target_h < g_ps.f.h;
+        const bool requires_downscale = target_w <= g_ps.f.w || target_h <= g_ps.f.h;
         if (requires_downscale) {
-            /* NVScaler at 1:1 performs the SDK's adaptive sharpening without
-             * requesting an unsupported reduction. The normal area pass
-             * remains responsible for the final downscale/aspect mapping. */
+            /* Use the SDK's 1:1 path whenever either destination axis does not
+             * enlarge. This preserves the NIS sharpened image as the source
+             * for the final area/bilinear presentation pass. */
             nis_status(6, (int)g_ps.f.w);
             nis_status(7, (int)g_ps.f.h);
             if (nis_dispatch(cb, f, src, g_ps.f.w, g_ps.f.h,
