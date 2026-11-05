@@ -92,6 +92,9 @@ fun SettingsScreen(
   var cas by remember { mutableStateOf(prefs.cas) }
   var casSharpness by remember { mutableStateOf(prefs.casSharpness) }
   var casSharpnessDialog by remember { mutableStateOf(false) }
+  var nis by remember { mutableStateOf(prefs.nis) }
+  var nisSharpness by remember { mutableStateOf(prefs.nisSharpness) }
+  var nisSharpnessDialog by remember { mutableStateOf(false) }
   var upscale by remember { mutableStateOf(prefs.upscaleFilter) }
   var upscaleDialog by remember { mutableStateOf(false) }
   var format by remember { mutableStateOf(prefs.screenFormat) }
@@ -311,6 +314,17 @@ fun SettingsScreen(
         onChange = { fxaa = it; prefs.fxaa = it },
       )
       SwitchItem(
+        title = stringResource(R.string.settings_nis),
+        summary = stringResource(R.string.settings_nis_desc) + " " + stringResource(R.string.settings_applies_next_start),
+        checked = nis,
+        onChange = { nis = it; prefs.nis = it },
+      )
+      ListItem(
+        headlineContent = { Text(stringResource(R.string.settings_nis_sharpness)) },
+        supportingContent = { Text(stringResource(R.string.settings_nis_sharpness_value, (nisSharpness * 100).toInt())) },
+        modifier = Modifier.clickable { nisSharpnessDialog = true },
+      )
+      SwitchItem(
         title = stringResource(R.string.settings_cas),
         summary = stringResource(R.string.settings_cas_desc) + " " + stringResource(R.string.settings_applies_next_start),
         checked = cas,
@@ -447,6 +461,16 @@ fun SettingsScreen(
       current = aspect,
       onPick = { aspect = it; prefs.aspectRatio = it; aspectDialog = false },
       onDismiss = { aspectDialog = false },
+    )
+  }
+  if (nisSharpnessDialog) {
+    val values = (0..10).map { it / 10.0f }
+    ChoiceDialog(
+      title = stringResource(R.string.settings_nis_sharpness),
+      options = values.map { it to stringResource(R.string.settings_nis_sharpness_value, (it * 100).toInt()) },
+      current = nisSharpness,
+      onPick = { nisSharpness = it; prefs.nisSharpness = it; nisSharpnessDialog = false },
+      onDismiss = { nisSharpnessDialog = false },
     )
   }
   if (casSharpnessDialog) {
