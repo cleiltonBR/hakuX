@@ -1306,10 +1306,18 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
         const float nw = sx * (float)ww, nh = sy * (float)wh;
         const float nrx = (float)g_ps.f.w / nw, nry = (float)g_ps.f.h / nh;
         const uint32_t ow = (uint32_t)(nw + 0.5f), oh = (uint32_t)(nh + 0.5f);
-        if (nrx >= 0.5f && nrx <= 1.0f && nry >= 0.5f && nry <= 1.0f &&
-            nis_dispatch(cb, f, src, g_ps.f.w, g_ps.f.h, ow, oh, nis_sharpness)) {
-            src = g_ps.nis_out_view;
-            nis_done = true;
+        if (nrx >= 0.5f && nrx <= 1.0f && nry >= 0.5f && nry <= 1.0f) {
+            if (nis_dispatch(cb, f, src, g_ps.f.w, g_ps.f.h, ow, oh, nis_sharpness)) {
+                src = g_ps.nis_out_view;
+                nis_done = true;
+            }
+        } else {
+            static bool reported_scale_range;
+            if (!reported_scale_range) {
+                hle_log("hakuX-hle-back", "NIS dispatch skipped: scale ratio outside supported range (input/output %.3f x %.3f; expected 0.5..1.0)",
+                        nrx, nry);
+                reported_scale_range = true;
+            }
         }
     }
     VkImage dst = g_ps.img[g_ps.idx];
