@@ -35,6 +35,7 @@
 #include "hw/xbox/hle/vk/display.h"
 #include "hw/xbox/hle/vk/quirks.h"
 #include "hw/xbox/hle/vk/swapchain.h"
+#include "hw/xbox/hle/vk/nis_coefficients.h"
 #include "nis_shader_sources.h"
 
 #include <string.h>
@@ -1086,6 +1087,74 @@ static void barrier(VkCommandBuffer cb, VkImage img, VkImageLayout from, VkImage
     T.vkCmdPipelineBarrier2(cb, &di);
 }
 
+static bool nis_output_target(uint32_t w, uint32_t h)
+{
+    if (g_ps.nis_out && g_ps.nis_out_w == w && g_ps.nis_out_h == h) return true;
+    if (g_ps.nis_out) {
+        idle();
+        nis_image_drop(&g_ps.nis_out, &g_ps.nis_out_mem, &g_ps.nis_out_view);
+    }
+    VkFormatProperties fp; vkGetPhysicalDeviceFormatProperties(g_hvk.phys, VK_FORMAT_R8G8B8A8_UNORM, &fp);
+    const VkFormatFeatureFlags need = VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT | VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT;
+    if ((fp.optimalTilingFeatures & need) != need) return false;
+    if (!nis_image_make(w, h, VK_FORMAT_R8G8B8A8_UNORM,
+            VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+            &g_ps.nis_out, &g_ps.nis_out_mem, &g_ps.nis_out_view)) return false;
+    g_ps.nis_out_w = w; g_ps.nis_out_h = h; g_ps.nis_out_layout = VK_IMAGE_LAYOUT_UNDEFINED;
+    return true;
+}
+
+static bool nis_dispatch(VkCommandBuffer cb, PsFrame *frame, VkImageView input,
+                         uint32_t input_w, uint32_t input_h, uint32_t output_w, uint32_t output_h,
+                         float sharpness)
+{
+    if (!g_ps.nis_resources_ready || !g_ps.nis_pipe || !input ||
+        output_w < 2 || output_h < 2 || output_w > 8192 || output_h > 8192 ||
+        !nis_output_target(output_w, output_h)) return false;
+    uint8_t *config = g_ps.nis_config_map + (size_t)(frame - g_ps.fr) * g_ps.nis_config_stride;
+    if (!hle_nis_update_scaler_config(config, sizeof(float) * 64, sharpness,
+                                      input_w, input_h, output_w, output_h)) return false;
+    VkDescriptorBufferInfo buffer = { g_ps.nis_config,
+        (VkDeviceSize)(frame - g_ps.fr) * g_ps.nis_config_stride, sizeof(float) * 64 };
+    VkDescriptorImageInfo sampler = { .sampler = g_ps.smp };
+    VkDescriptorImageInfo images[4] = {
+        { .imageView = input, .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL },
+        { .imageView = g_ps.nis_out_view, .imageLayout = VK_IMAGE_LAYOUT_GENERAL },
+        { .imageView = g_ps.nis_coef_scale_view, .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL },
+        { .imageView = g_ps.nis_coef_usm_view, .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL }
+    };
+    VkWriteDescriptorSet writes[6] = {
+        { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstSet = frame->nis_set, .dstBinding = 0,
+          .descriptorCount = 1, .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .pBufferInfo = &buffer },
+        { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstSet = frame->nis_set, .dstBinding = 1,
+          .descriptorCount = 1, .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER, .pImageInfo = &sampler },
+        { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstSet = frame->nis_set, .dstBinding = 2,
+          .descriptorCount = 1, .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, .pImageInfo = &images[0] },
+        { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstSet = frame->nis_set, .dstBinding = 3,
+          .descriptorCount = 1, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, .pImageInfo = &images[1] },
+        { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstSet = frame->nis_set, .dstBinding = 4,
+          .descriptorCount = 1, .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, .pImageInfo = &images[2] },
+        { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstSet = frame->nis_set, .dstBinding = 5,
+          .descriptorCount = 1, .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, .pImageInfo = &images[3] }
+    };
+    T.vkUpdateDescriptorSets(g_hvk.dev, ARRAY_SIZE(writes), writes, 0, NULL);
+    const VkPipelineStageFlags2 old_stage = g_ps.nis_out_layout == VK_IMAGE_LAYOUT_UNDEFINED ?
+        VK_PIPELINE_STAGE_2_NONE : VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+    const VkAccessFlags2 old_access = g_ps.nis_out_layout == VK_IMAGE_LAYOUT_UNDEFINED ? 0 : VK_ACCESS_2_SHADER_SAMPLED_READ_BIT;
+    barrier(cb, g_ps.nis_out, g_ps.nis_out_layout, VK_IMAGE_LAYOUT_GENERAL, old_stage, old_access,
+            VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
+    T.vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_COMPUTE, g_ps.nis_pipe);
+    T.vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_COMPUTE, g_ps.nis_pl, 0, 1, &frame->nis_set, 0, NULL);
+    uint32_t gx = 0, gy = 0;
+    hle_nis_get_dispatch_size(output_w, output_h, &gx, &gy);
+    if (!gx || !gy) return false;
+    T.vkCmdDispatch(cb, gx, gy, 1);
+    barrier(cb, g_ps.nis_out, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+            VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
+    g_ps.nis_out_layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    return true;
+}
 /* A quad of pipeline p over rect (clip space) into the rendering open. */
 static void quad(VkCommandBuffer cb, PsFrame *f, unsigned set, VkPipeline p, VkImageView src,
                  const float pc[12], uint32_t w, uint32_t h)
