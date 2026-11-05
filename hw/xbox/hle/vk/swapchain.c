@@ -1109,12 +1109,40 @@ static bool nis_dispatch(VkCommandBuffer cb, PsFrame *frame, VkImageView input,
                          uint32_t input_w, uint32_t input_h, uint32_t output_w, uint32_t output_h,
                          float sharpness)
 {
-    if (!g_ps.nis_resources_ready || !g_ps.nis_pipe || !input ||
-        output_w < 2 || output_h < 2 || output_w > 8192 || output_h > 8192 ||
-        !nis_output_target(output_w, output_h)) return false;
+    /* Report the exact reason when NIS cannot run; do not silently fall back. */
+    static int last_failure = -1;
+    static uint32_t last_w, last_h, last_ow, last_oh;
+    static int last_sharpness = -1;
+    int failure = 0;
+    if (!g_ps.nis_resources_ready || !g_ps.nis_pipe || !frame->nis_set ||
+        !g_ps.nis_config_map || !g_ps.nis_coef_scale_view || !g_ps.nis_coef_usm_view) {
+        failure = 1; /* compute pipeline/descriptors/coefficients not ready */
+    } else if (!input || input_w < 2 || input_h < 2 ||
+               output_w < 2 || output_h < 2 || output_w > 8192 || output_h > 8192) {
+        failure = 2; /* invalid source or destination dimensions */
+    } else if (!nis_output_target(output_w, output_h)) {
+        failure = 3; /* unsupported storage format or output allocation failed */
+    }
+    if (failure) {
+        if (failure != last_failure) {
+            hle_log("hakuX-hle-back", "NIS dispatch skipped: reason=%d ready=%d pipe=%d set=%d config=%d coef=%d/%d input=%ux%u output=%ux%u",
+                    failure, g_ps.nis_resources_ready, g_ps.nis_pipe != VK_NULL_HANDLE,
+                    frame->nis_set != VK_NULL_HANDLE, g_ps.nis_config_map != NULL,
+                    g_ps.nis_coef_scale_view != VK_NULL_HANDLE, g_ps.nis_coef_usm_view != VK_NULL_HANDLE,
+                    input_w, input_h, output_w, output_h);
+            last_failure = failure;
+        }
+        return false;
+    }
     uint8_t *config = g_ps.nis_config_map + (size_t)(frame - g_ps.fr) * g_ps.nis_config_stride;
     if (!hle_nis_update_scaler_config(config, sizeof(float) * 64, sharpness,
-                                      input_w, input_h, output_w, output_h)) return false;
+                                      input_w, input_h, output_w, output_h)) {
+        if (last_failure != 4) hle_log("hakuX-hle-back", "NIS dispatch skipped: configuration rejected (%ux%u -> %ux%u)",
+                                       input_w, input_h, output_w, output_h);
+        last_failure = 4;
+        return false;
+    }
+    last_failure = 0;
     VkDescriptorBufferInfo buffer = { g_ps.nis_config,
         (VkDeviceSize)(frame - g_ps.fr) * g_ps.nis_config_stride, sizeof(float) * 64 };
     VkDescriptorImageInfo sampler = { .sampler = g_ps.smp };
@@ -1154,6 +1182,14 @@ static bool nis_dispatch(VkCommandBuffer cb, PsFrame *frame, VkImageView input,
             VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
             VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
     g_ps.nis_out_layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    const int sharp_pct = (int)(sharpness * 100.0f + 0.5f);
+    if (input_w != last_w || input_h != last_h || output_w != last_ow ||
+        output_h != last_oh || sharp_pct != last_sharpness) {
+        hle_log("hakuX-hle-back", "NIS dispatch EXECUTED: %ux%u -> %ux%u, sharpness=%d%%, groups=%ux%u",
+                input_w, input_h, output_w, output_h, sharp_pct, gx, gy);
+        last_w = input_w; last_h = input_h; last_ow = output_w; last_oh = output_h;
+        last_sharpness = sharp_pct;
+    }
     return true;
 }
 /* A quad of pipeline p over rect (clip space) into the rendering open. */
