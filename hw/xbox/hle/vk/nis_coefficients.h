@@ -8,6 +8,7 @@
 #define HW_XBOX_HLE_VK_NIS_COEFFICIENTS_H
 
 #include <stddef.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
