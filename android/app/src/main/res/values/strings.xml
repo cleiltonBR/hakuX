@@ -196,7 +196,7 @@
   <string name="settings_upscale">Upscaling filter</string>
   <string name="settings_upscale_desc">For a picture smaller than the screen.</string>
   <string name="settings_upscale_bilinear">Bilinear</string>
-  <string name="settings_upscale_sgsr">Snapdragon GSR (sharper edges)</string>
+  <string name="settings_upscale_sgsr">Snapdragon GSR (sharper edges)</string>\n  <string name="settings_upscale_fsr">AMD FidelityFX Super Resolution 1.0</string>
   <string name="settings_section_console">Console</string>
   <string name="settings_language">Language</string>
   <string name="settings_language_desc">Games show their text and speech in it where they have it; the others keep their own. Takes effect at the next game start.</string>
