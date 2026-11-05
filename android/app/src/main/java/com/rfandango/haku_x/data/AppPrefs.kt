@@ -102,7 +102,7 @@ class AppPrefs(context: Context) {
 
   /** Enable RCAS (FSR's Contrast Adaptive Sharpening), only when FSR is selected. */
   var cas: Boolean
-    get() = sp.getBoolean(NativeCoreActivity.PREF_CAS, false)
+    get() = sp.getBoolean(NativeCoreActivity.PREF_CAS, true)
     set(value) = sp.edit { putBoolean(NativeCoreActivity.PREF_CAS, value) }
 
   /** RCAS strength in stops, 0.0-2.0 (read at game start). */
