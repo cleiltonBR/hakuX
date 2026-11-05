@@ -250,6 +250,8 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     args += "upscale=${settings.upscaleFilter}"
     args += "cas=${if (settings.cas) 1 else 0}"
     args += "cas_sharpness=${settings.casSharpness}"
+    args += "aniso=${if (AppPrefs(this).anisotropyEnabled) 1 else 0}"
+    args += "aniso_level=${AppPrefs(this).anisotropyLevel}"
     /* The console's video settings (widescreen, 480p/720p/1080i, the cable)
      * and its language. */
     args += "video=%x".format(settings.videoFlags())
@@ -779,9 +781,12 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
       nativeSetCas(prefs.cas, prefs.casSharpness)
     }
     val scaleValues = (1..4).toList()
+    val anisoLevels = listOf(1, 2, 4, 8, 16)
     val entries = arrayOf(
       "Escala de resolução: ${prefs.renderScale}x (reinicie o jogo para aplicar)",
       "Filtro: ${modeNames[modes.indexOf(prefs.upscaleFilter).coerceAtLeast(0)]}",
+      "Filtro anisotrópico: ${if (prefs.anisotropyEnabled) "Ativado" else "Desativado"} (reinicie o jogo)",
+      "Nível anisotrópico: ${prefs.anisotropyLevel}x (reinicie o jogo)",
       "CAS: ${if (prefs.cas) "Ativado" else "Desativado"}",
       "Intensidade CAS: ${"%.1f".format(java.util.Locale.US, prefs.casSharpness)}",
     )
@@ -806,11 +811,23 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
               showRuntimeGraphics()
             }.setNegativeButton(android.R.string.cancel, null))
           2 -> {
+            prefs.anisotropyEnabled = !prefs.anisotropyEnabled
+            showRuntimeGraphics()
+          }
+          3 -> showMenuDialog(AlertDialog.Builder(this)
+            .setTitle("Nível do filtro anisotrópico")
+            .setSingleChoiceItems(anisoLevels.map { "${it}x" }.toTypedArray(),
+              anisoLevels.indexOf(prefs.anisotropyLevel).coerceAtLeast(0)) { dialog, selected ->
+              prefs.anisotropyLevel = anisoLevels[selected]
+              dialog.dismiss()
+              showRuntimeGraphics()
+            }.setNegativeButton(android.R.string.cancel, null))
+          4 -> {
             prefs.cas = !prefs.cas
             refresh()
             showRuntimeGraphics()
           }
-          3 -> {
+          5 -> {
             val values = (0..10).map { it * 0.2f }
             val labels = values.map { "%.1f".format(java.util.Locale.US, it) }.toTypedArray()
             val selected = values.indexOfFirst { kotlin.math.abs(it - prefs.casSharpness) < 0.001f }.coerceAtLeast(0)
@@ -1216,6 +1233,8 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     const val PREF_CAS = "cas_enabled"
     const val PREF_CAS_SHARPNESS = "cas_sharpness"
     const val PREF_UPSCALE = "upscale_filter"
+    const val PREF_ANISO = "anisotropy_enabled"
+    const val PREF_ANISO_LEVEL = "anisotropy_level"
     const val UPSCALE_BILINEAR = "bilinear"
     const val UPSCALE_SGSR = "sgsr"
     const val UPSCALE_FSR = "fsr"
