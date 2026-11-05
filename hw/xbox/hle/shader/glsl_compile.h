@@ -21,9 +21,17 @@ typedef enum HleShaderStage {
 
 void hle_glsl_init(void);
 void hle_glsl_finalize(void);
+/* Optional in-memory GLSL include resolver. The returned data must remain
+ * valid until compilation returns; set *length to its byte length. */
+typedef const char *(*HleShaderIncludeFn)(void *ctx, const char *name,
+                                          size_t *length);
+
 /* Returns g_malloc'd SPIR-V words (free with g_free) or NULL; logs errors
  * with tag hakuX-hle-glsl. */
 uint32_t *hle_glsl_compile(HleShaderStage stage, const char *src,
                            size_t *nwords);
+uint32_t *hle_glsl_compile_with_includes(HleShaderStage stage, const char *src,
+                                        HleShaderIncludeFn include, void *ctx,
+                                        size_t *nwords);
 
 #endif
