@@ -1152,7 +1152,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     const val PREF_FXAA = "fxaa"
     const val PREF_UPSCALE = "upscale_filter"
     const val UPSCALE_BILINEAR = "bilinear"
-    const val UPSCALE_SGSR = "sgsr"
+    const val UPSCALE_SGSR = "sgsr"\n    const val UPSCALE_FSR = "fsr"
 
     /** fps, average frame time (ms), last frame time (ms), 1 if push-buffer decoding renders. */
     @JvmStatic
