@@ -250,6 +250,8 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     args += "upscale=${settings.upscaleFilter}"
     args += "cas=${if (settings.cas) 1 else 0}"
     args += "cas_sharpness=${settings.casSharpness}"
+    args += "nis=${if (settings.nis) 1 else 0}"
+    args += "nis_sharpness=${settings.nisSharpness}"
     args += "aniso=${if (AppPrefs(this).anisotropyEnabled) 1 else 0}"
     args += "aniso_level=${AppPrefs(this).anisotropyLevel}"
     /* The console's video settings (widescreen, 480p/720p/1080i, the cable)
@@ -1314,6 +1316,10 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     /** Change FSR's RCAS enablement and strength while the game runs. */
     @JvmStatic
     external fun nativeSetCas(enabled: Boolean, sharpness: Float)
+
+    /** Change NVIDIA Image Scaling while the game runs (sharpness 0-1). */
+    @JvmStatic
+    external fun nativeSetNis(enabled: Boolean, sharpness: Float)
 
     external fun nativeSetRenderScale(scale: Int)
 
