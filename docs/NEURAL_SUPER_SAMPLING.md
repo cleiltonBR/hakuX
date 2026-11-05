@@ -19,11 +19,21 @@ Pin exact SDK, model, and emulation-layer revisions before importing binaries or
 1. The SDK exposes a Vulkan backend and Android AArch64 build target. Its current integration guide documents NSS and NFRU.
 2. NSS is temporal super-resolution, not a spatial-only drop-in shader. Its dispatch contract requires current color, depth, motion vectors, jitter offset, frame time, exposure/camera parameters, output, and temporal history.
 3. The HakuX presenter currently receives a completed color frame and performs post-processing. The existing NIS integration is spatial. It does not currently provide NSS with a verified per-frame motion-vector buffer, camera jitter, near/far planes, or vertical FOV.
-4. The HLE renderer owns guest color/depth surfaces, but the exact depth resource, coordinate convention, and lifetime suitable for NSS still need to be traced and validated. A guest depth buffer is not automatically a valid NSS depth input.
+4. Depth-resource tracing is now partially confirmed in the HLE Vulkan backend: `vk/surf.c` creates depth images with depth/stencil-attachment, sampled, and transfer usage; `vk/back.c` binds the active `HleVkSurf` as the render pass depth attachment and stores it; `vk/zread.c` creates depth/stencil image views and can sample the depth image in a conversion pass. `vk/draw.c` also identifies guest depth surfaces used as shadow-buffer textures. This proves that real depth resources exist and are used by rendering, but does not yet prove that a stable, correctly normalized depth image can be handed to NSS at the presenter boundary. The depth format, reversed-Z convention, near/far reconstruction, frame association, and synchronization/lifetime still need validation. The existing ZREAD path converts depth into a guest color texture; it is not itself an NSS input bridge.
 5. The SDK requires Vulkan 1.3+, VK_ARM_tensors, VK_ARM_data_graph, synchronization2, and shader/device features selected by the shader path. The SDK documentation describes Arm's ML Emulation Layer for systems without native ML extensions.
 6. Turnip provides the Vulkan driver path used by this project, but does not itself imply that the Arm ML extensions exist. The Arm emulation layer must be packaged, discovered, enabled in instance creation, and validated against the exact Turnip build.
 7. The project creates its own Vulkan instance/device in hw/xbox/hle/vk/vkdev.c. Android's app packages the native core as a prebuilt library; the native CI/build pipeline must be extended rather than only changing the Android Gradle module.
 8. A software/emulated ML graph path can execute on Vulkan compute hardware, but its performance on Adreno/Turnip is unknown and must be measured. Do not promise a speedup or assume that successful compilation means the runtime path works.
+
+
+
+### Confirmed HLE depth path (2026-11-05)
+
+- `hw/xbox/hle/vk/surf.c`: HLE-owned depth surfaces are allocated as Vulkan depth/stencil images and include `VK_IMAGE_USAGE_SAMPLED_BIT`, `VK_IMAGE_USAGE_TRANSFER_SRC_BIT`, and `VK_IMAGE_USAGE_TRANSFER_DST_BIT`.
+- `hw/xbox/hle/vk/back.c`: the active render-target/depth pair is acquired before dynamic rendering; the depth surface is transitioned to attachment layout, bound through `VkRenderingInfo.pDepthAttachment`, and stored after the pass. The depth surface's write generation is tracked.
+- `hw/xbox/hle/vk/zread.c`: depth and stencil aspect views are created and sampled in a depth-to-color conversion pass. This path is used for guest ZREAD semantics, not a temporal upscaler interface.
+- `hw/xbox/hle/vk/draw.c`: guest depth surfaces can be recognized as shadow-buffer textures, and depth-write barriers exist for local framebuffer reads.
+- Remaining blocker: the presenter in `swapchain.c` consumes the completed color frame, not a synchronized color+depth+motion bundle. We have not yet found a verified per-pixel motion-vector source or camera jitter/near/far/FOV metadata. Therefore NSS still must not be dispatched.
 
 ## Integration stages
 
