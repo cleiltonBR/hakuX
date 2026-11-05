@@ -30,6 +30,9 @@ void nc_present_set_fxaa(bool on);
  * Snapdragon Game Super Resolution (a larger one is always averaged down). */
 enum { NC_UPSCALE_BILINEAR, NC_UPSCALE_SGSR, NC_UPSCALE_FSR };   /* swapchain.h HLE_UPSCALE_*'s */
 void nc_present_set_upscale(int mode);
+/* RCAS (FSR's Contrast Adaptive Sharpening), only on the FSR path. */
+void nc_present_set_cas(bool on);
+void nc_present_set_cas_sharpness(float sharpness);
 /* Frames the title presented per second over the last half second, their
  * average interval, and the last one's (ms). */
 void nc_present_stats(float *fps, float *avg_ms, float *last_ms);
