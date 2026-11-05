@@ -218,7 +218,7 @@ FSR_PASS = r"""    /* FSR 1.0 (HAKUX_FSR): use EASU when the frame must be enlar
     bool use_fsr = false;
     bool fsr_easu = false;
 #if HAKUX_FSR
-    if (g_ps.have && upscale == HLE_UPSCALE_FSR && g_ps.pipe[P_EASU] && g_ps.pipe[P_RCAS]) {
+    if (g_ps.have && !nis_done && upscale == HLE_UPSCALE_FSR && g_ps.pipe[P_EASU] && g_ps.pipe[P_RCAS]) {
         const float fvw = sx * (float)ww, fvh = sy * (float)wh;
         const bool fdown = (g_ps.f.w > fvw * 1.01f || g_ps.f.h > fvh * 1.01f) && average && g_ps.pipe[P_AREA];
         const bool fup = (float)g_ps.f.w < fvw * 0.99f || (float)g_ps.f.h < fvh * 0.99f;
