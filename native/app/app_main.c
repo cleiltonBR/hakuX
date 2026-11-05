@@ -171,6 +171,11 @@ EXPORT JNIEXPORT void JNICALL Java_com_rfandango_haku_1x_NativeCoreActivity_nati
     nc_present_set_cas_sharpness(sharpness);
 }
 
+EXPORT JNIEXPORT void JNICALL Java_com_rfandango_haku_1x_NativeCoreActivity_nativeSetRenderScale(JNIEnv *env, jclass cls, jint scale)
+{
+    nc_hle_set_render_scale(scale);
+}
+
 /* Savestates (native/state): the running game saved to path, on the
  * caller's thread (not the UI's: a frame and the write). Null: saved; else
  * why not. */
