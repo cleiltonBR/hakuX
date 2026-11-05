@@ -778,7 +778,9 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
       nativeSetUpscale(current)
       nativeSetCas(prefs.cas, prefs.casSharpness)
     }
+    val scaleValues = (1..4).toList()
     val entries = arrayOf(
+      "Escala de resolução: ${prefs.renderScale}x",
       "Filtro: ${modeNames[modes.indexOf(prefs.upscaleFilter).coerceAtLeast(0)]}",
       "CAS: ${if (prefs.cas) "Ativado" else "Desativado"}",
       "Intensidade CAS: ${"%.1f".format(java.util.Locale.US, prefs.casSharpness)}",
@@ -788,6 +790,15 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
       .setItems(entries) { _, which ->
         when (which) {
           0 -> showMenuDialog(AlertDialog.Builder(this)
+            .setTitle("Escala de resolução")
+            .setSingleChoiceItems(scaleValues.map { "${it}x" }.toTypedArray(), (prefs.renderScale - 1).coerceIn(0, 3)) { dialog, selected ->
+              val scale = scaleValues[selected]
+              prefs.renderScale = scale
+              nativeSetRenderScale(scale)
+              dialog.dismiss()
+              showRuntimeGraphics()
+            }.setNegativeButton(android.R.string.cancel, null))
+          1 -> showMenuDialog(AlertDialog.Builder(this)
             .setTitle("Filtro de imagem")
             .setSingleChoiceItems(modeNames, modes.indexOf(prefs.upscaleFilter).coerceAtLeast(0)) { dialog, selected ->
               prefs.upscaleFilter = modes[selected]
@@ -795,12 +806,12 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
               dialog.dismiss()
               showRuntimeGraphics()
             }.setNegativeButton(android.R.string.cancel, null))
-          1 -> {
+          2 -> {
             prefs.cas = !prefs.cas
             refresh()
             showRuntimeGraphics()
           }
-          2 -> {
+          3 -> {
             val values = (0..10).map { it * 0.2f }
             val labels = values.map { "%.1f".format(java.util.Locale.US, it) }.toTypedArray()
             val selected = values.indexOfFirst { kotlin.math.abs(it - prefs.casSharpness) < 0.001f }.coerceAtLeast(0)
@@ -1285,6 +1296,8 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     /** Change FSR's RCAS enablement and strength while the game runs. */
     @JvmStatic
     external fun nativeSetCas(enabled: Boolean, sharpness: Float)
+
+    external fun nativeSetRenderScale(scale: Int)
 
     /** The emulation paused (onPause) or resumed (onResume). */
     @JvmStatic
