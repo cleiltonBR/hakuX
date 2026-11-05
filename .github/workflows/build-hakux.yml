@@ -130,8 +130,20 @@ jobs:
         working-directory: android
         run: |
           chmod +x ./gradlew
-          ./gradlew assembleDebug --no-daemon \
-            -PciVersionCode="$GITHUB_RUN_NUMBER"
+          # Retry transient Maven Central / GitHub release gateway failures.
+          for attempt in 1 2 3; do
+            echo "Gradle build attempt $attempt/3"
+            if ./gradlew assembleDebug --no-daemon --refresh-dependencies \
+              -PciVersionCode="$GITHUB_RUN_NUMBER"; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              echo "Gradle failed; waiting 20 seconds before retry..."
+              sleep 20
+            fi
+          done
+          echo "Gradle build failed after 3 attempts."
+          exit 1
 
       - name: Nomear o APK
         run: |
