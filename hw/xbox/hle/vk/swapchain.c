@@ -52,6 +52,7 @@ typedef struct PsFrame {
     VkCommandBuffer cb;
     VkSemaphore acquired;       /* its swapchain image is ready */
     VkDescriptorSet set[2];     /* the window pass's, FXAA's */
+    VkDescriptorSet nis_set;
     uint64_t value;             /* its last submit's on the timeline */
     bool ramp_stale;            /* its share of the ramp buffer is behind */
 } PsFrame;
@@ -73,6 +74,17 @@ static struct {
     VkDescriptorSetLayout nis_dsl;
     VkPipelineLayout nis_pl;
     VkPipeline nis_pipe;
+    VkBuffer nis_config;
+    VkDeviceMemory nis_config_mem;
+    uint8_t *nis_config_map;
+    VkDeviceSize nis_config_stride;
+    VkSampler nis_sampler;
+    VkImage nis_coef_scale, nis_coef_usm, nis_out;
+    VkDeviceMemory nis_coef_scale_mem, nis_coef_usm_mem, nis_out_mem;
+    VkImageView nis_coef_scale_view, nis_coef_usm_view, nis_out_view;
+    uint32_t nis_out_w, nis_out_h;
+    VkImageLayout nis_out_layout;
+    bool nis_resources_ready;
     VkPipeline pipe[P_COUNT];
     VkFormat pipe_fmt;          /* the window pipelines' */
     PsFrame fr[PS_FRAMES];
@@ -482,11 +494,16 @@ static bool init(void)
     VkPipelineLayoutCreateInfo lci = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO, .setLayoutCount = 1,
         .pSetLayouts = &g_ps.dsl, .pushConstantRangeCount = 1, .pPushConstantRanges = &pcr };
-    VkDescriptorPoolSize ps[2] = { { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, PS_FRAMES * 2 },
-                                   { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, PS_FRAMES * 2 } };
+    VkDescriptorPoolSize ps[5] = {
+        { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, PS_FRAMES * 2 },
+        { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, PS_FRAMES * 3 },
+        { VK_DESCRIPTOR_TYPE_SAMPLER, PS_FRAMES },
+        { VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, PS_FRAMES * 3 },
+        { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, PS_FRAMES }
+    };
     VkDescriptorPoolCreateInfo pci = {
-        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO, .maxSets = PS_FRAMES * 2,
-        .poolSizeCount = 2, .pPoolSizes = ps };
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO, .maxSets = PS_FRAMES * 3,
+        .poolSizeCount = ARRAY_SIZE(ps), .pPoolSizes = ps };
     VkBufferCreateInfo bci = { .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, .size = PS_FRAMES * PS_RAMP,
                                .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT };
     if (T.vkCreatePipelineLayout(g_hvk.dev, &lci, NULL, &g_ps.pl) != VK_SUCCESS ||
