@@ -36,5 +36,7 @@ bool hle_present_frame(uint32_t *w, uint32_t *h);
  * false samples a frame larger than its place bilinearly too (comparisons).
  * key: what hle_present_unchanged compares next. */
 void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, bool cas, float cas_sharpness, bool nis, float nis_sharpness, uint64_t key);
+/* ready, enabled, executed, failure, input w/h, output w/h, final path (0 bilinear, 1 area, 2 SGSR, 3 NIS). */
+void hle_present_nis_status(int status[9]);
 
 #endif
