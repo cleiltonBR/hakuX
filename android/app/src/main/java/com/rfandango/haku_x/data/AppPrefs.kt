@@ -116,6 +116,16 @@ class AppPrefs(context: Context) {
       ?: NativeCoreActivity.UPSCALE_BILINEAR
     set(value) = sp.edit { putString(NativeCoreActivity.PREF_UPSCALE, value) }
 
+  /** Vulkan anisotropic texture filtering (applied when the next game starts). */
+  var anisotropyEnabled: Boolean
+    get() = sp.getBoolean(NativeCoreActivity.PREF_ANISO, true)
+    set(value) = sp.edit { putBoolean(NativeCoreActivity.PREF_ANISO, value) }
+
+  /** Requested anisotropy level: 1, 2, 4, 8 or 16 (clamped to GPU support). */
+  var anisotropyLevel: Int
+    get() = sp.getInt(NativeCoreActivity.PREF_ANISO_LEVEL, 16).coerceIn(1, 16)
+    set(value) = sp.edit { putInt(NativeCoreActivity.PREF_ANISO_LEVEL, value.coerceIn(1, 16)) }
+
   // The console's video settings, as its dashboard keeps them (EEPROM video
   // flags and the AV cable): games choose their display modes from these.
 
