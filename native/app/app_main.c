@@ -677,3 +677,4 @@ EXPORT int SDL_main(int argc, char *argv[])
     nc_log("hakuX-app", "native core: leaving");
     _exit(0); /* the core thread has no stop yet; the activity's process ends with it */
 }
+
