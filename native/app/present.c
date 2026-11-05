@@ -127,6 +127,11 @@ void nc_present_stats(float *fps, float *avg_ms, float *last_ms)
     *last_ms = g_last_ms;
 }
 
+void nc_present_nis_status(int status[9])
+{
+    hle_present_nis_status(status);
+}
+
 bool nc_present_shown(void)
 {
     return __atomic_load_n(&g_shown, __ATOMIC_RELAXED);
