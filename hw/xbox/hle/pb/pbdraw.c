@@ -157,7 +157,6 @@ typedef struct PbTex {
 static struct {
     bool on, device;
     uint32_t disp_w, disp_h;            /* the device's display (guest pixels) */
-    uint32_t render_scale;             /* scale currently applied to the Vulkan device */
     uint32_t r[0x2000 / 4];             /* the methods read here, as last written */
     bool rt_dirty;
     uint32_t rt, ds;                    /* the bound targets' object ids */
@@ -499,46 +498,6 @@ static bool g_restored_display;         /* a savestate loaded: the display set a
 
 static void kick(void);
 
-/* Apply a scale requested by Android between guest draw batches. DEVICE_RESET
- * is ordered after prior commands; Vulkan waits idle and rebuilds scaled images.
- * Render targets are recreated lazily from their guest descriptors. */
-static void runtime_scale_sync(void)
-{
-    if (!g_pd.device) return;
-    uint32_t scale = (uint32_t)hle_host_render_scale();
-    scale = MIN(MAX(scale, 1u), 4u);
-    if (scale == g_pd.render_scale) return;
-
-    const uint32_t old_scale = g_pd.render_scale;
-    kick();
-    HleCmdDevice *c = begin(HLE_OP_DEVICE_RESET, sizeof(*c));
-    memset(c, 0, sizeof(*c));
-    c->disp_w = g_pd.disp_w;
-    c->disp_h = g_pd.disp_h;
-    hle_fe_commit();
-
-    /* DEVICE_RESET drops backend images, not the guest surface catalogue.
-     * Re-send every live descriptor so render targets, textures and cube
-     * owners can be lazily rebuilt with the new scale. */
-    for (unsigned i = 0; i < g_pd.nobjs; i++) {
-        HleCmdObj *o = begin(HLE_OP_OBJ_CREATE, sizeof(*o));
-        o->s = g_pd.objs[i].d;
-        hle_fe_commit();
-    }
-
-    /* Force the next render-target bind to issue SET_RT again after the
-     * backend has discarded the old scaled images. */
-    g_pd.rt = g_pd.ds = 0;
-    g_pd.rt_obj = g_pd.ds_obj = NULL;
-    g_pd.rt_w = g_pd.rt_h = 0;
-    g_pd.frame_rt = 0;
-    g_pd.shown_id = 0;
-    g_pd.vp_key[0] = g_pd.vp_key[1] = ~0u;
-    g_pd.render_scale = scale;
-    g_pd.rt_dirty = true;
-    hle_log("hakuX-hle-pb", "runtime render scale %ux -> %ux", old_scale, scale);
-}
-
 /* The device, at the first render target: the display is that target's
  * size, or the video mode's (mode_sync). */
 static void device(uint32_t w, uint32_t h)
@@ -569,7 +528,6 @@ static void device(uint32_t w, uint32_t h)
     c->nsurf = 0;
     hle_fe_commit();
     g_pd.device = true;
-    g_pd.render_scale = (uint32_t)MIN(MAX(hle_host_render_scale(), 1), 4);
     g_pd.disp_w = w;
     g_pd.disp_h = h;
     hle_log("hakuX-hle-pb", "device %ux%u", w, h);
@@ -3929,7 +3887,6 @@ void hle_pbd_method(uint32_t m, uint32_t v)
     if (!g_pd.on || m >= 0x2000) {
         return;
     }
-    if (!g_pd.in_draw) runtime_scale_sync();
     if (g_pd.in_draw && g_pd.ndm < 12) {     /* debug: what an empty draw held */
         g_pd.dm[g_pd.ndm++] = m << 16 | (v & 0xFFFF);
     }
