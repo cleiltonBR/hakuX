@@ -35,6 +35,9 @@
 #include "hw/xbox/hle/vk/display.h"
 #include "hw/xbox/hle/vk/quirks.h"
 #include "hw/xbox/hle/vk/swapchain.h"
+#include "nis_shader_sources.h"
+
+#include <string.h>
 
 #include <android/native_window.h>
 
@@ -66,6 +69,7 @@ static struct {
     VkDeviceMemory ubo_mem;
     uint8_t *ubo_map;
     VkShaderModule vs, fs[P_COUNT];
+    VkShaderModule nis_cs;           /* optional NIS compute shader; presenter remains usable without it */
     VkPipeline pipe[P_COUNT];
     VkFormat pipe_fmt;          /* the window pipelines' */
     PsFrame fr[PS_FRAMES];
@@ -318,6 +322,38 @@ static VkShaderModule module(HleShaderStage stage, const char *head, const char 
     return m;
 }
 
+/* The SDK shader includes NIS_Scaler.h. Its source is embedded by
+ * native/cmake/hle.cmake, then supplied to glslang's include callback. */
+static const char *nis_include(void *ctx, const char *name, size_t *length)
+{
+    (void)ctx;
+    if (strcmp(name, "NIS_Scaler.h") != 0) {
+        return NULL;
+    }
+    *length = sizeof(k_hle_nis_scaler) - 1;
+    return k_hle_nis_scaler;
+}
+
+static VkShaderModule nis_compute_module(void)
+{
+    size_t n = 0;
+    g_autofree uint32_t *spv = hle_glsl_compile_with_includes(
+        HLE_SHADER_COMPUTE, k_hle_nis_main, nis_include, NULL, &n);
+    if (!spv || !n) {
+        return VK_NULL_HANDLE;
+    }
+    VkShaderModuleCreateInfo ci = {
+        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize = n * sizeof(uint32_t),
+        .pCode = spv
+    };
+    VkShaderModule shader = VK_NULL_HANDLE;
+    if (T.vkCreateShaderModule(g_hvk.dev, &ci, NULL, &shader) != VK_SUCCESS) {
+        return VK_NULL_HANDLE;
+    }
+    return shader;
+}
+
 static VkPipeline pipeline(VkShaderModule fs, VkFormat fmt)
 {
     if (!g_ps.vs || !fs) {
@@ -443,12 +479,14 @@ static bool init(void)
         }
         f->ramp_stale = true;
     }
+    g_ps.nis_cs = nis_compute_module();
     g_ps.vs = module(HLE_SHADER_VERTEX, k_vs, "");
     static const char *const body[P_COUNT] = { k_fs_bilinear, k_fs_area, k_fs_sgsr, k_fs_fxaa };
     for (unsigned i = 0; i < P_COUNT; i++) {
         g_ps.fs[i] = module(HLE_SHADER_FRAGMENT, k_fs_head, body[i]);
     }
     g_ps.pipe[P_FXAA] = pipeline(g_ps.fs[P_FXAA], VK_FORMAT_R8G8B8A8_UNORM);
+    hle_log("hakuX-hle-back", "present: NIS compute shader %s", g_ps.nis_cs ? "compiled" : "unavailable (existing filters retained)");
     hle_log("hakuX-hle-back", "present: ready (shaders: bilinear %d, averaging %d, SGSR %d, FXAA %d)",
             g_ps.fs[P_BILINEAR] != VK_NULL_HANDLE, g_ps.fs[P_AREA] != VK_NULL_HANDLE,
             g_ps.fs[P_SGSR] != VK_NULL_HANDLE, g_ps.pipe[P_FXAA] != VK_NULL_HANDLE);
