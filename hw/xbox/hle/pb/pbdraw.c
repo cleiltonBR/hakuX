@@ -517,6 +517,15 @@ static void runtime_scale_sync(void)
     c->disp_h = g_pd.disp_h;
     hle_fe_commit();
 
+    /* DEVICE_RESET drops backend images, not the guest surface catalogue.
+     * Re-send every live descriptor so render targets, textures and cube
+     * owners can be lazily rebuilt with the new scale. */
+    for (unsigned i = 0; i < g_pd.nobjs; i++) {
+        HleCmdObj *o = begin(HLE_OP_OBJ_CREATE, sizeof(*o));
+        o->s = g_pd.objs[i].d;
+        hle_fe_commit();
+    }
+
     /* Force the next render-target bind to issue SET_RT again after the
      * backend has discarded the old scaled images. */
     g_pd.rt = g_pd.ds = 0;
