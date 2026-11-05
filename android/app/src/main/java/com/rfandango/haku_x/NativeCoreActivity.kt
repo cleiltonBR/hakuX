@@ -750,6 +750,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
         updateControllerVisibility()
       },
       getString(R.string.overlay_menu_controllers) to ::showPlayers,
+      "Gráficos (FSR / CAS)" to ::showRuntimeGraphics,
     )
     if (states) {
       items += getString(R.string.overlay_menu_save_state) to { saveStates.showSlots(save = true) }
@@ -765,6 +766,56 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
         .setItems(items.map { it.first }.toTypedArray()) { _, which -> items[which].second() }
         .setNegativeButton(R.string.overlay_menu_resume, null)
     )
+  }
+
+  /** FSR/RCAS controls applied immediately to the running Vulkan presenter. */
+  private fun showRuntimeGraphics() {
+    val prefs = AppPrefs(this)
+    val modes = listOf(UPSCALE_BILINEAR, UPSCALE_SGSR, UPSCALE_FSR)
+    val modeNames = arrayOf("Bilinear", "SGSR", "FidelityFX FSR 1.0")
+    fun refresh() {
+      val current = modes.indexOf(prefs.upscaleFilter).coerceAtLeast(0)
+      nativeSetUpscale(current)
+      nativeSetCas(prefs.cas, prefs.casSharpness)
+    }
+    val entries = arrayOf(
+      "Filtro: ${modeNames[modes.indexOf(prefs.upscaleFilter).coerceAtLeast(0)]}",
+      "CAS: ${if (prefs.cas) "Ativado" else "Desativado"}",
+      "Intensidade CAS: ${"%.1f".format(java.util.Locale.US, prefs.casSharpness)}",
+    )
+    showMenuDialog(AlertDialog.Builder(this)
+      .setTitle("Gráficos durante a gameplay")
+      .setItems(entries) { _, which ->
+        when (which) {
+          0 -> showMenuDialog(AlertDialog.Builder(this)
+            .setTitle("Filtro de imagem")
+            .setSingleChoiceItems(modeNames, modes.indexOf(prefs.upscaleFilter).coerceAtLeast(0)) { dialog, selected ->
+              prefs.upscaleFilter = modes[selected]
+              refresh()
+              dialog.dismiss()
+              showRuntimeGraphics()
+            }.setNegativeButton(android.R.string.cancel, null))
+          1 -> {
+            prefs.cas = !prefs.cas
+            refresh()
+            showRuntimeGraphics()
+          }
+          2 -> {
+            val values = (0..10).map { it * 0.2f }
+            val labels = values.map { "%.1f".format(java.util.Locale.US, it) }.toTypedArray()
+            val selected = values.indexOfFirst { kotlin.math.abs(it - prefs.casSharpness) < 0.001f }.coerceAtLeast(0)
+            showMenuDialog(AlertDialog.Builder(this)
+              .setTitle("Intensidade CAS")
+              .setSingleChoiceItems(labels, selected) { dialog, index ->
+                prefs.casSharpness = values[index]
+                refresh()
+                dialog.dismiss()
+                showRuntimeGraphics()
+              }.setNegativeButton(android.R.string.cancel, null))
+          }
+        }
+      }
+      .setNegativeButton(android.R.string.cancel, null))
   }
 
   /** The players the core has a controller plugged in for (bit n: player n + 1). */
@@ -1226,6 +1277,14 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     /** The rumble the title last sent to a player: left << 16 | right. */
     @JvmStatic
     external fun nativeGetRumble(player: Int): Int
+
+    /** Change the running presenter's upscaling filter: 0 bilinear, 1 SGSR, 2 FSR. */
+    @JvmStatic
+    external fun nativeSetUpscale(mode: Int)
+
+    /** Change FSR's RCAS enablement and strength while the game runs. */
+    @JvmStatic
+    external fun nativeSetCas(enabled: Boolean, sharpness: Float)
 
     /** The emulation paused (onPause) or resumed (onResume). */
     @JvmStatic
