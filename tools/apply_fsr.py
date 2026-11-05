@@ -217,7 +217,7 @@ FSR_PASS = r"""    /* FSR 1.0 (HAKUX_FSR): EASU scales the frame up to its place
      * show it), then the window pass runs RCAS over it, through the ramp. */
     bool use_fsr = false;
 #if HAKUX_FSR
-    if (g_ps.have && upscale == HLE_UPSCALE_SGSR && g_ps.pipe[P_EASU] && g_ps.pipe[P_RCAS]) {
+    if (g_ps.have && upscale == HLE_UPSCALE_FSR && g_ps.pipe[P_EASU] && g_ps.pipe[P_RCAS]) {
         const float fvw = sx * (float)ww, fvh = sy * (float)wh;
         const bool fdown = (g_ps.f.w > fvw * 1.01f || g_ps.f.h > fvh * 1.01f) && average && g_ps.pipe[P_AREA];
         const bool fup = (float)g_ps.f.w < fvw * 0.99f || (float)g_ps.f.h < fvh * 0.99f;
@@ -251,7 +251,7 @@ FSR_SELECT = r"""} else if (use_fsr) {
             p = P_RCAS;
             src = g_ps.fs_view;
             pc[4] = 0.8706f;            /* RCAS sharpness 0.2 stops: exp2(-0.2) */
-        } else if ((rx < 0.99f || ry < 0.99f) && upscale == HLE_UPSCALE_SGSR && g_ps.pipe[P_SGSR]) {"""
+        } else if ((rx < 0.99f || ry < 0.99f) && upscale == HLE_UPSCALE_FSR && g_ps.pipe[P_SGSR]) {"""
 
 edits = [
     # (anchor, replacement)
