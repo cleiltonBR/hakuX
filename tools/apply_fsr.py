@@ -212,48 +212,54 @@ static bool fsr_target(uint32_t w, uint32_t h)
 
 """
 
-FSR_PASS = r"""    /* FSR 1.0 (HAKUX_FSR): EASU scales the frame up to its place in the
-     * window into an image of ours (once per frame, however many refreshes
-     * show it), then the window pass runs RCAS over it, through the ramp. */
+FSR_PASS = r"""    /* FSR 1.0 (HAKUX_FSR): use EASU when the frame must be enlarged.
+     * At native/output resolution, keep FSR selected and run RCAS directly
+     * on the frame. RCAS also sharpens the final image if EASU cannot allocate. */
     bool use_fsr = false;
+    bool fsr_easu = false;
 #if HAKUX_FSR
     if (g_ps.have && upscale == HLE_UPSCALE_FSR && g_ps.pipe[P_EASU] && g_ps.pipe[P_RCAS]) {
         const float fvw = sx * (float)ww, fvh = sy * (float)wh;
         const bool fdown = (g_ps.f.w > fvw * 1.01f || g_ps.f.h > fvh * 1.01f) && average && g_ps.pipe[P_AREA];
         const bool fup = (float)g_ps.f.w < fvw * 0.99f || (float)g_ps.f.h < fvh * 0.99f;
         const uint32_t ow = (uint32_t)(fvw + 0.5f), oh = (uint32_t)(fvh + 0.5f);
-        if (!fdown && fup && ow >= 2 && oh >= 2 && ow <= 8192 && oh <= 8192 && fsr_target(ow, oh)) {
-            if (g_ps.fs_serial != g_ps.serial || g_ps.fs_fxaa != fxaa_done) {
-                barrier(cb, g_ps.fs_img, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                        VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, 0,
-                        VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT);
-                rendering(cb, g_ps.fs_view, ow, oh, false);
-                const float easu[12] = { -1.0f, -1.0f, 1.0f, 1.0f,
-                                         1.0f / (float)g_ps.f.w, 1.0f / (float)g_ps.f.h,
-                                         (float)g_ps.f.w, (float)g_ps.f.h,
-                                         1.0f, 0.0f, 0.0f, 1.0f };
-                quad(cb, f, 2, g_ps.pipe[P_EASU], src, easu, ow, oh);
-                T.vkCmdEndRendering(cb);
-                barrier(cb, g_ps.fs_img, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-                        VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
-                        VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
-                g_ps.fs_serial = g_ps.serial;
-                g_ps.fs_fxaa = fxaa_done;
-            }
+        if (!fdown) {
             use_fsr = true;
+            if (fup && ow >= 2 && oh >= 2 && ow <= 8192 && oh <= 8192 && fsr_target(ow, oh)) {
+                if (g_ps.fs_serial != g_ps.serial || g_ps.fs_fxaa != fxaa_done) {
+                    barrier(cb, g_ps.fs_img, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                            VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, 0,
+                            VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT);
+                    rendering(cb, g_ps.fs_view, ow, oh, false);
+                    const float easu[12] = { -1.0f, -1.0f, 1.0f, 1.0f,
+                                             1.0f / (float)g_ps.f.w, 1.0f / (float)g_ps.f.h,
+                                             (float)g_ps.f.w, (float)g_ps.f.h,
+                                             1.0f, 0.0f, 0.0f, 1.0f };
+                    quad(cb, f, 2, g_ps.pipe[P_EASU], src, easu, ow, oh);
+                    T.vkCmdEndRendering(cb);
+                    barrier(cb, g_ps.fs_img, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+                            VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+                            VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
+                    g_ps.fs_serial = g_ps.serial;
+                    g_ps.fs_fxaa = fxaa_done;
+                }
+                fsr_easu = true;
+            }
         }
     }
 #endif
 """
 
 FSR_SELECT = r"""} else if (use_fsr) {
-            src = g_ps.fs_view;
+            if (fsr_easu) {
+                src = g_ps.fs_view;
+            }
             if (cas && cas_sharpness > 0.0f) {
                 p = P_RCAS;
                 pc[4] = exp2f(-cas_sharpness); /* RCAS strength in stops */
             } else {
-                p = P_BILINEAR; /* EASU without sharpening */
+                p = P_BILINEAR; /* EASU or native-resolution FSR without sharpening */
             }
         } else if ((rx < 0.99f || ry < 0.99f) && upscale == HLE_UPSCALE_SGSR && g_ps.pipe[P_SGSR]) {"""
 
@@ -296,7 +302,7 @@ edits = [
     ("} else if ((rx < 0.99f || ry < 0.99f) && upscale == HLE_UPSCALE_SGSR && g_ps.pipe[P_SGSR]) {",
      FSR_SELECT),
     ('p == P_AREA ? "averaged down" : p == P_SGSR ? "scaled up by SGSR" : "bilinear");',
-     'p == P_AREA ? "averaged down" : p == P_RCAS ? "scaled up by FSR 1" :\n'
+     'p == P_AREA ? "averaged down" : p == P_RCAS ? "FSR 1.0 (RCAS)" :\n'
      '            p == P_SGSR ? "scaled up by SGSR" : "bilinear");'),
 ]
 
