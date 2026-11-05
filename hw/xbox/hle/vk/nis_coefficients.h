@@ -27,6 +27,17 @@ extern "C" {
 void hle_nis_copy_coefficients(float *scaler_rgba, size_t scaler_count,
                                float *usm_rgba, size_t usm_count);
 
+/* Build the SDK constant buffer for a full-frame SDR scaler pass. The
+ * destination must hold the SDK's 256-byte aligned NISConfig structure. */
+int hle_nis_update_scaler_config(void *config, size_t config_size,
+                                 float sharpness,
+                                 uint32_t input_width, uint32_t input_height,
+                                 uint32_t output_width, uint32_t output_height);
+
+/* NIS NVScaler dispatch uses 32x24 output-pixel blocks. */
+void hle_nis_get_dispatch_size(uint32_t output_width, uint32_t output_height,
+                               uint32_t *groups_x, uint32_t *groups_y);
+
 #ifdef __cplusplus
 }
 #endif
