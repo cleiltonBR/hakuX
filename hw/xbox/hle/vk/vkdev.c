@@ -233,6 +233,32 @@ int hle_vk_init(void)
         .pApplicationName = "hakuX-hle",
         .apiVersion = force11 ? VK_API_VERSION_1_1 : VK_API_VERSION_1_3,
     };
+    /* Enumerate explicit Vulkan layers before instance creation. NSS may
+     * use Arm's ML graph/tensor emulation layers on Turnip; merely having
+     * Vulkan compute is not enough. Keep this diagnostic passive: do not
+     * enable third-party layers until their Android packaging and ordering
+     * have been verified. */
+    uint32_t nlayer = 0;
+    VkResult layer_result = vkEnumerateInstanceLayerProperties(&nlayer, NULL);
+    if (layer_result == VK_SUCCESS && nlayer) {
+        g_autofree VkLayerProperties *layers = g_new(VkLayerProperties, nlayer);
+        layer_result = vkEnumerateInstanceLayerProperties(&nlayer, layers);
+        if (layer_result == VK_SUCCESS) {
+            for (uint32_t i = 0; i < nlayer; i++) {
+                hle_log("hakuX-hle-back", "vk: available instance layer: %s (%s)",
+                        layers[i].layerName, layers[i].description);
+            }
+        } else {
+            hle_log("hakuX-hle-back", "vk: instance layer enumeration failed: %s",
+                    hle_vk_result_text(layer_result));
+        }
+    } else if (layer_result == VK_SUCCESS) {
+        hle_log("hakuX-hle-back", "vk: no explicit instance layers discovered");
+    } else {
+        hle_log("hakuX-hle-back", "vk: instance layer enumeration failed: %s",
+                hle_vk_result_text(layer_result));
+    }
+
     /* the window's surface (vk/swapchain.c): where the loader has it */
     uint32_t nie = 0;
     vkEnumerateInstanceExtensionProperties(NULL, &nie, NULL);
