@@ -20,6 +20,16 @@ val hasReleaseKeystore = hasKeystoreProperties &&
     !keystoreProperties.getProperty(it).isNullOrBlank()
   }
 
+val ciKeystoreFile = rootProject.file("hakuX-upload.jks")
+val ciStorePassword = providers.gradleProperty("ciStorePassword").orNull
+val ciKeyAlias = providers.gradleProperty("ciKeyAlias").orNull
+val ciKeyPassword = providers.gradleProperty("ciKeyPassword").orNull
+val hasCiKeystore = ciKeystoreFile.exists() &&
+  !ciStorePassword.isNullOrBlank() &&
+  !ciKeyAlias.isNullOrBlank() &&
+  !ciKeyPassword.isNullOrBlank()
+val ciVersionCode = providers.gradleProperty("ciVersionCode").orNull?.toIntOrNull() ?: 10
+
 android {
   namespace = "com.rfandango.haku_x"
   compileSdk = 36
@@ -31,7 +41,7 @@ android {
     minSdk = 28
     targetSdk = 36
 
-    versionCode = 9
+    versionCode = maxOf(10, ciVersionCode)
     versionName = "1.3.0"
 
     ndk {
@@ -44,6 +54,14 @@ android {
   }
 
   signingConfigs {
+    if (hasCiKeystore) {
+      create("ci") {
+        storeFile = ciKeystoreFile
+        storePassword = ciStorePassword
+        keyAlias = ciKeyAlias
+        keyPassword = ciKeyPassword
+      }
+    }
     if (hasReleaseKeystore) {
       create("release") {
         storeFile = file(keystoreProperties.getProperty("storeFile"))
@@ -56,6 +74,9 @@ android {
 
   buildTypes {
     debug {
+      if (hasCiKeystore) {
+        signingConfig = signingConfigs.getByName("ci")
+      }
       applicationIdSuffix = ".debug"
       resValue("string", "app_name", "hakuX Debug")
       ndk {
