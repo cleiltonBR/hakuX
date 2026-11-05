@@ -492,7 +492,7 @@ static bool nis_upload_coefficients(void)
         T.vkCmdPipelineBarrier2(cb, &dep);
         if (T.vkEndCommandBuffer(cb) != VK_SUCCESS) goto cleanup;
         VkCommandBufferSubmitInfo cbi = { .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO, .commandBuffer = cb };
-        VkSubmitInfo2 si = { .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2, .commandBufferInfoCount = 1, .pCommandBuffers = NULL, .pCommandBufferInfos = &cbi };
+        VkSubmitInfo2 si = { .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2, .commandBufferInfoCount = 1, .pCommandBufferInfos = &cbi };
         hle_vk_queue_lock(); VkResult qr = T.vkQueueSubmit2(g_hvk.queue, 1, &si, VK_NULL_HANDLE);
         if (qr == VK_SUCCESS) qr = T.vkQueueWaitIdle(g_hvk.queue); hle_vk_queue_unlock();
         ok = qr == VK_SUCCESS;
