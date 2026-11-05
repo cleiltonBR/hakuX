@@ -572,7 +572,8 @@ EXPORT int SDL_main(int argc, char *argv[])
             nc_present_set_fxaa(atoi(argv[i] + 5) != 0);
         }
         if (!strncmp(argv[i], "upscale=", 8)) {
-            nc_present_set_upscale(!strcmp(argv[i] + 8, "fsr") ? NC_UPSCALE_FSR :\n                                   !strcmp(argv[i] + 8, "sgsr") ? NC_UPSCALE_SGSR : NC_UPSCALE_BILINEAR);
+            nc_present_set_upscale(!strcmp(argv[i] + 8, "fsr") ? NC_UPSCALE_FSR :
+                                   !strcmp(argv[i] + 8, "sgsr") ? NC_UPSCALE_SGSR : NC_UPSCALE_BILINEAR);
         }
         /* vkdriver=<driver dir>|<library>|<hook library dir>: the custom
          * Vulkan driver chosen in the settings (Turnip), via adrenotools. */
