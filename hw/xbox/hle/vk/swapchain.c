@@ -886,7 +886,7 @@ static void log_path(unsigned p, bool fxaa, uint32_t vw, uint32_t vh)
             p == P_AREA ? "averaged down" : p == P_SGSR ? "scaled up by SGSR" : "bilinear");
 }
 
-void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, uint64_t key)
+void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, bool cas, float cas_sharpness, uint64_t key)
 {
     g_ps.shown = false;
     PsFrame *f = &g_ps.fr[g_ps.cur];
