@@ -5,8 +5,8 @@ Adds AMD FidelityFX Super Resolution 1.0 (EASU + RCAS) to hakuX's presenter
 
 Usage:  python3 apply_fsr.py hw/xbox/hle/vk/swapchain.c
 
-FSR replaces the SGSR scaling path: choosing "SGSR" in the app's settings
-runs FSR 1.0 instead. Set HAKUX_FSR to 0 in the patched file to get SGSR back.
+FSR 1.0 and SGSR are independent scaling paths. Choosing FSR runs EASU,
+then optional RCAS; choosing SGSR keeps the original Qualcomm shader.
 Every edit is anchored on exact text; if one anchor is missing or ambiguous
 the script stops and writes nothing.
 
@@ -255,7 +255,7 @@ FSR_SELECT = r"""} else if (use_fsr) {
             } else {
                 p = P_BILINEAR; /* EASU without sharpening */
             }
-        } else if ((rx < 0.99f || ry < 0.99f) && upscale == HLE_UPSCALE_FSR && g_ps.pipe[P_SGSR]) {"""
+        } else if ((rx < 0.99f || ry < 0.99f) && upscale == HLE_UPSCALE_SGSR && g_ps.pipe[P_SGSR]) {"""
 
 edits = [
     ("#include \"hw/xbox/hle/vk/swapchain.h\"\n", "#include \"hw/xbox/hle/vk/swapchain.h\"\n#include <math.h>\n"),
