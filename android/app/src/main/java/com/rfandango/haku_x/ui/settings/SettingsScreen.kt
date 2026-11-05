@@ -89,6 +89,9 @@ fun SettingsScreen(
   var scale by remember { mutableIntStateOf(prefs.renderScale) }
   var aspect by remember { mutableStateOf(prefs.aspectRatio) }
   var fxaa by remember { mutableStateOf(prefs.fxaa) }
+  var cas by remember { mutableStateOf(prefs.cas) }
+  var casSharpness by remember { mutableStateOf(prefs.casSharpness) }
+  var casSharpnessDialog by remember { mutableStateOf(false) }
   var upscale by remember { mutableStateOf(prefs.upscaleFilter) }
   var upscaleDialog by remember { mutableStateOf(false) }
   var format by remember { mutableStateOf(prefs.screenFormat) }
@@ -307,6 +310,17 @@ fun SettingsScreen(
         checked = fxaa,
         onChange = { fxaa = it; prefs.fxaa = it },
       )
+      SwitchItem(
+        title = stringResource(R.string.settings_cas),
+        summary = stringResource(R.string.settings_cas_desc) + " " + stringResource(R.string.settings_applies_next_start),
+        checked = cas,
+        onChange = { cas = it; prefs.cas = it },
+      )
+      ListItem(
+        headlineContent = { Text(stringResource(R.string.settings_cas_sharpness)) },
+        supportingContent = { Text(stringResource(R.string.settings_cas_sharpness_value, casSharpness)) },
+        modifier = Modifier.clickable { casSharpnessDialog = true },
+      )
       ListItem(
         headlineContent = { Text(stringResource(R.string.settings_upscale)) },
         supportingContent = {
@@ -433,6 +447,16 @@ fun SettingsScreen(
       current = aspect,
       onPick = { aspect = it; prefs.aspectRatio = it; aspectDialog = false },
       onDismiss = { aspectDialog = false },
+    )
+  }
+  if (casSharpnessDialog) {
+    val values = listOf(0.0f, 0.2f, 0.4f, 0.6f, 0.8f, 1.0f, 1.2f, 1.4f, 1.6f, 1.8f, 2.0f)
+    ChoiceDialog(
+      title = stringResource(R.string.settings_cas_sharpness),
+      options = values.map { it to stringResource(R.string.settings_cas_sharpness_value, it) },
+      current = casSharpness,
+      onPick = { casSharpness = it; prefs.casSharpness = it; casSharpnessDialog = false },
+      onDismiss = { casSharpnessDialog = false },
     )
   }
   if (upscaleDialog) {
