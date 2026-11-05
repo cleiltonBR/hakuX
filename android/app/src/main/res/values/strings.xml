@@ -195,6 +195,10 @@
   <string name="settings_cas_desc">Enable AMD Contrast Adaptive Sharpening (RCAS) after FSR upscaling. Only affects the FSR filter.</string>
   <string name="settings_cas_sharpness">CAS sharpness strength</string>
   <string name="settings_cas_sharpness_value">%1$.1f</string>
+  <string name="settings_nis">NVIDIA Image Scaling (NIS)</string>
+  <string name="settings_nis_desc">Enable NVIDIA Image Scaling and adaptive sharpening in the Vulkan presentation pass. Falls back to the selected filter when the GPU or scale ratio is unsupported.</string>
+  <string name="settings_nis_sharpness">NIS sharpness</string>
+  <string name="settings_nis_sharpness_value">%1$d%%</string>
   <string name="settings_fxaa">FXAA anti-aliasing</string>
   <string name="settings_fxaa_desc">Smooths jagged edges of each frame. Most useful at low resolution scales: a scale above the screen\'s already smooths them.</string>
   <string name="settings_upscale">Upscaling filter</string>
