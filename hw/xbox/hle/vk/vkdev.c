@@ -312,6 +312,19 @@ int hle_vk_init(void)
     vkEnumerateDeviceExtensionProperties(v->phys, NULL, &ne, NULL);
     g_autofree VkExtensionProperties *ext = g_new(VkExtensionProperties, ne);
     vkEnumerateDeviceExtensionProperties(v->phys, NULL, &ne, ext);
+    /* NSS capability probe only. These extensions are not enabled here:
+     * their presence alone does not prove the emulation layer is active or
+     * that the SDK's graph/tensor features can be created. */
+    const bool arm_tensors = has_ext(ext, ne, "VK_ARM_tensors");
+    const bool arm_data_graph = has_ext(ext, ne, "VK_ARM_data_graph");
+    const bool sync2_available = has_ext(ext, ne, VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME) ||
+                                 v->props.apiVersion >= VK_API_VERSION_1_3;
+    hle_log("hakuX-hle-back",
+            "vk: NSS probe device_api=%u.%u.%u ARM_tensors=%d ARM_data_graph=%d sync2=%d (not enabled)",
+            VK_API_VERSION_MAJOR(v->props.apiVersion),
+            VK_API_VERSION_MINOR(v->props.apiVersion),
+            VK_API_VERSION_PATCH(v->props.apiVersion),
+            arm_tensors, arm_data_graph, sync2_available);
     bool e_vids = has_ext(ext, ne, VK_EXT_VERTEX_INPUT_DYNAMIC_STATE_EXTENSION_NAME);
     bool e_eds2 = has_ext(ext, ne, VK_EXT_EXTENDED_DYNAMIC_STATE_2_EXTENSION_NAME);
     bool e_cbc = has_ext(ext, ne, VK_EXT_CUSTOM_BORDER_COLOR_EXTENSION_NAME);
