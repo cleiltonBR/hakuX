@@ -18,6 +18,8 @@
 #endif
 
 HleVk g_hvk;
+bool g_hle_aniso_enabled = true;
+float g_hle_aniso_level = 16.0f;
 static HleMutex g_queue_lock;
 static bool g_ready;
 static bool g_lost;                     /* hle_vk_lose */
