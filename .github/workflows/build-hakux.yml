@@ -6,6 +6,8 @@ name: Build hakuX (APK)
 on:
   push:
     branches: [master, feature/nvidia-image-scaling]
+  pull_request:
+    branches: [master]
   workflow_dispatch:
     inputs:
       apply_fsr:
