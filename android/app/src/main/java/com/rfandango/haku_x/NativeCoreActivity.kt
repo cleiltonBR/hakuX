@@ -780,7 +780,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     }
     val scaleValues = (1..4).toList()
     val entries = arrayOf(
-      "Escala de resolução: ${prefs.renderScale}x",
+      "Escala de resolução: ${prefs.renderScale}x (reinicie o jogo para aplicar)",
       "Filtro: ${modeNames[modes.indexOf(prefs.upscaleFilter).coerceAtLeast(0)]}",
       "CAS: ${if (prefs.cas) "Ativado" else "Desativado"}",
       "Intensidade CAS: ${"%.1f".format(java.util.Locale.US, prefs.casSharpness)}",
@@ -794,7 +794,6 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
             .setSingleChoiceItems(scaleValues.map { "${it}x" }.toTypedArray(), (prefs.renderScale - 1).coerceIn(0, 3)) { dialog, selected ->
               val scale = scaleValues[selected]
               prefs.renderScale = scale
-              nativeSetRenderScale(scale)
               dialog.dismiss()
               showRuntimeGraphics()
             }.setNegativeButton(android.R.string.cancel, null))
