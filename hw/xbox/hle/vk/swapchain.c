@@ -70,6 +70,9 @@ static struct {
     uint8_t *ubo_map;
     VkShaderModule vs, fs[P_COUNT];
     VkShaderModule nis_cs;           /* optional NIS compute shader; presenter remains usable without it */
+    VkDescriptorSetLayout nis_dsl;
+    VkPipelineLayout nis_pl;
+    VkPipeline nis_pipe;
     VkPipeline pipe[P_COUNT];
     VkFormat pipe_fmt;          /* the window pipelines' */
     PsFrame fr[PS_FRAMES];
@@ -354,6 +357,55 @@ static VkShaderModule nis_compute_module(void)
     return shader;
 }
 
+/* Build the compute pipeline independently of the active presentation
+ * path. Until the NIS output image and descriptors are ready, it is never
+ * dispatched; a failure here leaves all existing filters untouched. */
+static bool nis_compute_pipeline_init(void)
+{
+    if (!g_ps.nis_cs) {
+        return false;
+    }
+
+    const VkDescriptorSetLayoutBinding bindings[6] = {
+        { 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL },
+        { 1, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL },
+        { 2, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL },
+        { 3, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL },
+        { 4, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL },
+        { 5, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL },
+    };
+    VkDescriptorSetLayoutCreateInfo dci = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .bindingCount = 6,
+        .pBindings = bindings
+    };
+    if (T.vkCreateDescriptorSetLayout(g_hvk.dev, &dci, NULL, &g_ps.nis_dsl) != VK_SUCCESS) {
+        return false;
+    }
+
+    VkPipelineLayoutCreateInfo lci = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+        .setLayoutCount = 1,
+        .pSetLayouts = &g_ps.nis_dsl
+    };
+    if (T.vkCreatePipelineLayout(g_hvk.dev, &lci, NULL, &g_ps.nis_pl) != VK_SUCCESS) {
+        return false;
+    }
+
+    VkComputePipelineCreateInfo pci = {
+        .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
+        .stage = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+            .stage = VK_SHADER_STAGE_COMPUTE_BIT,
+            .module = g_ps.nis_cs,
+            .pName = "main"
+        },
+        .layout = g_ps.nis_pl
+    };
+    return T.vkCreateComputePipelines(g_hvk.dev, VK_NULL_HANDLE, 1, &pci,
+                                      NULL, &g_ps.nis_pipe) == VK_SUCCESS;
+}
+
 static VkPipeline pipeline(VkShaderModule fs, VkFormat fmt)
 {
     if (!g_ps.vs || !fs) {
@@ -480,13 +532,14 @@ static bool init(void)
         f->ramp_stale = true;
     }
     g_ps.nis_cs = nis_compute_module();
+    const bool nis_ready = nis_compute_pipeline_init();
     g_ps.vs = module(HLE_SHADER_VERTEX, k_vs, "");
     static const char *const body[P_COUNT] = { k_fs_bilinear, k_fs_area, k_fs_sgsr, k_fs_fxaa };
     for (unsigned i = 0; i < P_COUNT; i++) {
         g_ps.fs[i] = module(HLE_SHADER_FRAGMENT, k_fs_head, body[i]);
     }
     g_ps.pipe[P_FXAA] = pipeline(g_ps.fs[P_FXAA], VK_FORMAT_R8G8B8A8_UNORM);
-    hle_log("hakuX-hle-back", "present: NIS compute shader %s", g_ps.nis_cs ? "compiled" : "unavailable (existing filters retained)");
+    hle_log("hakuX-hle-back", "present: NIS compute pipeline %s", nis_ready ? "created (dispatch pending)" : "unavailable (existing filters retained)");
     hle_log("hakuX-hle-back", "present: ready (shaders: bilinear %d, averaging %d, SGSR %d, FXAA %d)",
             g_ps.fs[P_BILINEAR] != VK_NULL_HANDLE, g_ps.fs[P_AREA] != VK_NULL_HANDLE,
             g_ps.fs[P_SGSR] != VK_NULL_HANDLE, g_ps.pipe[P_FXAA] != VK_NULL_HANDLE);
