@@ -1,1 +1,130 @@
+# Coloque em .github/workflows/build-hakux.yml no SEU fork de rfandango/hakuX.
+# Roda à mão: aba Actions > "Build hakuX (APK)" > Run workflow.
+# Segue o android/README.md do hakuX: núcleo nativo (CMake + NDK 29), depois o APK (Gradle).
+name: Build hakuX (APK)
 
+on:
+  workflow_dispatch:
+    inputs:
+      apply_fsr:
+        description: "Aplicar tools/apply_fsr.py (FSR 1.0) antes de compilar"
+        type: boolean
+        default: true
+      publish:
+        description: "Publicar o APK numa Release (mais fácil de baixar no celular)"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    env:
+      NDK_VERSION: 29.0.14206865
+      NC_DEPS: ${{ github.workspace }}/../native-deps
+    steps:
+      - name: Liberar espaço em disco
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost /opt/hostedtoolcache/CodeQL || true
+          df -h /
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Ferramentas (CMake, Ninja)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build cmake python3
+          cmake --version
+
+      - name: Android SDK 36 + NDK 29
+        run: |
+          yes | sdkmanager --licenses > /dev/null || true
+          sdkmanager "platforms;android-36" "build-tools;36.1.0" "ndk;${NDK_VERSION}"
+          echo "ANDROID_NDK_HOME=${ANDROID_HOME}/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_ROOT=${ANDROID_HOME}/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
+          echo "NDK_HOME=${ANDROID_HOME}/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
+
+      - name: Submódulos (FEX e os dele)
+        run: |
+          git submodule update --init external/fex
+          git -C external/fex submodule update --init External/fmt External/range-v3 \
+            External/rpmalloc External/unordered_dense External/xxhash Source/Common/cpp-optparse
+
+      - name: Dependências do núcleo (NC_DEPS, versões do README)
+        run: |
+          set -e
+          mkdir -p "$NC_DEPS/root/subprojects"
+          cd "$NC_DEPS"
+          git clone --depth 1 --branch 1.4.304 https://github.com/zeux/volk.git volk
+          git clone --depth 1 --branch 16.1.0 https://github.com/KhronosGroup/glslang.git glslang
+          git clone --depth 1 --branch vulkan-sdk-1.4.328.0 https://github.com/KhronosGroup/SPIRV-Reflect.git spirv_reflect
+          git clone --depth 1 --branch v3.3.0 https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator.git vma
+          git clone --depth 1 --branch release-3.4.18 https://github.com/libsdl-org/SDL.git SDL3
+          git clone --depth 1 --branch v4.7.0 https://gitlab.freedesktop.org/slirp/libslirp.git libslirp
+          git clone https://github.com/abaire/nv2a_vsh_cpu.git root/subprojects/nv2a_vsh_cpu
+          git -C root/subprojects/nv2a_vsh_cpu checkout 561fe80
+          git clone https://github.com/bylaws/libadrenotools.git adrenotools
+          git -C adrenotools checkout 8fae8ce
+          git -C adrenotools submodule update --init --recursive
+          git -C adrenotools apply "$GITHUB_WORKSPACE/tools/native/adrenotools-kgsl-context-priority.patch"
+          ls -la "$NC_DEPS"
+
+      - name: Aplicar o FSR 1.0 (se ainda não estiver no código)
+        if: ${{ inputs.apply_fsr }}
+        run: |
+          F=hw/xbox/hle/vk/swapchain.c
+          if grep -q P_EASU "$F"; then
+            echo "FSR já está no $F"
+          else
+            python3 tools/apply_fsr.py "$F"
+          fi
+
+      - name: Diagnóstico (como o CMake usa NC_DEPS)
+        run: |
+          grep -rn "NC_DEPS" native --include=CMakeLists.txt --include=*.cmake | head -60 || true
+          ls tools/native || true
+
+      - name: Compilar o núcleo (hakuxcore)
+        run: |
+          cmake -S native -B build/native/core -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-28 -DCMAKE_BUILD_TYPE=Release \
+            -DNC_DEPS="$NC_DEPS"
+          ninja -C build/native/core hakuxcore
+
+      - name: Copiar as bibliotecas para o app
+        run: bash tools/native/app-libs.sh
+
+      - name: Compilar o APK (debug, já assinado)
+        working-directory: android
+        run: |
+          chmod +x ./gradlew
+          ./gradlew assembleDebug --no-daemon
+
+      - name: Nomear o APK
+        run: |
+          APK=$(find android/app/build/outputs/apk/debug -name "*.apk" | head -n1)
+          cp "$APK" hakuX-fsr-debug.apk
+          ls -la hakuX-fsr-debug.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hakuX-fsr-debug-apk
+          path: hakuX-fsr-debug.apk
+
+      - name: Publicar numa Release
+        if: ${{ inputs.publish }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: fsr-build-${{ github.run_number }}
+          name: hakuX FSR build ${{ github.run_number }}
+          prerelease: true
+          files: hakuX-fsr-debug.apk
