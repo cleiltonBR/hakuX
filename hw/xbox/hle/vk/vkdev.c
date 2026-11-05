@@ -320,7 +320,9 @@ int hle_vk_init(void)
     const bool sync2_available = has_ext(ext, ne, VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME) ||
                                  v->props.apiVersion >= VK_API_VERSION_1_3;
     hle_log("hakuX-hle-back",
-            "vk: NSS probe device_api=%u.%u.%u ARM_tensors=%d ARM_data_graph=%d sync2=%d (not enabled)",
+            "vk: NSS probe GPU=%s vendor=%04x device=%04x driver=%u api=%u.%u.%u ARM_tensors=%d ARM_data_graph=%d sync2=%d (not enabled)",
+            v->props.deviceName, v->props.vendorID, v->props.deviceID,
+            v->props.driverVersion,
             VK_API_VERSION_MAJOR(v->props.apiVersion),
             VK_API_VERSION_MINOR(v->props.apiVersion),
             VK_API_VERSION_PATCH(v->props.apiVersion),
