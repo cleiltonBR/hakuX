@@ -23,6 +23,9 @@
 #include "native/core/core.h"
 #include "native/core/mods.h"
 #include "native/core/options.h"
+#ifdef CONFIG_VULKAN
+#include "hw/xbox/hle/vk/vkdev.h"
+#endif
 #include "native/dev/usb.h"
 #include "native/kernel/kernel.h"
 #include "native/net/net.h"
@@ -599,6 +602,16 @@ EXPORT int SDL_main(int argc, char *argv[])
         if (!strncmp(argv[i], "cas_sharpness=", 14)) {
             nc_present_set_cas_sharpness(strtof(argv[i] + 14, NULL));
         }
+#ifdef CONFIG_VULKAN
+        if (!strncmp(argv[i], "aniso=", 6)) {
+            g_hle_aniso_enabled = atoi(argv[i] + 6) != 0;
+        }
+        if (!strncmp(argv[i], "aniso_level=", 12)) {
+            g_hle_aniso_level = (float)atoi(argv[i] + 12);
+            if (g_hle_aniso_level < 1.0f) g_hle_aniso_level = 1.0f;
+            if (g_hle_aniso_level > 16.0f) g_hle_aniso_level = 16.0f;
+        }
+#endif
         /* vkdriver=<driver dir>|<library>|<hook library dir>: the custom
          * Vulkan driver chosen in the settings (Turnip), via adrenotools. */
         if (!strncmp(argv[i], "vkdriver=", 9)) {
