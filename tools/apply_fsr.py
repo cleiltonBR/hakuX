@@ -258,6 +258,7 @@ FSR_SELECT = r"""} else if (use_fsr) {
         } else if ((rx < 0.99f || ry < 0.99f) && upscale == HLE_UPSCALE_FSR && g_ps.pipe[P_SGSR]) {"""
 
 edits = [
+    ("#include \"hw/xbox/hle/vk/swapchain.h\"\n", "#include \"hw/xbox/hle/vk/swapchain.h\"\n#include <math.h>\n"),
     # (anchor, replacement)
     ("enum { P_BILINEAR, P_AREA, P_SGSR, P_FXAA, P_COUNT };",
      "/* FSR 1.0 on, replacing the SGSR scaling path (0: SGSR as before) */\n"
