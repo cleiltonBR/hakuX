@@ -696,6 +696,7 @@ static bool init(void)
     }
     g_ps.nis_cs = nis_compute_module();
     const bool nis_ready = nis_compute_pipeline_init();
+    g_ps.nis_resources_ready = nis_ready;
     g_ps.vs = module(HLE_SHADER_VERTEX, k_vs, "");
     static const char *const body[P_COUNT] = { k_fs_bilinear, k_fs_area, k_fs_sgsr, k_fs_fxaa };
     for (unsigned i = 0; i < P_COUNT; i++) {
