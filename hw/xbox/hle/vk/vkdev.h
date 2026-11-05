@@ -108,6 +108,9 @@ typedef struct HleVk {
 } HleVk;
 
 extern HleVk g_hvk;
+/* Requested texture anisotropy, configured before the Vulkan device starts. */
+extern bool g_hle_aniso_enabled;
+extern float g_hle_aniso_level;
 
 /* 0 = ready; -1 = no Vulkan; -2 = floor not met (g_hvk.caps.missing).
  * Vulkan 1.1 is the floor's version: 1.2's and 1.3's parts come from their
