@@ -100,7 +100,17 @@ class AppPrefs(context: Context) {
     get() = sp.getBoolean(NativeCoreActivity.PREF_FXAA, false)
     set(value) = sp.edit { putBoolean(NativeCoreActivity.PREF_FXAA, value) }
 
-  /** How a picture smaller than the screen is scaled up: bilinear or sgsr (read at game start). */
+  /** Enable RCAS (FSR's Contrast Adaptive Sharpening), only when FSR is selected. */
+  var cas: Boolean
+    get() = sp.getBoolean(NativeCoreActivity.PREF_CAS, false)
+    set(value) = sp.edit { putBoolean(NativeCoreActivity.PREF_CAS, value) }
+
+  /** RCAS strength in stops, 0.0-2.0 (read at game start). */
+  var casSharpness: Float
+    get() = sp.getFloat(NativeCoreActivity.PREF_CAS_SHARPNESS, 0.2f)
+    set(value) = sp.edit { putFloat(NativeCoreActivity.PREF_CAS_SHARPNESS, value.coerceIn(0.0f, 2.0f)) }
+
+  /** How a picture smaller than the screen is scaled up: bilinear, SGSR or FSR. */
   var upscaleFilter: String
     get() = sp.getString(NativeCoreActivity.PREF_UPSCALE, NativeCoreActivity.UPSCALE_BILINEAR)
       ?: NativeCoreActivity.UPSCALE_BILINEAR
