@@ -575,6 +575,12 @@ EXPORT int SDL_main(int argc, char *argv[])
             nc_present_set_upscale(!strcmp(argv[i] + 8, "fsr") ? NC_UPSCALE_FSR :
                                    !strcmp(argv[i] + 8, "sgsr") ? NC_UPSCALE_SGSR : NC_UPSCALE_BILINEAR);
         }
+        if (!strncmp(argv[i], "cas=", 4)) {
+            nc_present_set_cas(atoi(argv[i] + 4) != 0);
+        }
+        if (!strncmp(argv[i], "cas_sharpness=", 14)) {
+            nc_present_set_cas_sharpness(strtof(argv[i] + 14, NULL));
+        }
         /* vkdriver=<driver dir>|<library>|<hook library dir>: the custom
          * Vulkan driver chosen in the settings (Turnip), via adrenotools. */
         if (!strncmp(argv[i], "vkdriver=", 9)) {
