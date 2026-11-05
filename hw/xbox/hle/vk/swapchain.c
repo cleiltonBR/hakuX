@@ -372,6 +372,31 @@ static VkShaderModule nis_compute_module(void)
 /* Build the compute pipeline independently of the active presentation
  * path. Until the NIS output image and descriptors are ready, it is never
  * dispatched; a failure here leaves all existing filters untouched. */
+static bool nis_config_buffer_init(void)
+{
+    const VkDeviceSize align = MAX((VkDeviceSize)g_hvk.props.limits.minUniformBufferOffsetAlignment, (VkDeviceSize)1);
+    g_ps.nis_config_stride = (sizeof(float) * 64 + align - 1) / align * align;
+    VkBufferCreateInfo bci = {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size = g_ps.nis_config_stride * PS_FRAMES,
+        .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE
+    };
+    if (T.vkCreateBuffer(g_hvk.dev, &bci, NULL, &g_ps.nis_config) != VK_SUCCESS) return false;
+    VkMemoryRequirements mr;
+    T.vkGetBufferMemoryRequirements(g_hvk.dev, g_ps.nis_config, &mr);
+    int mt = hle_vk_memtype(mr.memoryTypeBits,
+                            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, 0);
+    VkMemoryAllocateInfo mai = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize = mr.size, .memoryTypeIndex = mt < 0 ? 0u : (uint32_t)mt
+    };
+    if (mt < 0 || T.vkAllocateMemory(g_hvk.dev, &mai, NULL, &g_ps.nis_config_mem) != VK_SUCCESS ||
+        T.vkBindBufferMemory(g_hvk.dev, g_ps.nis_config, g_ps.nis_config_mem, 0) != VK_SUCCESS ||
+        T.vkMapMemory(g_hvk.dev, g_ps.nis_config_mem, 0, VK_WHOLE_SIZE, 0,
+                      (void **)&g_ps.nis_config_map) != VK_SUCCESS) return false;
+    return true;
+}
 static bool nis_compute_pipeline_init(void)
 {
     if (!g_ps.nis_cs) {
@@ -414,8 +439,17 @@ static bool nis_compute_pipeline_init(void)
         },
         .layout = g_ps.nis_pl
     };
-    return T.vkCreateComputePipelines(g_hvk.dev, VK_NULL_HANDLE, 1, &pci,
-                                      NULL, &g_ps.nis_pipe) == VK_SUCCESS;
+    if (T.vkCreateComputePipelines(g_hvk.dev, VK_NULL_HANDLE, 1, &pci,
+                                   NULL, &g_ps.nis_pipe) != VK_SUCCESS) return false;
+    VkDescriptorSetLayout layouts[PS_FRAMES] = { g_ps.nis_dsl, g_ps.nis_dsl, g_ps.nis_dsl };
+    VkDescriptorSet sets[PS_FRAMES];
+    VkDescriptorSetAllocateInfo ai = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool = g_ps.dp, .descriptorSetCount = PS_FRAMES, .pSetLayouts = layouts
+    };
+    if (T.vkAllocateDescriptorSets(g_hvk.dev, &ai, sets) != VK_SUCCESS || !nis_config_buffer_init()) return false;
+    for (unsigned i = 0; i < PS_FRAMES; i++) g_ps.fr[i].nis_set = sets[i];
+    return true;
 }
 
 static VkPipeline pipeline(VkShaderModule fs, VkFormat fmt)
