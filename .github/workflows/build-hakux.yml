@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       apply_fsr:
-        description: "Aplicar tools/apply_fsr.py (FSR 1.0) antes de compilar"
+        description: "Compatibilidade: aplicar o patch FSR caso o código ainda não o contenha"
         type: boolean
         default: true
       publish:
@@ -98,7 +98,7 @@ jobs:
           git -C adrenotools apply "$GITHUB_WORKSPACE/tools/native/adrenotools-kgsl-context-priority.patch"
           ls -la "$NC_DEPS"
 
-      - name: Aplicar o FSR 1.0 (se ainda não estiver no código)
+      - name: Preparar shaders FSR 1.0 (compatibilidade do build)
         if: ${{ inputs.apply_fsr }}
         run: |
           F=hw/xbox/hle/vk/swapchain.c
