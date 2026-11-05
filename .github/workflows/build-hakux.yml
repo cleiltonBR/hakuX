@@ -126,35 +126,12 @@ jobs:
       - name: Copiar as bibliotecas para o app
         run: bash tools/native/app-libs.sh
 
-      - name: Preparar assinatura permanente para atualizações
-        env:
-          HAKUX_KEYSTORE_BASE64: ${{ secrets.HAKUX_KEYSTORE_BASE64 }}
-          HAKUX_STORE_PASSWORD: ${{ secrets.HAKUX_STORE_PASSWORD }}
-          HAKUX_KEY_ALIAS: ${{ secrets.HAKUX_KEY_ALIAS }}
-          HAKUX_KEY_PASSWORD: ${{ secrets.HAKUX_KEY_PASSWORD }}
-        run: |
-          set -e
-          test -n "$HAKUX_KEYSTORE_BASE64" || { echo "::error::Configure HAKUX_KEYSTORE_BASE64 nos GitHub Actions Secrets."; exit 1; }
-          test -n "$HAKUX_STORE_PASSWORD" || { echo "::error::Configure HAKUX_STORE_PASSWORD nos GitHub Actions Secrets."; exit 1; }
-          test -n "$HAKUX_KEY_ALIAS" || { echo "::error::Configure HAKUX_KEY_ALIAS nos GitHub Actions Secrets."; exit 1; }
-          test -n "$HAKUX_KEY_PASSWORD" || { echo "::error::Configure HAKUX_KEY_PASSWORD nos GitHub Actions Secrets."; exit 1; }
-          echo "$HAKUX_KEYSTORE_BASE64" | base64 --decode > android/hakuX-upload.jks
-          test -s android/hakuX-upload.jks
-
-      - name: Compilar o APK (debug, assinatura permanente)
+      - name: Compilar o APK (debug, assinatura temporária)
         working-directory: android
-        env:
-          CI_STORE_PASSWORD: ${{ secrets.HAKUX_STORE_PASSWORD }}
-          CI_KEY_ALIAS: ${{ secrets.HAKUX_KEY_ALIAS }}
-          CI_KEY_PASSWORD: ${{ secrets.HAKUX_KEY_PASSWORD }}
         run: |
           chmod +x ./gradlew
           ./gradlew assembleDebug --no-daemon \
-            -PciVersionCode="$GITHUB_RUN_NUMBER" \
-            -PciStorePassword="$CI_STORE_PASSWORD" \
-            -PciKeyAlias="$CI_KEY_ALIAS" \
-            -PciKeyPassword="$CI_KEY_PASSWORD"
-          rm -f hakuX-upload.jks
+            -PciVersionCode="$GITHUB_RUN_NUMBER"
 
       - name: Nomear o APK
         run: |
