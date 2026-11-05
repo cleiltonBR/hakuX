@@ -248,6 +248,8 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
      * the screen is scaled up (a larger one is averaged down). */
     args += "fxaa=${if (settings.fxaa) 1 else 0}"
     args += "upscale=${settings.upscaleFilter}"
+    args += "cas=${if (settings.cas) 1 else 0}"
+    args += "cas_sharpness=${settings.casSharpness}"
     /* The console's video settings (widescreen, 480p/720p/1080i, the cable)
      * and its language. */
     args += "video=%x".format(settings.videoFlags())
@@ -1150,6 +1152,8 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     const val PREF_ASPECT = "aspect_ratio"
     const val ASPECT_AUTO = "auto"
     const val PREF_FXAA = "fxaa"
+    const val PREF_CAS = "cas_enabled"
+    const val PREF_CAS_SHARPNESS = "cas_sharpness"
     const val PREF_UPSCALE = "upscale_filter"
     const val UPSCALE_BILINEAR = "bilinear"
     const val UPSCALE_SGSR = "sgsr"
