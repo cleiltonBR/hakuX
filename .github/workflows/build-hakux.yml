@@ -102,8 +102,7 @@ jobs:
           git -C adrenotools apply "$GITHUB_WORKSPACE/tools/native/adrenotools-kgsl-context-priority.patch"
           ls -la "$NC_DEPS"
 
-      - name: Preparar shaders FSR 1.0 (compatibilidade do build)
-        if: ${{ github.event_name == 'push' || inputs.apply_fsr }}
+      - name: Preparar shaders FSR 1.0 (sempre garantir o caminho FSR)
         run: |
           F=hw/xbox/hle/vk/swapchain.c
           if grep -q P_EASU "$F"; then
