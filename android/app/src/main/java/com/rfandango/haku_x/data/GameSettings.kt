@@ -16,6 +16,8 @@ enum class GameSetting(val key: String) {
   ASPECT("aspect"),
   FXAA("fxaa"),
   UPSCALE("upscale"),
+  CAS("cas"),
+  CAS_SHARPNESS("cas_sharpness"),
   LANGUAGE("language"),
   SCREEN_FORMAT("screen_format"),
   VIDEO_480P("480p"),
@@ -94,6 +96,8 @@ class RunSettings(private val app: AppPrefs, private val game: GameOverrides?) {
   val aspectRatio get() = text(GameSetting.ASPECT, app.aspectRatio)
   val fxaa get() = bool(GameSetting.FXAA, app.fxaa)
   val upscaleFilter get() = text(GameSetting.UPSCALE, app.upscaleFilter)
+  val cas get() = bool(GameSetting.CAS, app.cas)
+  val casSharpness get() = game?.get(GameSetting.CAS_SHARPNESS)?.toFloatOrNull()?.coerceIn(0.0f, 2.0f) ?: app.casSharpness
   val language get() = text(GameSetting.LANGUAGE, app.language)
   val screenFormat get() = text(GameSetting.SCREEN_FORMAT, app.screenFormat)
   val video480p get() = bool(GameSetting.VIDEO_480P, app.video480p)
