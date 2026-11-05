@@ -315,6 +315,16 @@ EXPORT JNIEXPORT jboolean JNICALL Java_com_rfandango_haku_1x_NativeCoreActivity_
     return nc_present_shown() ? JNI_TRUE : JNI_FALSE;
 }
 
+/* NIS status for the in-game debug overlay. */
+EXPORT JNIEXPORT jintArray JNICALL Java_com_rfandango_haku_1x_NativeCoreActivity_nativeGetNisStatus(JNIEnv *env, jclass cls)
+{
+    jint values[9];
+    nc_present_nis_status((int *)values);
+    jintArray result = (*env)->NewIntArray(env, 9);
+    if (result) (*env)->SetIntArrayRegion(env, result, 0, 9, values);
+    return result;
+}
+
 /* The FPS overlay (NativeCoreActivity): the title's frame rate and pacing,
  * and 1 when it renders by push-buffer decoding (else 0: D3D's hooks). */
 EXPORT JNIEXPORT jfloatArray JNICALL Java_com_rfandango_haku_1x_NativeCoreActivity_nativeGetFrameStats(JNIEnv *env,
