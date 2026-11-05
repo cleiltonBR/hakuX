@@ -64,6 +64,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
   private var onScreenController: OnScreenController? = null
   private var fpsView: TextView? = null
   private var hitchView: TextView? = null
+  private var nisView: TextView? = null
   /* the settings' overlays, read as the game comes back (onResume) */
   private var fpsOn = false
   private var hitchesOn = false
@@ -89,6 +90,14 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
           text += " *" /* the last frame took over twice the average */
         }
         fpsView?.text = text
+      }
+      nisView?.let { v ->
+        val n = nativeGetNisStatus()
+        if (n != null && n.size >= 9) {
+          val reason = when (n[3]) { 1 -> "recursos/pipeline"; 2 -> "dimensões"; 3 -> "imagem de saída"; 4 -> "configuração"; 5 -> "escala fora de 0,5–1,0"; else -> "nenhum" }
+          val path = when (n[8]) { 3 -> "NIS"; 2 -> "SGSR"; 1 -> "redução"; else -> "bilinear" }
+          v.text = "NIS ${if (n[1] == 1) "ON" else "OFF"} | GPU ${if (n[0] == 1) "OK" else "INDISPONÍVEL"} | ${if (n[2] == 1) "EXECUTADO" else "NÃO EXECUTADO"}\n${n[4]}x${n[5]} → ${n[6]}x${n[7]} | saída: $path | motivo: $reason"
+        }
       }
       hitchView?.takeIf { hitchesOn }?.let { v ->
         val hitches = nativeGetHleHitches()
@@ -586,6 +595,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
       return
     }
     val hitch = TextView(this).apply {
+      id = View.generateViewId()
       text = ""
       visibility = View.GONE
       setTextColor(Color.WHITE)
@@ -607,6 +617,28 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     }
     mLayout?.addView(hitch, hitchParams)
     hitchView = hitch
+
+    val nis = TextView(this).apply {
+      text = "NIS: aguardando dados"
+      visibility = View.VISIBLE
+      setTextColor(Color.WHITE)
+      setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f)
+      typeface = Typeface.MONOSPACE
+      setShadowLayer(2f, 1f, 1f, Color.BLACK)
+      setPadding(16, 6, 16, 6)
+      setBackgroundColor(Color.argb(150, 0, 0, 0))
+      maxLines = 2
+    }
+    val nisParams = RelativeLayout.LayoutParams(
+      RelativeLayout.LayoutParams.WRAP_CONTENT,
+      RelativeLayout.LayoutParams.WRAP_CONTENT,
+    ).apply {
+      addRule(RelativeLayout.BELOW, hitch.id)
+      addRule(RelativeLayout.ALIGN_PARENT_START)
+      topMargin = 4
+    }
+    mLayout?.addView(nis, nisParams)
+    nisView = nis
   }
 
   /** The run's cheats in the manifest's order (nativeSetCheat's index), and the game's key; empty: none. */
@@ -1322,6 +1354,10 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     /** Change NVIDIA Image Scaling while the game runs (sharpness 0-1). */
     @JvmStatic
     external fun nativeSetNis(enabled: Boolean, sharpness: Float)
+
+    /** NIS GPU state: ready, enabled, executed, reason, input/output dimensions, final path. */
+    @JvmStatic
+    external fun nativeGetNisStatus(): IntArray?
 
     external fun nativeSetRenderScale(scale: Int)
 
