@@ -99,7 +99,7 @@ jobs:
           ls -la "$NC_DEPS"
 
       - name: Preparar shaders FSR 1.0 (compatibilidade do build)
-        if: ${{ inputs.apply_fsr }}
+        if: ${{ github.event_name == 'push' || inputs.apply_fsr }}
         run: |
           F=hw/xbox/hle/vk/swapchain.c
           if grep -q P_EASU "$F"; then
@@ -142,7 +142,7 @@ jobs:
           path: hakuX-fsr-debug.apk
 
       - name: Publicar numa Release
-        if: ${{ inputs.publish }}
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish }}
         uses: softprops/action-gh-release@v2
         with:
           tag_name: fsr-build-${{ github.run_number }}
