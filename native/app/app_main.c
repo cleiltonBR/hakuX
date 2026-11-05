@@ -158,6 +158,19 @@ EXPORT JNIEXPORT void JNICALL Java_com_rfandango_haku_1x_NativeCoreActivity_nati
     nc_audio_set_paused(on != JNI_FALSE);
 }
 
+/* Runtime presentation controls from NativeCoreActivity's gameplay menu. */
+EXPORT JNIEXPORT void JNICALL Java_com_rfandango_haku_1x_NativeCoreActivity_nativeSetUpscale(JNIEnv *env, jclass cls, jint mode)
+{
+    if (mode < NC_UPSCALE_BILINEAR || mode > NC_UPSCALE_FSR) return;
+    nc_present_set_upscale(mode);
+}
+
+EXPORT JNIEXPORT void JNICALL Java_com_rfandango_haku_1x_NativeCoreActivity_nativeSetCas(JNIEnv *env, jclass cls, jboolean enabled, jfloat sharpness)
+{
+    nc_present_set_cas(enabled != JNI_FALSE);
+    nc_present_set_cas_sharpness(sharpness);
+}
+
 /* Savestates (native/state): the running game saved to path, on the
  * caller's thread (not the UI's: a frame and the write). Null: saved; else
  * why not. */
