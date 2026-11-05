@@ -397,6 +397,117 @@ static bool nis_config_buffer_init(void)
                       (void **)&g_ps.nis_config_map) != VK_SUCCESS) return false;
     return true;
 }
+static void nis_image_drop(VkImage *image, VkDeviceMemory *memory, VkImageView *view)
+{
+    if (*view) T.vkDestroyImageView(g_hvk.dev, *view, NULL);
+    if (*image) T.vkDestroyImage(g_hvk.dev, *image, NULL);
+    if (*memory) T.vkFreeMemory(g_hvk.dev, *memory, NULL);
+    *image = VK_NULL_HANDLE; *memory = VK_NULL_HANDLE; *view = VK_NULL_HANDLE;
+}
+
+static bool nis_image_make(uint32_t w, uint32_t h, VkFormat format, VkImageUsageFlags usage,
+                           VkImage *image, VkDeviceMemory *memory, VkImageView *view)
+{
+    VkImageCreateInfo ici = { .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .imageType = VK_IMAGE_TYPE_2D, .format = format, .extent = { w, h, 1 },
+        .mipLevels = 1, .arrayLayers = 1, .samples = VK_SAMPLE_COUNT_1_BIT,
+        .tiling = VK_IMAGE_TILING_OPTIMAL, .usage = usage,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE, .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED };
+    if (T.vkCreateImage(g_hvk.dev, &ici, NULL, image) != VK_SUCCESS) return false;
+    VkMemoryRequirements mr; T.vkGetImageMemoryRequirements(g_hvk.dev, *image, &mr);
+    int mt = hle_vk_memtype(mr.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 0);
+    VkMemoryAllocateInfo mai = { .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize = mr.size, .memoryTypeIndex = mt < 0 ? 0u : (uint32_t)mt };
+    VkImageViewCreateInfo vci = { .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .image = *image, .viewType = VK_IMAGE_VIEW_TYPE_2D, .format = format,
+        .subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 } };
+    if (mt < 0 || T.vkAllocateMemory(g_hvk.dev, &mai, NULL, memory) != VK_SUCCESS ||
+        T.vkBindImageMemory(g_hvk.dev, *image, *memory, 0) != VK_SUCCESS ||
+        T.vkCreateImageView(g_hvk.dev, &vci, NULL, view) != VK_SUCCESS) {
+        nis_image_drop(image, memory, view); return false;
+    }
+    return true;
+}
+
+static bool nis_upload_coefficients(void)
+{
+    const VkDeviceSize bytes = HLE_NIS_COEFFICIENT_FLOATS * sizeof(float);
+    VkFormatProperties fp; vkGetPhysicalDeviceFormatProperties(g_hvk.phys, VK_FORMAT_R32G32B32A32_SFLOAT, &fp);
+    const VkFormatFeatureFlags need = VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT;
+    if ((fp.optimalTilingFeatures & need) != need) return false;
+    VkBuffer staging = VK_NULL_HANDLE; VkDeviceMemory staging_mem = VK_NULL_HANDLE;
+    VkCommandPool pool = VK_NULL_HANDLE; VkCommandBuffer cb = VK_NULL_HANDLE; void *mapped = NULL;
+    bool ok = false;
+    VkBufferCreateInfo bci = { .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, .size = bytes * 2,
+        .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT, .sharingMode = VK_SHARING_MODE_EXCLUSIVE };
+    if (T.vkCreateBuffer(g_hvk.dev, &bci, NULL, &staging) != VK_SUCCESS) goto cleanup;
+    VkMemoryRequirements mr; T.vkGetBufferMemoryRequirements(g_hvk.dev, staging, &mr);
+    int mt = hle_vk_memtype(mr.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, 0);
+    VkMemoryAllocateInfo mai = { .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize = mr.size, .memoryTypeIndex = mt < 0 ? 0u : (uint32_t)mt };
+    if (mt < 0 || T.vkAllocateMemory(g_hvk.dev, &mai, NULL, &staging_mem) != VK_SUCCESS ||
+        T.vkBindBufferMemory(g_hvk.dev, staging, staging_mem, 0) != VK_SUCCESS ||
+        T.vkMapMemory(g_hvk.dev, staging_mem, 0, VK_WHOLE_SIZE, 0, &mapped) != VK_SUCCESS) goto cleanup;
+    hle_nis_copy_coefficients((float *)mapped, HLE_NIS_COEFFICIENT_FLOATS,
+        (float *)((uint8_t *)mapped + bytes), HLE_NIS_COEFFICIENT_FLOATS);
+    if (!nis_image_make(2, HLE_NIS_COEFFICIENT_PHASES, VK_FORMAT_R32G32B32A32_SFLOAT,
+            VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+            &g_ps.nis_coef_scale, &g_ps.nis_coef_scale_mem, &g_ps.nis_coef_scale_view) ||
+        !nis_image_make(2, HLE_NIS_COEFFICIENT_PHASES, VK_FORMAT_R32G32B32A32_SFLOAT,
+            VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+            &g_ps.nis_coef_usm, &g_ps.nis_coef_usm_mem, &g_ps.nis_coef_usm_view)) goto cleanup;
+    {
+        VkCommandPoolCreateInfo pci = { .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+            .flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT, .queueFamilyIndex = g_hvk.qfam };
+        if (T.vkCreateCommandPool(g_hvk.dev, &pci, NULL, &pool) != VK_SUCCESS) goto cleanup;
+        VkCommandBufferAllocateInfo cai = { .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+            .commandPool = pool, .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .commandBufferCount = 1 };
+        if (T.vkAllocateCommandBuffers(g_hvk.dev, &cai, &cb) != VK_SUCCESS) goto cleanup;
+        VkCommandBufferBeginInfo begin = { .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+            .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT };
+        if (T.vkBeginCommandBuffer(cb, &begin) != VK_SUCCESS) goto cleanup;
+        VkImage imgs[2] = { g_ps.nis_coef_scale, g_ps.nis_coef_usm };
+        VkImageMemoryBarrier2 bars[2] = {0};
+        for (unsigned i = 0; i < 2; i++) bars[i] = (VkImageMemoryBarrier2){
+            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2, .dstStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+            .dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT, .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+            .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED, .image = imgs[i],
+            .subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 } };
+        VkDependencyInfo dep = { .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+            .imageMemoryBarrierCount = 2, .pImageMemoryBarriers = bars };
+        T.vkCmdPipelineBarrier2(cb, &dep);
+        VkBufferImageCopy copies[2] = {
+            { .bufferOffset = 0, .imageSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 }, .imageExtent = { 2, HLE_NIS_COEFFICIENT_PHASES, 1 } },
+            { .bufferOffset = bytes, .imageSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 }, .imageExtent = { 2, HLE_NIS_COEFFICIENT_PHASES, 1 } } };
+        T.vkCmdCopyBufferToImage(cb, staging, imgs[0], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copies[0]);
+        T.vkCmdCopyBufferToImage(cb, staging, imgs[1], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copies[1]);
+        for (unsigned i = 0; i < 2; i++) bars[i] = (VkImageMemoryBarrier2){
+            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2, .srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+            .srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT, .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+            .dstAccessMask = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT, .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED, .image = imgs[i],
+            .subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 } };
+        T.vkCmdPipelineBarrier2(cb, &dep);
+        if (T.vkEndCommandBuffer(cb) != VK_SUCCESS) goto cleanup;
+        VkCommandBufferSubmitInfo cbi = { .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO, .commandBuffer = cb };
+        VkSubmitInfo2 si = { .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2, .commandBufferInfoCount = 1, .pCommandBuffers = NULL, .pCommandBufferInfos = &cbi };
+        hle_vk_queue_lock(); VkResult qr = T.vkQueueSubmit2(g_hvk.queue, 1, &si, VK_NULL_HANDLE);
+        if (qr == VK_SUCCESS) qr = T.vkQueueWaitIdle(g_hvk.queue); hle_vk_queue_unlock();
+        ok = qr == VK_SUCCESS;
+    }
+cleanup:
+    if (mapped) T.vkUnmapMemory(g_hvk.dev, staging_mem);
+    if (pool) T.vkDestroyCommandPool(g_hvk.dev, pool, NULL);
+    if (staging) T.vkDestroyBuffer(g_hvk.dev, staging, NULL);
+    if (staging_mem) T.vkFreeMemory(g_hvk.dev, staging_mem, NULL);
+    if (!ok) {
+        nis_image_drop(&g_ps.nis_coef_scale, &g_ps.nis_coef_scale_mem, &g_ps.nis_coef_scale_view);
+        nis_image_drop(&g_ps.nis_coef_usm, &g_ps.nis_coef_usm_mem, &g_ps.nis_coef_usm_view);
+    }
+    return ok;
+}
 static bool nis_compute_pipeline_init(void)
 {
     if (!g_ps.nis_cs) {
@@ -449,7 +560,7 @@ static bool nis_compute_pipeline_init(void)
     };
     if (T.vkAllocateDescriptorSets(g_hvk.dev, &ai, sets) != VK_SUCCESS || !nis_config_buffer_init()) return false;
     for (unsigned i = 0; i < PS_FRAMES; i++) g_ps.fr[i].nis_set = sets[i];
-    return true;
+    return nis_upload_coefficients();
 }
 
 static VkPipeline pipeline(VkShaderModule fs, VkFormat fmt)
