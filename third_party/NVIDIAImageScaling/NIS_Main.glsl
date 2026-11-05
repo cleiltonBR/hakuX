@@ -33,8 +33,7 @@
 // require optional 16-bit storage/arithmetic features on mobile GPUs.
 // NIS_USE_HALF_PRECISION remains 0 unless the device explicitly supports FP16.
 #define NIS_USE_HALF_PRECISION 0
-#extension GL_EXT_shader_16bit_storage : enable
-#extension GL_EXT_shader_explicit_arithmetic_types : enable
+// FP16 extensions are intentionally omitted: the Android path compiles FP32 only.
 
 #define NIS_GLSL 1
 
