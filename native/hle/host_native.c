@@ -153,12 +153,12 @@ static int g_render_scale = 1;
 
 void nc_hle_set_render_scale(int scale)
 {
-    g_render_scale = scale < 1 ? 1 : scale > 4 ? 4 : scale;
+    __atomic_store_n(&g_render_scale, scale < 1 ? 1 : scale > 4 ? 4 : scale, __ATOMIC_RELEASE);
 }
 
 int hle_host_render_scale(void)
 {
-    return g_render_scale;
+    return __atomic_load_n(&g_render_scale, __ATOMIC_ACQUIRE);
 }
 
 /* A custom Vulkan driver's entry point (the app loads Turnip through
