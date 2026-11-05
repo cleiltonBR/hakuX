@@ -248,9 +248,13 @@ FSR_PASS = r"""    /* FSR 1.0 (HAKUX_FSR): EASU scales the frame up to its place
 """
 
 FSR_SELECT = r"""} else if (use_fsr) {
-            p = P_RCAS;
             src = g_ps.fs_view;
-            pc[4] = 0.8706f;            /* RCAS sharpness 0.2 stops: exp2(-0.2) */
+            if (cas && cas_sharpness > 0.0f) {
+                p = P_RCAS;
+                pc[4] = exp2f(-cas_sharpness); /* RCAS strength in stops */
+            } else {
+                p = P_BILINEAR; /* EASU without sharpening */
+            }
         } else if ((rx < 0.99f || ry < 0.99f) && upscale == HLE_UPSCALE_FSR && g_ps.pipe[P_SGSR]) {"""
 
 edits = [
