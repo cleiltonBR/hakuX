@@ -569,7 +569,8 @@ internal fun cableLabel(value: String) = when (value) {
 }
 
 internal fun upscaleLabel(value: String) = when (value) {
-  NativeCoreActivity.UPSCALE_SGSR -> R.string.settings_upscale_sgsr\n  NativeCoreActivity.UPSCALE_FSR -> R.string.settings_upscale_fsr
+  NativeCoreActivity.UPSCALE_SGSR -> R.string.settings_upscale_sgsr
+  NativeCoreActivity.UPSCALE_FSR -> R.string.settings_upscale_fsr
   else -> R.string.settings_upscale_bilinear
 }
 
