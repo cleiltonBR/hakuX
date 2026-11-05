@@ -1330,21 +1330,38 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
     nis_status(8, 0);
     if (g_ps.have && nis) {
         const float nw = sx * (float)ww, nh = sy * (float)wh;
-        const float nrx = (float)g_ps.f.w / nw, nry = (float)g_ps.f.h / nh;
-        const uint32_t ow = (uint32_t)(nw + 0.5f), oh = (uint32_t)(nh + 0.5f);
-        nis_status(6, (int)(nw + 0.5f));
-        nis_status(7, (int)(nh + 0.5f));
-        if (nrx >= 0.5f && nrx <= 1.0f && nry >= 0.5f && nry <= 1.0f) {
-            if (nis_dispatch(cb, f, src, g_ps.f.w, g_ps.f.h, ow, oh, nis_sharpness)) {
+        const uint32_t target_w = (uint32_t)(nw + 0.5f), target_h = (uint32_t)(nh + 0.5f);
+        /* NIS supports upscaling by at most 2x per axis. For larger display
+         * scales, let NIS produce a 2x intermediate image; the existing
+         * presentation pass then performs only the final enlargement. */
+        const uint32_t nis_w = MIN(target_w, g_ps.f.w * 2u);
+        const uint32_t nis_h = MIN(target_h, g_ps.f.h * 2u);
+        const float nrx = (float)g_ps.f.w / (float)nis_w;
+        const float nry = (float)g_ps.f.h / (float)nis_h;
+        nis_status(6, (int)nis_w);
+        nis_status(7, (int)nis_h);
+        if (nis_w >= g_ps.f.w && nis_h >= g_ps.f.h &&
+            nrx >= 0.5f && nrx <= 1.0f && nry >= 0.5f && nry <= 1.0f) {
+            if (nis_dispatch(cb, f, src, g_ps.f.w, g_ps.f.h, nis_w, nis_h, nis_sharpness)) {
                 src = g_ps.nis_out_view;
                 nis_done = true;
+                if (nis_w != target_w || nis_h != target_h) {
+                    static uint32_t last_target_w, last_target_h, last_nis_w, last_nis_h;
+                    if (target_w != last_target_w || target_h != last_target_h ||
+                        nis_w != last_nis_w || nis_h != last_nis_h) {
+                        hle_log("hakuX-hle-back", "NIS two-stage upscale: %ux%u -> %ux%u (final presentation %ux%u)",
+                                g_ps.f.w, g_ps.f.h, nis_w, nis_h, target_w, target_h);
+                        last_target_w = target_w; last_target_h = target_h;
+                        last_nis_w = nis_w; last_nis_h = nis_h;
+                    }
+                }
             }
         } else {
             nis_status(3, 5);
             static bool reported_scale_range;
             if (!reported_scale_range) {
-                hle_log("hakuX-hle-back", "NIS dispatch skipped: scale ratio outside supported range (input/output %.3f x %.3f; expected 0.5..1.0)",
-                        nrx, nry);
+                hle_log("hakuX-hle-back", "NIS dispatch skipped: no supported upscale stage for target %ux%u from %ux%u",
+                        target_w, target_h, g_ps.f.w, g_ps.f.h);
                 reported_scale_range = true;
             }
         }
