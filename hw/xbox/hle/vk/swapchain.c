@@ -702,7 +702,7 @@ static bool init(void)
         g_ps.fs[i] = module(HLE_SHADER_FRAGMENT, k_fs_head, body[i]);
     }
     g_ps.pipe[P_FXAA] = pipeline(g_ps.fs[P_FXAA], VK_FORMAT_R8G8B8A8_UNORM);
-    hle_log("hakuX-hle-back", "present: NIS compute pipeline %s", nis_ready ? "created (dispatch pending)" : "unavailable (existing filters retained)");
+    hle_log("hakuX-hle-back", "present: NIS compute pipeline %s", nis_ready ? "ready (coefficients and compute resources uploaded)" : "unavailable (existing filters retained)");
     hle_log("hakuX-hle-back", "present: ready (shaders: bilinear %d, averaging %d, SGSR %d, FXAA %d)",
             g_ps.fs[P_BILINEAR] != VK_NULL_HANDLE, g_ps.fs[P_AREA] != VK_NULL_HANDLE,
             g_ps.fs[P_SGSR] != VK_NULL_HANDLE, g_ps.pipe[P_FXAA] != VK_NULL_HANDLE);
@@ -1190,22 +1190,23 @@ static void rendering(VkCommandBuffer cb, VkImageView v, uint32_t w, uint32_t h,
 }
 
 /* How the frame meets the window, logged when that changes. */
-static void log_path(unsigned p, bool fxaa, uint32_t vw, uint32_t vh)
+static void log_path(unsigned p, bool fxaa, bool nis, uint32_t vw, uint32_t vh)
 {
     static unsigned s_p = ~0u;
-    static bool s_fxaa;
+    static bool s_fxaa, s_nis;
     static uint32_t s_w, s_h, s_vw, s_vh;
-    if (p == s_p && fxaa == s_fxaa && g_ps.f.w == s_w && g_ps.f.h == s_h && vw == s_vw && vh == s_vh) {
+    if (p == s_p && fxaa == s_fxaa && nis == s_nis && g_ps.f.w == s_w && g_ps.f.h == s_h && vw == s_vw && vh == s_vh) {
         return;
     }
     s_p = p;
     s_fxaa = fxaa;
+    s_nis = nis;
     s_w = g_ps.f.w;
     s_h = g_ps.f.h;
     s_vw = vw;
     s_vh = vh;
     hle_log("hakuX-hle-back", "present: %ux%u%s into %ux%u: %s", s_w, s_h, fxaa ? " after FXAA" : "", vw, vh,
-            p == P_AREA ? "averaged down" : p == P_SGSR ? "scaled up by SGSR" : "bilinear");
+            nis ? "NVIDIA Image Scaling" : p == P_AREA ? "averaged down" : p == P_SGSR ? "scaled up by SGSR" : "bilinear");
 }
 
 void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, bool cas, float cas_sharpness, bool nis, float nis_sharpness, uint64_t key)
@@ -1298,7 +1299,7 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
             pc[7] = (float)g_ps.f.h;
         }
         quad(cb, f, 0, g_ps.pipe[p], src, pc, iw, ih);
-        log_path(p, fxaa_done, (uint32_t)(vw + 0.5f), (uint32_t)(vh + 0.5f));
+        log_path(p, fxaa_done, nis_done, (uint32_t)(vw + 0.5f), (uint32_t)(vh + 0.5f));
     }
     T.vkCmdEndRendering(cb);
     barrier(cb, dst, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
