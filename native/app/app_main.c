@@ -174,6 +174,11 @@ EXPORT JNIEXPORT void JNICALL Java_com_rfandango_haku_1x_NativeCoreActivity_nati
     nc_present_set_cas_sharpness(sharpness);
 }
 
+EXPORT JNIEXPORT void JNICALL Java_com_rfandango_haku_1x_NativeCoreActivity_nativeSetNis(JNIEnv *env, jclass cls, jboolean enabled, jfloat sharpness)
+{
+    nc_present_set_nis(enabled != JNI_FALSE, sharpness);
+}
+
 EXPORT JNIEXPORT void JNICALL Java_com_rfandango_haku_1x_NativeCoreActivity_nativeSetRenderScale(JNIEnv *env, jclass cls, jint scale)
 {
     nc_hle_set_render_scale(scale);
@@ -574,6 +579,8 @@ EXPORT int SDL_main(int argc, char *argv[])
     }
     NcOptions opt;
     nc_options_init(&opt);
+    bool nis_enabled = false;
+    float nis_sharpness = 0.5f;
     for (int i = 3; i < argc; i++) {
         if (nc_option(&opt, argv[i])) {
             continue;                           /* the core's (native/core/options.h) */
@@ -602,6 +609,8 @@ EXPORT int SDL_main(int argc, char *argv[])
         if (!strncmp(argv[i], "cas_sharpness=", 14)) {
             nc_present_set_cas_sharpness(strtof(argv[i] + 14, NULL));
         }
+        if (!strncmp(argv[i], "nis=", 4)) nis_enabled = atoi(argv[i] + 4) != 0;
+        if (!strncmp(argv[i], "nis_sharpness=", 14)) nis_sharpness = strtof(argv[i] + 14, NULL);
 #ifdef CONFIG_VULKAN
         if (!strncmp(argv[i], "aniso=", 6)) {
             g_hle_aniso_enabled = atoi(argv[i] + 6) != 0;
@@ -618,6 +627,7 @@ EXPORT int SDL_main(int argc, char *argv[])
             nc_vk_driver_load(argv[i] + 9);
         }
     }
+    nc_present_set_nis(nis_enabled, nis_sharpness);
     nc_options_apply(&opt);
     nc_present_set_widescreen(opt.video >= 0 && (opt.video & NC_VIDEO_WIDESCREEN));
     nc_log("hakuX-app", "native core: disc %s, hdd %s%s", disc, argv[2], opt.uncap ? ", frame rate uncapped" : "");
