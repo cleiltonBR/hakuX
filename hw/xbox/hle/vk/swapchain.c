@@ -123,6 +123,17 @@ static struct {
     uint64_t shown_key;
 } g_ps;
 
+/* Read by the Android debug overlay; each field is independently atomic. */
+static int g_nis_status[9];
+static void nis_status(int index, int value)
+{
+    __atomic_store_n(&g_nis_status[index], value, __ATOMIC_RELAXED);
+}
+void hle_present_nis_status(int status[9])
+{
+    for (unsigned i = 0; i < 9; i++) status[i] = __atomic_load_n(&g_nis_status[i], __ATOMIC_RELAXED);
+}
+
 /* ---- shaders ---- */
 
 /* rect: x0, y0, x1, y1 in the window's clip space; rot: that space turned
@@ -697,6 +708,7 @@ static bool init(void)
     g_ps.nis_cs = nis_compute_module();
     const bool nis_ready = nis_compute_pipeline_init();
     g_ps.nis_resources_ready = nis_ready;
+    nis_status(0, nis_ready ? 1 : 0);
     g_ps.vs = module(HLE_SHADER_VERTEX, k_vs, "");
     static const char *const body[P_COUNT] = { k_fs_bilinear, k_fs_area, k_fs_sgsr, k_fs_fxaa };
     for (unsigned i = 0; i < P_COUNT; i++) {
@@ -1124,6 +1136,8 @@ static bool nis_dispatch(VkCommandBuffer cb, PsFrame *frame, VkImageView input,
         failure = 3; /* unsupported storage format or output allocation failed */
     }
     if (failure) {
+        nis_status(2, 0);
+        nis_status(3, failure);
         if (failure != last_failure) {
             hle_log("hakuX-hle-back", "NIS dispatch skipped: reason=%d ready=%d pipe=%d set=%d config=%d coef=%d/%d input=%ux%u output=%ux%u",
                     failure, g_ps.nis_resources_ready, g_ps.nis_pipe != VK_NULL_HANDLE,
@@ -1137,12 +1151,16 @@ static bool nis_dispatch(VkCommandBuffer cb, PsFrame *frame, VkImageView input,
     uint8_t *config = g_ps.nis_config_map + (size_t)(frame - g_ps.fr) * g_ps.nis_config_stride;
     if (!hle_nis_update_scaler_config(config, sizeof(float) * 64, sharpness,
                                       input_w, input_h, output_w, output_h)) {
+        nis_status(2, 0);
+        nis_status(3, 4);
         if (last_failure != 4) hle_log("hakuX-hle-back", "NIS dispatch skipped: configuration rejected (%ux%u -> %ux%u)",
                                        input_w, input_h, output_w, output_h);
         last_failure = 4;
         return false;
     }
     last_failure = 0;
+    nis_status(3, 0);
+    nis_status(2, 1);
     VkDescriptorBufferInfo buffer = { g_ps.nis_config,
         (VkDeviceSize)(frame - g_ps.fr) * g_ps.nis_config_stride, sizeof(float) * 64 };
     VkDescriptorImageInfo sampler = { .sampler = g_ps.smp };
@@ -1302,16 +1320,27 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
         }
     }
     bool nis_done = false;
+    nis_status(1, nis ? 1 : 0);
+    nis_status(2, 0);
+    nis_status(3, 0);
+    nis_status(4, g_ps.have ? (int)g_ps.f.w : 0);
+    nis_status(5, g_ps.have ? (int)g_ps.f.h : 0);
+    nis_status(6, 0);
+    nis_status(7, 0);
+    nis_status(8, 0);
     if (g_ps.have && nis) {
         const float nw = sx * (float)ww, nh = sy * (float)wh;
         const float nrx = (float)g_ps.f.w / nw, nry = (float)g_ps.f.h / nh;
         const uint32_t ow = (uint32_t)(nw + 0.5f), oh = (uint32_t)(nh + 0.5f);
+        nis_status(6, (int)(nw + 0.5f));
+        nis_status(7, (int)(nh + 0.5f));
         if (nrx >= 0.5f && nrx <= 1.0f && nry >= 0.5f && nry <= 1.0f) {
             if (nis_dispatch(cb, f, src, g_ps.f.w, g_ps.f.h, ow, oh, nis_sharpness)) {
                 src = g_ps.nis_out_view;
                 nis_done = true;
             }
         } else {
+            nis_status(3, 5);
             static bool reported_scale_range;
             if (!reported_scale_range) {
                 hle_log("hakuX-hle-back", "NIS dispatch skipped: scale ratio outside supported range (input/output %.3f x %.3f; expected 0.5..1.0)",
@@ -1344,6 +1373,7 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
             pc[7] = (float)g_ps.f.h;
         }
         quad(cb, f, 0, g_ps.pipe[p], src, pc, iw, ih);
+        nis_status(8, nis_done ? 3 : p == P_AREA ? 1 : p == P_SGSR ? 2 : 0);
         log_path(p, fxaa_done, nis_done, (uint32_t)(vw + 0.5f), (uint32_t)(vh + 0.5f));
     }
     T.vkCmdEndRendering(cb);
