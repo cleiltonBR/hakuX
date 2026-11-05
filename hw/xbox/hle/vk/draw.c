@@ -1647,6 +1647,13 @@ static uint32_t sampler_index(const uint32_t *tss, uint32_t lod_down)
         .addressModeU = addr_mode(tss[TSS_ADDRESSU]),
         .addressModeV = addr_mode(tss[TSS_ADDRESSV]),
         .addressModeW = addr_mode(tss[TSS_ADDRESSW]),
+        /* Use the device's supported anisotropy for sharper oblique surfaces
+         * (roads, floors and walls). The feature is enabled only when the
+         * physical device exposed samplerAnisotropy at device creation. */
+        .anisotropyEnable = g_hvk.caps.aniso ? VK_TRUE : VK_FALSE,
+        .maxAnisotropy = g_hvk.caps.aniso
+                             ? MIN(g_hvk.props.limits.maxSamplerAnisotropy, 16.0f)
+                             : 1.0f,
         .mipLodBias = bias, .minLod = (float)base,
         .maxLod = mip ? VK_LOD_CLAMP_NONE : base + 0.25f,
         .borderColor = border };
