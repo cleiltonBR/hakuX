@@ -1208,7 +1208,7 @@ static void log_path(unsigned p, bool fxaa, uint32_t vw, uint32_t vh)
             p == P_AREA ? "averaged down" : p == P_SGSR ? "scaled up by SGSR" : "bilinear");
 }
 
-void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, bool cas, float cas_sharpness, uint64_t key)
+void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, bool cas, float cas_sharpness, bool nis, float nis_sharpness, uint64_t key)
 {
     g_ps.shown = false;
     PsFrame *f = &g_ps.fr[g_ps.cur];
@@ -1263,6 +1263,17 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
             fxaa_done = true;
         }
     }
+    bool nis_done = false;
+    if (g_ps.have && nis) {
+        const float nw = sx * (float)ww, nh = sy * (float)wh;
+        const float nrx = (float)g_ps.f.w / nw, nry = (float)g_ps.f.h / nh;
+        const uint32_t ow = (uint32_t)(nw + 0.5f), oh = (uint32_t)(nh + 0.5f);
+        if (nrx >= 0.5f && nrx <= 1.0f && nry >= 0.5f && nry <= 1.0f &&
+            nis_dispatch(cb, f, src, g_ps.f.w, g_ps.f.h, ow, oh, nis_sharpness)) {
+            src = g_ps.nis_out_view;
+            nis_done = true;
+        }
+    }
     VkImage dst = g_ps.img[g_ps.idx];
     barrier(cb, dst, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
             VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, 0, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
@@ -1275,11 +1286,11 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
         const float rx = (float)g_ps.f.w / vw, ry = (float)g_ps.f.h / vh;
         unsigned p = P_BILINEAR;
         float pc[12] = { -sx, -sy, sx, sy, 0.0f, 0.0f, 0.0f, 0.0f, g_ps.rot[0], g_ps.rot[1], g_ps.rot[2], g_ps.rot[3] };
-        if ((rx > 1.01f || ry > 1.01f) && average && g_ps.pipe[P_AREA]) {
+        if (!nis_done && (rx > 1.01f || ry > 1.01f) && average && g_ps.pipe[P_AREA]) {
             p = P_AREA;
             pc[4] = rx;
             pc[5] = ry;
-        } else if ((rx < 0.99f || ry < 0.99f) && upscale == HLE_UPSCALE_SGSR && g_ps.pipe[P_SGSR]) {
+        } else if (!nis_done && (rx < 0.99f || ry < 0.99f) && upscale == HLE_UPSCALE_SGSR && g_ps.pipe[P_SGSR]) {
             p = P_SGSR;
             pc[4] = 1.0f / (float)g_ps.f.w;
             pc[5] = 1.0f / (float)g_ps.f.h;
