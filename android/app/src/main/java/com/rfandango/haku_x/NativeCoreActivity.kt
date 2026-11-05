@@ -455,7 +455,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     fpsView?.visibility = if (fpsOn) View.VISIBLE else View.GONE
     if (!hitchesOn) hitchView?.visibility = View.GONE
     fpsHandler.removeCallbacks(fpsRunnable)
-    if (fpsOn || hitchesOn) {
+    if (fpsOn || hitchesOn || BuildConfig.DEBUG) {
       fpsHandler.postDelayed(fpsRunnable, FPS_INTERVAL_MS)
     }
     fpsHandler.removeCallbacks(fatalRunnable)
