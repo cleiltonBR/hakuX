@@ -170,12 +170,57 @@ static size_t strip_ia_depth(uint32_t *w, size_t n)
     return o;
 }
 
-uint32_t *hle_glsl_compile(HleShaderStage stage, const char *src,
-                           size_t *nwords)
+typedef struct HleGlslIncludeResult {
+    glsl_include_result_t result;
+    char *name;
+} HleGlslIncludeResult;
+
+typedef struct HleGlslIncludeContext {
+    HleShaderIncludeFn resolve;
+    void *user;
+} HleGlslIncludeContext;
+
+static glsl_include_result_t *glsl_include_user(void *ctx, const char *name,
+                                                 const char *includer, size_t depth)
+{
+    HleGlslIncludeContext *c = ctx;
+    (void)includer;
+    (void)depth;
+    if (!c || !c->resolve) {
+        return NULL;
+    }
+    size_t length = 0;
+    const char *data = c->resolve(c->user, name, &length);
+    if (!data) {
+        return NULL;
+    }
+    HleGlslIncludeResult *r = g_new0(HleGlslIncludeResult, 1);
+    r->name = g_strdup(name);
+    r->result.header_name = r->name;
+    r->result.header_data = data;
+    r->result.header_length = length;
+    return &r->result;
+}
+
+static int glsl_free_include(void *ctx, glsl_include_result_t *result)
+{
+    (void)ctx;
+    if (result) {
+        HleGlslIncludeResult *r = (HleGlslIncludeResult *)result;
+        g_free(r->name);
+        g_free(r);
+    }
+    return 0;
+}
+
+uint32_t *hle_glsl_compile_with_includes(HleShaderStage stage, const char *src,
+                                         HleShaderIncludeFn include, void *ctx,
+                                         size_t *nwords)
 {
     glslang_stage_t st = stage == HLE_SHADER_VERTEX ? GLSLANG_STAGE_VERTEX :
                          stage == HLE_SHADER_FRAGMENT ? GLSLANG_STAGE_FRAGMENT :
                          GLSLANG_STAGE_COMPUTE;
+    HleGlslIncludeContext include_ctx = { include, ctx };
     const glslang_input_t input = {
         .language = GLSLANG_SOURCE_GLSL,
         .stage = st,
@@ -191,6 +236,12 @@ uint32_t *hle_glsl_compile(HleShaderStage stage, const char *src,
         .forward_compatible = false,
         .messages = GLSLANG_MSG_DEFAULT_BIT,
         .resource = &k_hle_glsl_limits,
+        .callbacks = {
+            .include_system = include ? glsl_include_user : NULL,
+            .include_local = include ? glsl_include_user : NULL,
+            .free_include_result = glsl_free_include,
+        },
+        .callbacks_ctx = &include_ctx,
     };
     *nwords = 0;
     glslang_shader_t *sh = glslang_shader_create(&input);
@@ -232,5 +283,11 @@ uint32_t *hle_glsl_compile(HleShaderStage stage, const char *src,
     }
     *nwords = n;
     return words;
+}
+
+uint32_t *hle_glsl_compile(HleShaderStage stage, const char *src,
+                           size_t *nwords)
+{
+    return hle_glsl_compile_with_includes(stage, src, NULL, NULL, nwords);
 }
 
