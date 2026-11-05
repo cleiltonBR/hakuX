@@ -72,3 +72,25 @@ NFRU is out of scope until NSS is validated. It needs additional optical-flow su
 - GPU completion is verified separately from command recording.
 - Debug view and diagnostics can distinguish unavailable capability, invalid input, context failure, dispatch failure, and successful output.
 - No release is published and no pull request is merged without explicit user authorization.
+
+### Depth-format and motion-vector findings (2026-11-06)
+
+The HLE surface-format mapping in `hw/xbox/hle/vk/surf.c` now narrows the depth-format investigation:
+
+| Guest surface format | Vulkan backing format selected by HLE | Notes |
+|---|---|---|
+| D24S8 / LIN_D24S8 | D24_UNORM_S8_UINT when `g_hvk.caps.d24s8` is true; otherwise D32_SFLOAT_S8_UINT | The capability flag is a backend decision; the fallback changes precision/representation. |
+| F24S8 / LIN_F24S8 | D32_SFLOAT_S8_UINT | Guest F24S8 is backed by a 32-bit floating-point depth/stencil format. |
+| D16 / LIN_D16 | D16_UNORM | 16-bit normalized depth. |
+| F16 / LIN_F16 | D32_SFLOAT | Guest F16 is backed by a 32-bit floating-point depth format. |
+
+These are the selected Vulkan storage formats, not proof of the game's projection convention or of a normalized linear-depth signal. The NSS bridge must inspect the actual active surface format and dimensions per frame, preserve the depth aspect, and explicitly handle the selected backing format. It must not assume that all games use the same depth representation.
+
+The NV2A vertex-program translator in `hw/xbox/hle/shader/vsh.c` confirms that the guest program's `oPos` (R12) is screen-space position for the current draw. The translator maps that position to Vulkan `gl_Position`; its output interface carries diffuse/specular colors, fog, point size, and texture coordinates. This path does not expose a previous-frame clip position or a dedicated per-pixel motion-vector semantic. Therefore current `oPos` cannot be repurposed as motion vectors, and the existing translated vertex shader is not sufficient to synthesize temporal motion without additional previous-frame state and reliable correspondence.
+
+#### Updated implementation decision
+
+1. Treat the depth backing-format mapping as known, but keep depth convention, linearization, per-frame association, and synchronization as unresolved runtime validations.
+2. Do not add a fake motion-vector attachment or infer motion from current-frame position alone.
+3. Before a temporal NSS dispatch, prototype one of two real data paths: (a) instrument guest transform/state history to derive previous-to-current screen-space motion where the guest pipeline provides enough information, or (b) evaluate optical flow from consecutive completed color frames as a separate compute pass. Both paths need confidence/validity handling, disocclusion treatment, and measured GPU cost.
+4. Keep NSS disabled and preserve the existing NIS/FSR/SGSR/CAS/anisotropic-filter paths until a complete input bundle and actual presented NSS output are verified.
