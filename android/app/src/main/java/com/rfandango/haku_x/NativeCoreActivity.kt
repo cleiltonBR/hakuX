@@ -1234,6 +1234,8 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     const val PREF_FXAA = "fxaa"
     const val PREF_CAS = "cas_enabled"
     const val PREF_CAS_SHARPNESS = "cas_sharpness"
+    const val PREF_NIS = "nis_enabled"
+    const val PREF_NIS_SHARPNESS = "nis_sharpness"
     const val PREF_UPSCALE = "upscale_filter"
     const val PREF_ANISO = "anisotropy_enabled"
     const val PREF_ANISO_LEVEL = "anisotropy_level"
