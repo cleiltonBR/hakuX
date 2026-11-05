@@ -1650,9 +1650,11 @@ static uint32_t sampler_index(const uint32_t *tss, uint32_t lod_down)
         /* Use the device's supported anisotropy for sharper oblique surfaces
          * (roads, floors and walls). The feature is enabled only when the
          * physical device exposed samplerAnisotropy at device creation. */
-        .anisotropyEnable = g_hvk.caps.aniso ? VK_TRUE : VK_FALSE,
-        .maxAnisotropy = g_hvk.caps.aniso
-                             ? MIN(g_hvk.props.limits.maxSamplerAnisotropy, 16.0f)
+        .anisotropyEnable = (g_hvk.caps.aniso && g_hle_aniso_enabled &&
+                             g_hle_aniso_level > 1.0f) ? VK_TRUE : VK_FALSE,
+        .maxAnisotropy = (g_hvk.caps.aniso && g_hle_aniso_enabled)
+                             ? MIN(g_hvk.props.limits.maxSamplerAnisotropy,
+                                   MAX(1.0f, g_hle_aniso_level))
                              : 1.0f,
         .mipLodBias = bias, .minLod = (float)base,
         .maxLod = mip ? VK_LOD_CLAMP_NONE : base + 0.25f,
