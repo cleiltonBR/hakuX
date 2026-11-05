@@ -35,6 +35,10 @@
 #include "hw/xbox/hle/vk/display.h"
 #include "hw/xbox/hle/vk/quirks.h"
 #include "hw/xbox/hle/vk/swapchain.h"
+#include "hw/xbox/hle/vk/nis_coefficients.h"
+#include "nis_shader_sources.h"
+
+#include <string.h>
 
 #include <android/native_window.h>
 
@@ -49,6 +53,7 @@ typedef struct PsFrame {
     VkCommandBuffer cb;
     VkSemaphore acquired;       /* its swapchain image is ready */
     VkDescriptorSet set[2];     /* the window pass's, FXAA's */
+    VkDescriptorSet nis_set;
     uint64_t value;             /* its last submit's on the timeline */
     bool ramp_stale;            /* its share of the ramp buffer is behind */
 } PsFrame;
@@ -66,6 +71,21 @@ static struct {
     VkDeviceMemory ubo_mem;
     uint8_t *ubo_map;
     VkShaderModule vs, fs[P_COUNT];
+    VkShaderModule nis_cs;           /* optional NIS compute shader; presenter remains usable without it */
+    VkDescriptorSetLayout nis_dsl;
+    VkPipelineLayout nis_pl;
+    VkPipeline nis_pipe;
+    VkBuffer nis_config;
+    VkDeviceMemory nis_config_mem;
+    uint8_t *nis_config_map;
+    VkDeviceSize nis_config_stride;
+    VkSampler nis_sampler;
+    VkImage nis_coef_scale, nis_coef_usm, nis_out;
+    VkDeviceMemory nis_coef_scale_mem, nis_coef_usm_mem, nis_out_mem;
+    VkImageView nis_coef_scale_view, nis_coef_usm_view, nis_out_view;
+    uint32_t nis_out_w, nis_out_h;
+    VkImageLayout nis_out_layout;
+    bool nis_resources_ready;
     VkPipeline pipe[P_COUNT];
     VkFormat pipe_fmt;          /* the window pipelines' */
     PsFrame fr[PS_FRAMES];
@@ -102,6 +122,17 @@ static struct {
     bool shown;
     uint64_t shown_key;
 } g_ps;
+
+/* Read by the Android debug overlay; each field is independently atomic. */
+static int g_nis_status[9];
+static void nis_status(int index, int value)
+{
+    __atomic_store_n(&g_nis_status[index], value, __ATOMIC_RELAXED);
+}
+void hle_present_nis_status(int status[9])
+{
+    for (unsigned i = 0; i < 9; i++) status[i] = __atomic_load_n(&g_nis_status[i], __ATOMIC_RELAXED);
+}
 
 /* ---- shaders ---- */
 
@@ -318,6 +349,232 @@ static VkShaderModule module(HleShaderStage stage, const char *head, const char 
     return m;
 }
 
+/* The SDK shader includes NIS_Scaler.h. Its source is embedded by
+ * native/cmake/hle.cmake, then supplied to glslang's include callback. */
+static const char *nis_include(void *ctx, const char *name, size_t *length)
+{
+    (void)ctx;
+    if (strcmp(name, "NIS_Scaler.h") != 0) {
+        return NULL;
+    }
+    *length = sizeof(k_hle_nis_scaler) - 1;
+    return k_hle_nis_scaler;
+}
+
+static VkShaderModule nis_compute_module(void)
+{
+    size_t n = 0;
+    g_autofree uint32_t *spv = hle_glsl_compile_with_includes(
+        HLE_SHADER_COMPUTE, k_hle_nis_main, nis_include, NULL, &n);
+    if (!spv || !n) {
+        return VK_NULL_HANDLE;
+    }
+    VkShaderModuleCreateInfo ci = {
+        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize = n * sizeof(uint32_t),
+        .pCode = spv
+    };
+    VkShaderModule shader = VK_NULL_HANDLE;
+    if (T.vkCreateShaderModule(g_hvk.dev, &ci, NULL, &shader) != VK_SUCCESS) {
+        return VK_NULL_HANDLE;
+    }
+    return shader;
+}
+
+/* Build the compute pipeline independently of the active presentation
+ * path. Until the NIS output image and descriptors are ready, it is never
+ * dispatched; a failure here leaves all existing filters untouched. */
+static bool nis_config_buffer_init(void)
+{
+    const VkDeviceSize align = MAX((VkDeviceSize)g_hvk.props.limits.minUniformBufferOffsetAlignment, (VkDeviceSize)1);
+    g_ps.nis_config_stride = (sizeof(float) * 64 + align - 1) / align * align;
+    VkBufferCreateInfo bci = {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size = g_ps.nis_config_stride * PS_FRAMES,
+        .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE
+    };
+    if (T.vkCreateBuffer(g_hvk.dev, &bci, NULL, &g_ps.nis_config) != VK_SUCCESS) return false;
+    VkMemoryRequirements mr;
+    T.vkGetBufferMemoryRequirements(g_hvk.dev, g_ps.nis_config, &mr);
+    int mt = hle_vk_memtype(mr.memoryTypeBits,
+                            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, 0);
+    VkMemoryAllocateInfo mai = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize = mr.size, .memoryTypeIndex = mt < 0 ? 0u : (uint32_t)mt
+    };
+    if (mt < 0 || T.vkAllocateMemory(g_hvk.dev, &mai, NULL, &g_ps.nis_config_mem) != VK_SUCCESS ||
+        T.vkBindBufferMemory(g_hvk.dev, g_ps.nis_config, g_ps.nis_config_mem, 0) != VK_SUCCESS ||
+        T.vkMapMemory(g_hvk.dev, g_ps.nis_config_mem, 0, VK_WHOLE_SIZE, 0,
+                      (void **)&g_ps.nis_config_map) != VK_SUCCESS) return false;
+    return true;
+}
+static void nis_image_drop(VkImage *image, VkDeviceMemory *memory, VkImageView *view)
+{
+    if (*view) T.vkDestroyImageView(g_hvk.dev, *view, NULL);
+    if (*image) T.vkDestroyImage(g_hvk.dev, *image, NULL);
+    if (*memory) T.vkFreeMemory(g_hvk.dev, *memory, NULL);
+    *image = VK_NULL_HANDLE; *memory = VK_NULL_HANDLE; *view = VK_NULL_HANDLE;
+}
+
+static bool nis_image_make(uint32_t w, uint32_t h, VkFormat format, VkImageUsageFlags usage,
+                           VkImage *image, VkDeviceMemory *memory, VkImageView *view)
+{
+    VkImageCreateInfo ici = { .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .imageType = VK_IMAGE_TYPE_2D, .format = format, .extent = { w, h, 1 },
+        .mipLevels = 1, .arrayLayers = 1, .samples = VK_SAMPLE_COUNT_1_BIT,
+        .tiling = VK_IMAGE_TILING_OPTIMAL, .usage = usage,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE, .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED };
+    if (T.vkCreateImage(g_hvk.dev, &ici, NULL, image) != VK_SUCCESS) return false;
+    VkMemoryRequirements mr; T.vkGetImageMemoryRequirements(g_hvk.dev, *image, &mr);
+    int mt = hle_vk_memtype(mr.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 0);
+    VkMemoryAllocateInfo mai = { .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize = mr.size, .memoryTypeIndex = mt < 0 ? 0u : (uint32_t)mt };
+    VkImageViewCreateInfo vci = { .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .image = *image, .viewType = VK_IMAGE_VIEW_TYPE_2D, .format = format,
+        .subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 } };
+    if (mt < 0 || T.vkAllocateMemory(g_hvk.dev, &mai, NULL, memory) != VK_SUCCESS ||
+        T.vkBindImageMemory(g_hvk.dev, *image, *memory, 0) != VK_SUCCESS ||
+        T.vkCreateImageView(g_hvk.dev, &vci, NULL, view) != VK_SUCCESS) {
+        nis_image_drop(image, memory, view); return false;
+    }
+    return true;
+}
+
+static bool nis_upload_coefficients(void)
+{
+    const VkDeviceSize bytes = HLE_NIS_COEFFICIENT_FLOATS * sizeof(float);
+    VkFormatProperties fp; vkGetPhysicalDeviceFormatProperties(g_hvk.phys, VK_FORMAT_R32G32B32A32_SFLOAT, &fp);
+    const VkFormatFeatureFlags need = VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT;
+    if ((fp.optimalTilingFeatures & need) != need) return false;
+    VkBuffer staging = VK_NULL_HANDLE; VkDeviceMemory staging_mem = VK_NULL_HANDLE;
+    VkCommandPool pool = VK_NULL_HANDLE; VkCommandBuffer cb = VK_NULL_HANDLE; void *mapped = NULL;
+    bool ok = false;
+    VkBufferCreateInfo bci = { .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, .size = bytes * 2,
+        .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT, .sharingMode = VK_SHARING_MODE_EXCLUSIVE };
+    if (T.vkCreateBuffer(g_hvk.dev, &bci, NULL, &staging) != VK_SUCCESS) goto cleanup;
+    VkMemoryRequirements mr; T.vkGetBufferMemoryRequirements(g_hvk.dev, staging, &mr);
+    int mt = hle_vk_memtype(mr.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, 0);
+    VkMemoryAllocateInfo mai = { .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize = mr.size, .memoryTypeIndex = mt < 0 ? 0u : (uint32_t)mt };
+    if (mt < 0 || T.vkAllocateMemory(g_hvk.dev, &mai, NULL, &staging_mem) != VK_SUCCESS ||
+        T.vkBindBufferMemory(g_hvk.dev, staging, staging_mem, 0) != VK_SUCCESS ||
+        T.vkMapMemory(g_hvk.dev, staging_mem, 0, VK_WHOLE_SIZE, 0, &mapped) != VK_SUCCESS) goto cleanup;
+    hle_nis_copy_coefficients((float *)mapped, HLE_NIS_COEFFICIENT_FLOATS,
+        (float *)((uint8_t *)mapped + bytes), HLE_NIS_COEFFICIENT_FLOATS);
+    if (!nis_image_make(2, HLE_NIS_COEFFICIENT_PHASES, VK_FORMAT_R32G32B32A32_SFLOAT,
+            VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+            &g_ps.nis_coef_scale, &g_ps.nis_coef_scale_mem, &g_ps.nis_coef_scale_view) ||
+        !nis_image_make(2, HLE_NIS_COEFFICIENT_PHASES, VK_FORMAT_R32G32B32A32_SFLOAT,
+            VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+            &g_ps.nis_coef_usm, &g_ps.nis_coef_usm_mem, &g_ps.nis_coef_usm_view)) goto cleanup;
+    {
+        VkCommandPoolCreateInfo pci = { .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+            .flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT, .queueFamilyIndex = g_hvk.qfam };
+        if (T.vkCreateCommandPool(g_hvk.dev, &pci, NULL, &pool) != VK_SUCCESS) goto cleanup;
+        VkCommandBufferAllocateInfo cai = { .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+            .commandPool = pool, .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .commandBufferCount = 1 };
+        if (T.vkAllocateCommandBuffers(g_hvk.dev, &cai, &cb) != VK_SUCCESS) goto cleanup;
+        VkCommandBufferBeginInfo begin = { .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+            .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT };
+        if (T.vkBeginCommandBuffer(cb, &begin) != VK_SUCCESS) goto cleanup;
+        VkImage imgs[2] = { g_ps.nis_coef_scale, g_ps.nis_coef_usm };
+        VkImageMemoryBarrier2 bars[2] = {0};
+        for (unsigned i = 0; i < 2; i++) bars[i] = (VkImageMemoryBarrier2){
+            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2, .dstStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+            .dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT, .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+            .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED, .image = imgs[i],
+            .subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 } };
+        VkDependencyInfo dep = { .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+            .imageMemoryBarrierCount = 2, .pImageMemoryBarriers = bars };
+        T.vkCmdPipelineBarrier2(cb, &dep);
+        VkBufferImageCopy copies[2] = {
+            { .bufferOffset = 0, .imageSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 }, .imageExtent = { 2, HLE_NIS_COEFFICIENT_PHASES, 1 } },
+            { .bufferOffset = bytes, .imageSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 }, .imageExtent = { 2, HLE_NIS_COEFFICIENT_PHASES, 1 } } };
+        T.vkCmdCopyBufferToImage(cb, staging, imgs[0], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copies[0]);
+        T.vkCmdCopyBufferToImage(cb, staging, imgs[1], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copies[1]);
+        for (unsigned i = 0; i < 2; i++) bars[i] = (VkImageMemoryBarrier2){
+            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2, .srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+            .srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT, .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+            .dstAccessMask = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT, .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED, .image = imgs[i],
+            .subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 } };
+        T.vkCmdPipelineBarrier2(cb, &dep);
+        if (T.vkEndCommandBuffer(cb) != VK_SUCCESS) goto cleanup;
+        VkCommandBufferSubmitInfo cbi = { .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO, .commandBuffer = cb };
+        VkSubmitInfo2 si = { .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2, .commandBufferInfoCount = 1, .pCommandBufferInfos = &cbi };
+        hle_vk_queue_lock(); VkResult qr = T.vkQueueSubmit2(g_hvk.queue, 1, &si, VK_NULL_HANDLE);
+        if (qr == VK_SUCCESS) qr = T.vkQueueWaitIdle(g_hvk.queue); hle_vk_queue_unlock();
+        ok = qr == VK_SUCCESS;
+    }
+cleanup:
+    if (mapped) T.vkUnmapMemory(g_hvk.dev, staging_mem);
+    if (pool) T.vkDestroyCommandPool(g_hvk.dev, pool, NULL);
+    if (staging) T.vkDestroyBuffer(g_hvk.dev, staging, NULL);
+    if (staging_mem) T.vkFreeMemory(g_hvk.dev, staging_mem, NULL);
+    if (!ok) {
+        nis_image_drop(&g_ps.nis_coef_scale, &g_ps.nis_coef_scale_mem, &g_ps.nis_coef_scale_view);
+        nis_image_drop(&g_ps.nis_coef_usm, &g_ps.nis_coef_usm_mem, &g_ps.nis_coef_usm_view);
+    }
+    return ok;
+}
+static bool nis_compute_pipeline_init(void)
+{
+    if (!g_ps.nis_cs) {
+        return false;
+    }
+
+    const VkDescriptorSetLayoutBinding bindings[6] = {
+        { 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL },
+        { 1, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL },
+        { 2, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL },
+        { 3, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL },
+        { 4, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL },
+        { 5, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL },
+    };
+    VkDescriptorSetLayoutCreateInfo dci = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .bindingCount = 6,
+        .pBindings = bindings
+    };
+    if (T.vkCreateDescriptorSetLayout(g_hvk.dev, &dci, NULL, &g_ps.nis_dsl) != VK_SUCCESS) {
+        return false;
+    }
+
+    VkPipelineLayoutCreateInfo lci = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+        .setLayoutCount = 1,
+        .pSetLayouts = &g_ps.nis_dsl
+    };
+    if (T.vkCreatePipelineLayout(g_hvk.dev, &lci, NULL, &g_ps.nis_pl) != VK_SUCCESS) {
+        return false;
+    }
+
+    VkComputePipelineCreateInfo pci = {
+        .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
+        .stage = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+            .stage = VK_SHADER_STAGE_COMPUTE_BIT,
+            .module = g_ps.nis_cs,
+            .pName = "main"
+        },
+        .layout = g_ps.nis_pl
+    };
+    if (T.vkCreateComputePipelines(g_hvk.dev, VK_NULL_HANDLE, 1, &pci,
+                                   NULL, &g_ps.nis_pipe) != VK_SUCCESS) return false;
+    VkDescriptorSetLayout layouts[PS_FRAMES] = { g_ps.nis_dsl, g_ps.nis_dsl, g_ps.nis_dsl };
+    VkDescriptorSet sets[PS_FRAMES];
+    VkDescriptorSetAllocateInfo ai = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool = g_ps.dp, .descriptorSetCount = PS_FRAMES, .pSetLayouts = layouts
+    };
+    if (T.vkAllocateDescriptorSets(g_hvk.dev, &ai, sets) != VK_SUCCESS || !nis_config_buffer_init()) return false;
+    for (unsigned i = 0; i < PS_FRAMES; i++) g_ps.fr[i].nis_set = sets[i];
+    return nis_upload_coefficients();
+}
+
 static VkPipeline pipeline(VkShaderModule fs, VkFormat fmt)
 {
     if (!g_ps.vs || !fs) {
@@ -394,11 +651,16 @@ static bool init(void)
     VkPipelineLayoutCreateInfo lci = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO, .setLayoutCount = 1,
         .pSetLayouts = &g_ps.dsl, .pushConstantRangeCount = 1, .pPushConstantRanges = &pcr };
-    VkDescriptorPoolSize ps[2] = { { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, PS_FRAMES * 2 },
-                                   { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, PS_FRAMES * 2 } };
+    VkDescriptorPoolSize ps[5] = {
+        { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, PS_FRAMES * 2 },
+        { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, PS_FRAMES * 3 },
+        { VK_DESCRIPTOR_TYPE_SAMPLER, PS_FRAMES },
+        { VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, PS_FRAMES * 3 },
+        { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, PS_FRAMES }
+    };
     VkDescriptorPoolCreateInfo pci = {
-        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO, .maxSets = PS_FRAMES * 2,
-        .poolSizeCount = 2, .pPoolSizes = ps };
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO, .maxSets = PS_FRAMES * 3,
+        .poolSizeCount = ARRAY_SIZE(ps), .pPoolSizes = ps };
     VkBufferCreateInfo bci = { .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, .size = PS_FRAMES * PS_RAMP,
                                .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT };
     if (T.vkCreatePipelineLayout(g_hvk.dev, &lci, NULL, &g_ps.pl) != VK_SUCCESS ||
@@ -443,12 +705,17 @@ static bool init(void)
         }
         f->ramp_stale = true;
     }
+    g_ps.nis_cs = nis_compute_module();
+    const bool nis_ready = nis_compute_pipeline_init();
+    g_ps.nis_resources_ready = nis_ready;
+    nis_status(0, nis_ready ? 1 : 0);
     g_ps.vs = module(HLE_SHADER_VERTEX, k_vs, "");
     static const char *const body[P_COUNT] = { k_fs_bilinear, k_fs_area, k_fs_sgsr, k_fs_fxaa };
     for (unsigned i = 0; i < P_COUNT; i++) {
         g_ps.fs[i] = module(HLE_SHADER_FRAGMENT, k_fs_head, body[i]);
     }
     g_ps.pipe[P_FXAA] = pipeline(g_ps.fs[P_FXAA], VK_FORMAT_R8G8B8A8_UNORM);
+    hle_log("hakuX-hle-back", "present: NIS compute pipeline %s", nis_ready ? "ready (coefficients and compute resources uploaded)" : "unavailable (existing filters retained)");
     hle_log("hakuX-hle-back", "present: ready (shaders: bilinear %d, averaging %d, SGSR %d, FXAA %d)",
             g_ps.fs[P_BILINEAR] != VK_NULL_HANDLE, g_ps.fs[P_AREA] != VK_NULL_HANDLE,
             g_ps.fs[P_SGSR] != VK_NULL_HANDLE, g_ps.pipe[P_FXAA] != VK_NULL_HANDLE);
@@ -833,6 +1100,116 @@ static void barrier(VkCommandBuffer cb, VkImage img, VkImageLayout from, VkImage
     T.vkCmdPipelineBarrier2(cb, &di);
 }
 
+static bool nis_output_target(uint32_t w, uint32_t h)
+{
+    if (g_ps.nis_out && g_ps.nis_out_w == w && g_ps.nis_out_h == h) return true;
+    if (g_ps.nis_out) {
+        idle();
+        nis_image_drop(&g_ps.nis_out, &g_ps.nis_out_mem, &g_ps.nis_out_view);
+    }
+    VkFormatProperties fp; vkGetPhysicalDeviceFormatProperties(g_hvk.phys, VK_FORMAT_R8G8B8A8_UNORM, &fp);
+    const VkFormatFeatureFlags need = VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT | VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT;
+    if ((fp.optimalTilingFeatures & need) != need) return false;
+    if (!nis_image_make(w, h, VK_FORMAT_R8G8B8A8_UNORM,
+            VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+            &g_ps.nis_out, &g_ps.nis_out_mem, &g_ps.nis_out_view)) return false;
+    g_ps.nis_out_w = w; g_ps.nis_out_h = h; g_ps.nis_out_layout = VK_IMAGE_LAYOUT_UNDEFINED;
+    return true;
+}
+
+static bool nis_dispatch(VkCommandBuffer cb, PsFrame *frame, VkImageView input,
+                         uint32_t input_w, uint32_t input_h, uint32_t output_w, uint32_t output_h,
+                         float sharpness)
+{
+    /* Report the exact reason when NIS cannot run; do not silently fall back. */
+    static int last_failure = -1;
+    static uint32_t last_w, last_h, last_ow, last_oh;
+    static int last_sharpness = -1;
+    int failure = 0;
+    if (!g_ps.nis_resources_ready || !g_ps.nis_pipe || !frame->nis_set ||
+        !g_ps.nis_config_map || !g_ps.nis_coef_scale_view || !g_ps.nis_coef_usm_view) {
+        failure = 1; /* compute pipeline/descriptors/coefficients not ready */
+    } else if (!input || input_w < 2 || input_h < 2 ||
+               output_w < 2 || output_h < 2 || output_w > 8192 || output_h > 8192) {
+        failure = 2; /* invalid source or destination dimensions */
+    } else if (!nis_output_target(output_w, output_h)) {
+        failure = 3; /* unsupported storage format or output allocation failed */
+    }
+    if (failure) {
+        nis_status(2, 0);
+        nis_status(3, failure);
+        if (failure != last_failure) {
+            hle_log("hakuX-hle-back", "NIS dispatch skipped: reason=%d ready=%d pipe=%d set=%d config=%d coef=%d/%d input=%ux%u output=%ux%u",
+                    failure, g_ps.nis_resources_ready, g_ps.nis_pipe != VK_NULL_HANDLE,
+                    frame->nis_set != VK_NULL_HANDLE, g_ps.nis_config_map != NULL,
+                    g_ps.nis_coef_scale_view != VK_NULL_HANDLE, g_ps.nis_coef_usm_view != VK_NULL_HANDLE,
+                    input_w, input_h, output_w, output_h);
+            last_failure = failure;
+        }
+        return false;
+    }
+    uint8_t *config = g_ps.nis_config_map + (size_t)(frame - g_ps.fr) * g_ps.nis_config_stride;
+    if (!hle_nis_update_scaler_config(config, sizeof(float) * 64, sharpness,
+                                      input_w, input_h, output_w, output_h)) {
+        nis_status(2, 0);
+        nis_status(3, 4);
+        if (last_failure != 4) hle_log("hakuX-hle-back", "NIS dispatch skipped: configuration rejected (%ux%u -> %ux%u)",
+                                       input_w, input_h, output_w, output_h);
+        last_failure = 4;
+        return false;
+    }
+    last_failure = 0;
+    nis_status(3, 0);
+    nis_status(2, 1);
+    VkDescriptorBufferInfo buffer = { g_ps.nis_config,
+        (VkDeviceSize)(frame - g_ps.fr) * g_ps.nis_config_stride, sizeof(float) * 64 };
+    VkDescriptorImageInfo sampler = { .sampler = g_ps.smp };
+    VkDescriptorImageInfo images[4] = {
+        { .imageView = input, .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL },
+        { .imageView = g_ps.nis_out_view, .imageLayout = VK_IMAGE_LAYOUT_GENERAL },
+        { .imageView = g_ps.nis_coef_scale_view, .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL },
+        { .imageView = g_ps.nis_coef_usm_view, .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL }
+    };
+    VkWriteDescriptorSet writes[6] = {
+        { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstSet = frame->nis_set, .dstBinding = 0,
+          .descriptorCount = 1, .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .pBufferInfo = &buffer },
+        { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstSet = frame->nis_set, .dstBinding = 1,
+          .descriptorCount = 1, .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER, .pImageInfo = &sampler },
+        { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstSet = frame->nis_set, .dstBinding = 2,
+          .descriptorCount = 1, .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, .pImageInfo = &images[0] },
+        { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstSet = frame->nis_set, .dstBinding = 3,
+          .descriptorCount = 1, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, .pImageInfo = &images[1] },
+        { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstSet = frame->nis_set, .dstBinding = 4,
+          .descriptorCount = 1, .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, .pImageInfo = &images[2] },
+        { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstSet = frame->nis_set, .dstBinding = 5,
+          .descriptorCount = 1, .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, .pImageInfo = &images[3] }
+    };
+    T.vkUpdateDescriptorSets(g_hvk.dev, ARRAY_SIZE(writes), writes, 0, NULL);
+    const VkPipelineStageFlags2 old_stage = g_ps.nis_out_layout == VK_IMAGE_LAYOUT_UNDEFINED ?
+        VK_PIPELINE_STAGE_2_NONE : VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+    const VkAccessFlags2 old_access = g_ps.nis_out_layout == VK_IMAGE_LAYOUT_UNDEFINED ? 0 : VK_ACCESS_2_SHADER_SAMPLED_READ_BIT;
+    barrier(cb, g_ps.nis_out, g_ps.nis_out_layout, VK_IMAGE_LAYOUT_GENERAL, old_stage, old_access,
+            VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
+    T.vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_COMPUTE, g_ps.nis_pipe);
+    T.vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_COMPUTE, g_ps.nis_pl, 0, 1, &frame->nis_set, 0, NULL);
+    uint32_t gx = 0, gy = 0;
+    hle_nis_get_dispatch_size(output_w, output_h, &gx, &gy);
+    if (!gx || !gy) return false;
+    T.vkCmdDispatch(cb, gx, gy, 1);
+    barrier(cb, g_ps.nis_out, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+            VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
+    g_ps.nis_out_layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    const int sharp_pct = (int)(sharpness * 100.0f + 0.5f);
+    if (input_w != last_w || input_h != last_h || output_w != last_ow ||
+        output_h != last_oh || sharp_pct != last_sharpness) {
+        hle_log("hakuX-hle-back", "NIS dispatch EXECUTED: %ux%u -> %ux%u, sharpness=%d%%, groups=%ux%u",
+                input_w, input_h, output_w, output_h, sharp_pct, gx, gy);
+        last_w = input_w; last_h = input_h; last_ow = output_w; last_oh = output_h;
+        last_sharpness = sharp_pct;
+    }
+    return true;
+}
 /* A quad of pipeline p over rect (clip space) into the rendering open. */
 static void quad(VkCommandBuffer cb, PsFrame *f, unsigned set, VkPipeline p, VkImageView src,
                  const float pc[12], uint32_t w, uint32_t h)
@@ -868,25 +1245,26 @@ static void rendering(VkCommandBuffer cb, VkImageView v, uint32_t w, uint32_t h,
 }
 
 /* How the frame meets the window, logged when that changes. */
-static void log_path(unsigned p, bool fxaa, uint32_t vw, uint32_t vh)
+static void log_path(unsigned p, bool fxaa, bool nis, uint32_t vw, uint32_t vh)
 {
     static unsigned s_p = ~0u;
-    static bool s_fxaa;
+    static bool s_fxaa, s_nis;
     static uint32_t s_w, s_h, s_vw, s_vh;
-    if (p == s_p && fxaa == s_fxaa && g_ps.f.w == s_w && g_ps.f.h == s_h && vw == s_vw && vh == s_vh) {
+    if (p == s_p && fxaa == s_fxaa && nis == s_nis && g_ps.f.w == s_w && g_ps.f.h == s_h && vw == s_vw && vh == s_vh) {
         return;
     }
     s_p = p;
     s_fxaa = fxaa;
+    s_nis = nis;
     s_w = g_ps.f.w;
     s_h = g_ps.f.h;
     s_vw = vw;
     s_vh = vh;
     hle_log("hakuX-hle-back", "present: %ux%u%s into %ux%u: %s", s_w, s_h, fxaa ? " after FXAA" : "", vw, vh,
-            p == P_AREA ? "averaged down" : p == P_SGSR ? "scaled up by SGSR" : "bilinear");
+            nis ? "NVIDIA Image Scaling" : p == P_AREA ? "averaged down" : p == P_SGSR ? "scaled up by SGSR" : "bilinear");
 }
 
-void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, bool cas, float cas_sharpness, uint64_t key)
+void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, bool cas, float cas_sharpness, bool nis, float nis_sharpness, uint64_t key)
 {
     g_ps.shown = false;
     PsFrame *f = &g_ps.fr[g_ps.cur];
@@ -941,6 +1319,59 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
             fxaa_done = true;
         }
     }
+    bool nis_done = false;
+    bool nis_sharpen_only = false;
+    nis_status(1, nis ? 1 : 0);
+    nis_status(2, 0);
+    nis_status(3, 0);
+    nis_status(4, g_ps.have ? (int)g_ps.f.w : 0);
+    nis_status(5, g_ps.have ? (int)g_ps.f.h : 0);
+    nis_status(6, 0);
+    nis_status(7, 0);
+    nis_status(8, 0);
+    if (g_ps.have && nis) {
+        const float nw = sx * (float)ww, nh = sy * (float)wh;
+        const uint32_t target_w = (uint32_t)(nw + 0.5f), target_h = (uint32_t)(nh + 0.5f);
+        const bool requires_downscale = target_w <= g_ps.f.w || target_h <= g_ps.f.h;
+        if (requires_downscale) {
+            /* Use the SDK's 1:1 path whenever either destination axis does not
+             * enlarge. This preserves the NIS sharpened image as the source
+             * for the final area/bilinear presentation pass. */
+            nis_status(6, (int)g_ps.f.w);
+            nis_status(7, (int)g_ps.f.h);
+            if (nis_dispatch(cb, f, src, g_ps.f.w, g_ps.f.h,
+                             g_ps.f.w, g_ps.f.h, nis_sharpness)) {
+                src = g_ps.nis_out_view;
+                nis_done = true;
+                nis_sharpen_only = true;
+            }
+        } else {
+            /* NIS supports upscaling by at most 2x per axis. For larger
+             * display scales, render a <=2x intermediate and let final
+             * presentation perform the remaining enlargement. */
+            const uint32_t nis_w = MIN(target_w, g_ps.f.w * 2u);
+            const uint32_t nis_h = MIN(target_h, g_ps.f.h * 2u);
+            const float nrx = (float)g_ps.f.w / (float)nis_w;
+            const float nry = (float)g_ps.f.h / (float)nis_h;
+            nis_status(6, (int)nis_w);
+            nis_status(7, (int)nis_h);
+            if (nis_w >= g_ps.f.w && nis_h >= g_ps.f.h &&
+                nrx >= 0.5f && nrx <= 1.0f && nry >= 0.5f && nry <= 1.0f) {
+                if (nis_dispatch(cb, f, src, g_ps.f.w, g_ps.f.h, nis_w, nis_h, nis_sharpness)) {
+                    src = g_ps.nis_out_view;
+                    nis_done = true;
+                }
+            } else {
+                nis_status(3, 5);
+                static bool reported_scale_range;
+                if (!reported_scale_range) {
+                    hle_log("hakuX-hle-back", "NIS dispatch skipped: unsupported upscale target %ux%u from %ux%u",
+                            target_w, target_h, g_ps.f.w, g_ps.f.h);
+                    reported_scale_range = true;
+                }
+            }
+        }
+    }
     VkImage dst = g_ps.img[g_ps.idx];
     barrier(cb, dst, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
             VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, 0, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
@@ -953,11 +1384,11 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
         const float rx = (float)g_ps.f.w / vw, ry = (float)g_ps.f.h / vh;
         unsigned p = P_BILINEAR;
         float pc[12] = { -sx, -sy, sx, sy, 0.0f, 0.0f, 0.0f, 0.0f, g_ps.rot[0], g_ps.rot[1], g_ps.rot[2], g_ps.rot[3] };
-        if ((rx > 1.01f || ry > 1.01f) && average && g_ps.pipe[P_AREA]) {
+        if ((!nis_done || nis_sharpen_only) && (rx > 1.01f || ry > 1.01f) && average && g_ps.pipe[P_AREA]) {
             p = P_AREA;
             pc[4] = rx;
             pc[5] = ry;
-        } else if ((rx < 0.99f || ry < 0.99f) && upscale == HLE_UPSCALE_SGSR && g_ps.pipe[P_SGSR]) {
+        } else if (!nis_done && (rx < 0.99f || ry < 0.99f) && upscale == HLE_UPSCALE_SGSR && g_ps.pipe[P_SGSR]) {
             p = P_SGSR;
             pc[4] = 1.0f / (float)g_ps.f.w;
             pc[5] = 1.0f / (float)g_ps.f.h;
@@ -965,7 +1396,8 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
             pc[7] = (float)g_ps.f.h;
         }
         quad(cb, f, 0, g_ps.pipe[p], src, pc, iw, ih);
-        log_path(p, fxaa_done, (uint32_t)(vw + 0.5f), (uint32_t)(vh + 0.5f));
+        nis_status(8, nis_done ? (nis_sharpen_only ? 4 : 3) : p == P_AREA ? 1 : p == P_SGSR ? 2 : 0);
+        log_path(p, fxaa_done, nis_done, (uint32_t)(vw + 0.5f), (uint32_t)(vh + 0.5f));
     }
     T.vkCmdEndRendering(cb);
     barrier(cb, dst, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,

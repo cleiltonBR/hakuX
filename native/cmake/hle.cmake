@@ -24,6 +24,18 @@ add_subdirectory("${NC_DEPS}/glslang" glslang-build EXCLUDE_FROM_ALL)
 
 set(NC_HLE "${NC_REPO}/hw/xbox/hle")
 
+# Embed the upstream NIS GLSL sources so Android can resolve the SDK include
+# without depending on a filesystem path at runtime.
+set(NC_NIS_GENERATED "${CMAKE_CURRENT_BINARY_DIR}/generated")
+file(MAKE_DIRECTORY "${NC_NIS_GENERATED}")
+file(READ "${NC_REPO}/third_party/NVIDIAImageScaling/NIS_Main.glsl" NC_NIS_MAIN_SOURCE)
+file(READ "${NC_REPO}/third_party/NVIDIAImageScaling/NIS_Scaler.h" NC_NIS_SCALER_SOURCE)
+file(WRITE "${NC_NIS_GENERATED}/nis_shader_sources.h"
+  "#pragma once\n"
+  "static const char k_hle_nis_main[] = R\"HAKUXNISMAIN(${NC_NIS_MAIN_SOURCE})HAKUXNISMAIN\";\n"
+  "static const char k_hle_nis_scaler[] = R\"HAKUXNISSCALER(${NC_NIS_SCALER_SOURCE})HAKUXNISSCALER\";\n"
+)
+
 # The GLib subset the HLE and the APU use.
 add_library(nc_glib STATIC "${CMAKE_CURRENT_SOURCE_DIR}/compat/glib/glib.c")
 target_include_directories(nc_glib PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/compat/glib")
@@ -60,6 +72,7 @@ add_library(hakux_hle STATIC
   ${NC_HLE}/vk/back.c
   ${NC_HLE}/vk/display.c
   ${NC_HLE}/vk/swapchain.c
+  ${NC_HLE}/vk/nis_coefficients.cpp
   ${NC_HLE}/vk/batch.c
   ${NC_HLE}/vk/compat.c
   ${NC_HLE}/vk/draw.c
@@ -81,7 +94,8 @@ add_library(hakux_hle STATIC
   ${CMAKE_CURRENT_SOURCE_DIR}/hle/dirty.c
 )
 target_include_directories(hakux_hle PUBLIC "${NC_REPO}" "${NC_DEPS}/root" "${NC_DEPS}/vma/include"
-                           "${NC_DEPS}/glslang")
+                           "${NC_DEPS}/glslang"
+                    PRIVATE "${NC_NIS_GENERATED}")
 # xxhash (single header, FEX's copy): pb/pbdraw.c's span hashes
 target_include_directories(hakux_hle PRIVATE "${HAKUX_FEX_DIR}/External/xxhash")
 target_compile_definitions(hakux_hle PUBLIC CONFIG_VULKAN=1 HAKUX_HLE_GPU=1 HAKUX_NATIVE_CORE=1)

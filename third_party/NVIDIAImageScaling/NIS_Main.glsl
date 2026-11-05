@@ -29,8 +29,11 @@
 #extension GL_ARB_separate_shader_objects : enable
 #extension GL_ARB_shading_language_420pack : enable
 #extension GL_GOOGLE_include_directive : enable
-#extension GL_EXT_shader_16bit_storage : require
-#extension GL_EXT_shader_explicit_arithmetic_types : require
+// The Android Vulkan path uses the SDK's FP32 variant by default. Do not
+// require optional 16-bit storage/arithmetic features on mobile GPUs.
+// NIS_USE_HALF_PRECISION remains 0 unless the device explicitly supports FP16.
+#define NIS_USE_HALF_PRECISION 0
+// FP16 extensions are intentionally omitted: the Android path compiles FP32 only.
 
 #define NIS_GLSL 1
 
@@ -79,7 +82,7 @@ layout(set=0,binding=0) uniform const_buffer
 
 layout(set=0,binding=1) uniform sampler samplerLinearClamp;
 layout(set=0,binding=2) uniform texture2D in_texture;
-layout(set=0,binding=3) uniform writeonly image2D out_texture;
+layout(rgba8, set=0,binding=3) uniform writeonly image2D out_texture;
 
 #if NIS_SCALER
 layout(set=0,binding=4) uniform texture2D coef_scaler;

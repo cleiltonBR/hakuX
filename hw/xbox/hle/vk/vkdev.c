@@ -233,6 +233,32 @@ int hle_vk_init(void)
         .pApplicationName = "hakuX-hle",
         .apiVersion = force11 ? VK_API_VERSION_1_1 : VK_API_VERSION_1_3,
     };
+    /* Enumerate explicit Vulkan layers before instance creation. NSS may
+     * use Arm's ML graph/tensor emulation layers on Turnip; merely having
+     * Vulkan compute is not enough. Keep this diagnostic passive: do not
+     * enable third-party layers until their Android packaging and ordering
+     * have been verified. */
+    uint32_t nlayer = 0;
+    VkResult layer_result = vkEnumerateInstanceLayerProperties(&nlayer, NULL);
+    if (layer_result == VK_SUCCESS && nlayer) {
+        g_autofree VkLayerProperties *layers = g_new(VkLayerProperties, nlayer);
+        layer_result = vkEnumerateInstanceLayerProperties(&nlayer, layers);
+        if (layer_result == VK_SUCCESS) {
+            for (uint32_t i = 0; i < nlayer; i++) {
+                hle_log("hakuX-hle-back", "vk: available instance layer: %s (%s)",
+                        layers[i].layerName, layers[i].description);
+            }
+        } else {
+            hle_log("hakuX-hle-back", "vk: instance layer enumeration failed: %s",
+                    hle_vk_result_text(layer_result));
+        }
+    } else if (layer_result == VK_SUCCESS) {
+        hle_log("hakuX-hle-back", "vk: no explicit instance layers discovered");
+    } else {
+        hle_log("hakuX-hle-back", "vk: instance layer enumeration failed: %s",
+                hle_vk_result_text(layer_result));
+    }
+
     /* the window's surface (vk/swapchain.c): where the loader has it */
     uint32_t nie = 0;
     vkEnumerateInstanceExtensionProperties(NULL, &nie, NULL);
@@ -286,6 +312,21 @@ int hle_vk_init(void)
     vkEnumerateDeviceExtensionProperties(v->phys, NULL, &ne, NULL);
     g_autofree VkExtensionProperties *ext = g_new(VkExtensionProperties, ne);
     vkEnumerateDeviceExtensionProperties(v->phys, NULL, &ne, ext);
+    /* NSS capability probe only. These extensions are not enabled here:
+     * their presence alone does not prove the emulation layer is active or
+     * that the SDK's graph/tensor features can be created. */
+    const bool arm_tensors = has_ext(ext, ne, "VK_ARM_tensors");
+    const bool arm_data_graph = has_ext(ext, ne, "VK_ARM_data_graph");
+    const bool sync2_available = has_ext(ext, ne, VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME) ||
+                                 v->props.apiVersion >= VK_API_VERSION_1_3;
+    hle_log("hakuX-hle-back",
+            "vk: NSS probe GPU=%s vendor=%04x device=%04x driver=%u api=%u.%u.%u ARM_tensors=%d ARM_data_graph=%d sync2=%d (not enabled)",
+            v->props.deviceName, v->props.vendorID, v->props.deviceID,
+            v->props.driverVersion,
+            VK_API_VERSION_MAJOR(v->props.apiVersion),
+            VK_API_VERSION_MINOR(v->props.apiVersion),
+            VK_API_VERSION_PATCH(v->props.apiVersion),
+            arm_tensors, arm_data_graph, sync2_available);
     bool e_vids = has_ext(ext, ne, VK_EXT_VERTEX_INPUT_DYNAMIC_STATE_EXTENSION_NAME);
     bool e_eds2 = has_ext(ext, ne, VK_EXT_EXTENDED_DYNAMIC_STATE_2_EXTENSION_NAME);
     bool e_cbc = has_ext(ext, ne, VK_EXT_CUSTOM_BORDER_COLOR_EXTENSION_NAME);

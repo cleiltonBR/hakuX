@@ -218,7 +218,7 @@ FSR_PASS = r"""    /* FSR 1.0 (HAKUX_FSR): use EASU when the frame must be enlar
     bool use_fsr = false;
     bool fsr_easu = false;
 #if HAKUX_FSR
-    if (g_ps.have && upscale == HLE_UPSCALE_FSR && g_ps.pipe[P_EASU] && g_ps.pipe[P_RCAS]) {
+    if (g_ps.have && !nis_done && upscale == HLE_UPSCALE_FSR && g_ps.pipe[P_EASU] && g_ps.pipe[P_RCAS]) {
         const float fvw = sx * (float)ww, fvh = sy * (float)wh;
         const bool fdown = (g_ps.f.w > fvw * 1.01f || g_ps.f.h > fvh * 1.01f) && average && g_ps.pipe[P_AREA];
         const bool fup = (float)g_ps.f.w < fvw * 0.99f || (float)g_ps.f.h < fvh * 0.99f;
@@ -261,7 +261,7 @@ FSR_SELECT = r"""} else if (use_fsr) {
             } else {
                 p = P_BILINEAR; /* EASU or native-resolution FSR without sharpening */
             }
-        } else if ((rx < 0.99f || ry < 0.99f) && upscale == HLE_UPSCALE_SGSR && g_ps.pipe[P_SGSR]) {"""
+        } else if (!nis_done && (rx < 0.99f || ry < 0.99f) && upscale == HLE_UPSCALE_SGSR && g_ps.pipe[P_SGSR]) {"""
 
 edits = [
     ("#include \"hw/xbox/hle/vk/swapchain.h\"\n", "#include \"hw/xbox/hle/vk/swapchain.h\"\n#include <math.h>\n"),
@@ -283,9 +283,9 @@ edits = [
      "static VkShaderModule module(HleShaderStage stage"),
     ("VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, PS_FRAMES * 2 }",
      "VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, PS_FRAMES * 3 }"),
-    ("VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, PS_FRAMES * 2 }",
-     "VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, PS_FRAMES * 3 }"),
-    (".maxSets = PS_FRAMES * 2,", ".maxSets = PS_FRAMES * 3,"),
+    ("VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, PS_FRAMES * 3 }",
+     "VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, PS_FRAMES * 4 }"),
+    (".maxSets = PS_FRAMES * 3,", ".maxSets = PS_FRAMES * 4,"),
     ("VkDescriptorSetLayout l[2] = { g_ps.dsl, g_ps.dsl };",
      "VkDescriptorSetLayout l[3] = { g_ps.dsl, g_ps.dsl, g_ps.dsl };"),
     (".descriptorPool = g_ps.dp, .descriptorSetCount = 2,",
@@ -299,10 +299,10 @@ edits = [
     ("static void barrier(VkCommandBuffer cb, VkImage img, VkImageLayout from, VkImageLayout to,",
      FSR_TARGET.lstrip("\n") + "static void barrier(VkCommandBuffer cb, VkImage img, VkImageLayout from, VkImageLayout to,"),
     ("    VkImage dst = g_ps.img[g_ps.idx];\n", FSR_PASS + "    VkImage dst = g_ps.img[g_ps.idx];\n"),
-    ("} else if ((rx < 0.99f || ry < 0.99f) && upscale == HLE_UPSCALE_SGSR && g_ps.pipe[P_SGSR]) {",
+    ("} else if (!nis_done && (rx < 0.99f || ry < 0.99f) && upscale == HLE_UPSCALE_SGSR && g_ps.pipe[P_SGSR]) {",
      FSR_SELECT),
-    ('p == P_AREA ? "averaged down" : p == P_SGSR ? "scaled up by SGSR" : "bilinear");',
-     'p == P_AREA ? "averaged down" : p == P_RCAS ? "FSR 1.0 (RCAS)" :\n'
+    ('nis ? "NVIDIA Image Scaling" : p == P_AREA ? "averaged down" : p == P_SGSR ? "scaled up by SGSR" : "bilinear");',
+     'nis ? "NVIDIA Image Scaling" : p == P_AREA ? "averaged down" : p == P_RCAS ? "FSR 1.0 (RCAS)" :\n'
      '            p == P_SGSR ? "scaled up by SGSR" : "bilinear");'),
 ]
 

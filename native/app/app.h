@@ -33,9 +33,13 @@ void nc_present_set_upscale(int mode);
 /* RCAS (FSR's Contrast Adaptive Sharpening), only on the FSR path. */
 void nc_present_set_cas(bool on);
 void nc_present_set_cas_sharpness(float sharpness);
+/* NVIDIA Image Scaling: independent toggle and SDK sharpness, 0-100%. */
+void nc_present_set_nis(bool on, float sharpness);
 /* Frames the title presented per second over the last half second, their
  * average interval, and the last one's (ms). */
 void nc_present_stats(float *fps, float *avg_ms, float *last_ms);
+/* NIS diagnostics for the debug overlay: ready/enabled/executed/reason/dimensions/path. */
+void nc_present_nis_status(int status[9]);
 /* A title frame has been on screen (any thread). */
 bool nc_present_shown(void);
 

@@ -110,6 +110,16 @@ class AppPrefs(context: Context) {
     get() = sp.getFloat(NativeCoreActivity.PREF_CAS_SHARPNESS, 0.2f)
     set(value) = sp.edit { putFloat(NativeCoreActivity.PREF_CAS_SHARPNESS, value.coerceIn(0.0f, 2.0f)) }
 
+  /** NVIDIA Image Scaling: independent compute upscaler (applied at next game start). */
+  var nis: Boolean
+    get() = sp.getBoolean(NativeCoreActivity.PREF_NIS, false)
+    set(value) = sp.edit { putBoolean(NativeCoreActivity.PREF_NIS, value) }
+
+  /** NIS SDK sharpness, 0-100 percent represented as 0.0-1.0. */
+  var nisSharpness: Float
+    get() = sp.getFloat(NativeCoreActivity.PREF_NIS_SHARPNESS, 0.5f).coerceIn(0.0f, 1.0f)
+    set(value) = sp.edit { putFloat(NativeCoreActivity.PREF_NIS_SHARPNESS, value.coerceIn(0.0f, 1.0f)) }
+
   /** How a picture smaller than the screen is scaled up: bilinear, SGSR or FSR. */
   var upscaleFilter: String
     get() = sp.getString(NativeCoreActivity.PREF_UPSCALE, NativeCoreActivity.UPSCALE_BILINEAR)

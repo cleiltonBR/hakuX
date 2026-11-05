@@ -55,6 +55,8 @@ private val SECTIONS: List<Pair<Int, List<Overridable>>> = listOf(
     Overridable(GameSetting.UPSCALE, R.string.settings_upscale, UPSCALERS, { it.upscaleFilter }, { stringResource(upscaleLabel(it)) }),
     Overridable(GameSetting.CAS, R.string.settings_cas, ON_OFF, { it.cas.toString() }, { onOff(it) }),
     Overridable(GameSetting.CAS_SHARPNESS, R.string.settings_cas_sharpness, listOf("0.0", "0.2", "0.4", "0.6", "0.8", "1.0", "1.2", "1.4", "1.6", "1.8", "2.0"), { it.casSharpness.toString() }, { stringResource(R.string.settings_cas_sharpness_value, it.toFloat()) }),
+    Overridable(GameSetting.NIS, R.string.settings_nis, ON_OFF, { it.nis.toString() }, { onOff(it) }),
+    Overridable(GameSetting.NIS_SHARPNESS, R.string.settings_nis_sharpness, (0..10).map { (it / 10.0f).toString() }, { it.nisSharpness.toString() }, { stringResource(R.string.settings_nis_sharpness_value, (it.toFloat() * 100).toInt()) }),
     Overridable(GameSetting.ASYNC_SHADERS, R.string.settings_async_shaders, ON_OFF, { it.asyncShaders.toString() }, { onOff(it) }),
     Overridable(GameSetting.PREBUILD_SHADERS, R.string.settings_prebuild_shaders, ON_OFF, { it.prebuildShaders.toString() }, { onOff(it) }),
   ),
