@@ -301,8 +301,8 @@ edits = [
     ("    VkImage dst = g_ps.img[g_ps.idx];\n", FSR_PASS + "    VkImage dst = g_ps.img[g_ps.idx];\n"),
     ("} else if (!nis_done && (rx < 0.99f || ry < 0.99f) && upscale == HLE_UPSCALE_SGSR && g_ps.pipe[P_SGSR]) {",
      FSR_SELECT),
-    ('p == P_AREA ? "averaged down" : p == P_SGSR ? "scaled up by SGSR" : "bilinear");',
-     'p == P_AREA ? "averaged down" : p == P_RCAS ? "FSR 1.0 (RCAS)" :\n'
+    ('nis ? "NVIDIA Image Scaling" : p == P_AREA ? "averaged down" : p == P_SGSR ? "scaled up by SGSR" : "bilinear");',
+     'nis ? "NVIDIA Image Scaling" : p == P_AREA ? "averaged down" : p == P_RCAS ? "FSR 1.0 (RCAS)" :\n'
      '            p == P_SGSR ? "scaled up by SGSR" : "bilinear");'),
 ]
 
