@@ -70,37 +70,67 @@ jobs:
           git -C external/fex submodule update --init External/fmt External/range-v3 \
             External/rpmalloc External/unordered_dense External/xxhash Source/Common/cpp-optparse
 
-      - name: Build Bloodframe LSFG backend (SPIR-V first, DXBC optional)
+      - name: Build Bloodframe LSFG backend (embedded SPIR-V; DXBC optional)
         run: |
           set -euo pipefail
           BF_SRC="$GITHUB_WORKSPACE/../bloodframe"
           BF_BUILD="$GITHUB_WORKSPACE/build/bloodframe"
           git clone --depth 1 https://github.com/ducvd89/bloodframe.git "$BF_SRC"
           git -C "$BF_SRC" submodule update --init --depth 1 thirdparty/pe-parse thirdparty/volk
-          # This hakuX build uses the Lossless.dll's embedded FP16/FP32 SPIR-V.
-          # Keep DXBC translation as a graceful unavailable fallback, not a build dependency:
-          # the upstream DXBC submodule is currently inaccessible from CI.
+          # The runtime uses embedded SPIR-V from Lossless.dll. Exclude the DXBC
+          # translator source entirely when its optional submodule is unavailable.
           python3 - "$BF_SRC/android/CMakeLists.txt" "$BF_SRC/android/bb_no_dxbc.cpp" <<'PY'
           import pathlib, sys
-          cmake = pathlib.Path(sys.argv[1])
-          stub = pathlib.Path(sys.argv[2])
-          s = cmake.read_text()
+          cmake_path, stub_path = map(pathlib.Path, sys.argv[1:])
+          s = cmake_path.read_text()
           s = s.replace(
               'add_subdirectory(${LSFG_SRC}/thirdparty/dxbc dxbc EXCLUDE_FROM_ALL)',
-              'option(BLOODFRAME_NO_DXBC "Build using embedded Lossless.dll SPIR-V only" OFF)\nif(NOT BLOODFRAME_NO_DXBC)\n  add_subdirectory(${LSFG_SRC}/thirdparty/dxbc dxbc EXCLUDE_FROM_ALL)\nendif()')
-          s = s.replace(
-              '  ${LSFG_SRC}/src/extract/trans.cpp)',
-              '  ${LSFG_SRC}/src/extract/trans.cpp)\nif(BLOODFRAME_NO_DXBC)\n  list(REMOVE_ITEM _bloodframe_sources ${LSFG_SRC}/src/extract/trans.cpp)\n  list(APPEND _bloodframe_sources ${CMAKE_CURRENT_LIST_DIR}/bb_no_dxbc.cpp)\nendif()')
-          s = s.replace('add_library(bloodframe SHARED\n', 'set(_bloodframe_sources\n')
-          s = s.replace('  bb_lsfg.cpp\n', '  bb_lsfg.cpp\n')
-          s = s.replace('  ${LSFG_SRC}/src/extract/trans.cpp)\nif(BLOODFRAME_NO_DXBC)', '  ${LSFG_SRC}/src/extract/trans.cpp)\nadd_library(bloodframe SHARED ${_bloodframe_sources})\nif(BLOODFRAME_NO_DXBC)')
-          s = s.replace('target_link_libraries(bloodframe PRIVATE lsfg-vk-framegen pe-parse dxbc volk nativewindow log)',
-                        'if(BLOODFRAME_NO_DXBC)\n  target_link_libraries(bloodframe PRIVATE lsfg-vk-framegen pe-parse volk nativewindow log)\nelse()\n  target_link_libraries(bloodframe PRIVATE lsfg-vk-framegen pe-parse dxbc volk nativewindow log)\nendif()')
-          if 'BLOODFRAME_NO_DXBC' not in s or 'bb_no_dxbc.cpp' not in s:
-              raise SystemExit('Could not apply the DXBC-optional Bloodframe CMake patch')
-          cmake.write_text(s)
-          stub.write_text('''#include "extract/trans.hpp"\n#include <stdexcept>\nnamespace Extract {\nstd::vector<uint8_t> translateShader(std::vector<uint8_t>) {\n  throw std::runtime_error("This build supports embedded Lossless.dll SPIR-V only; DXBC translation is unavailable");\n}\n}\n''')
+              'option(BLOODFRAME_NO_DXBC "Build using embedded Lossless.dll SPIR-V only" OFF)\\n'
+              'if(NOT BLOODFRAME_NO_DXBC)\\n'
+              '  add_subdirectory(${LSFG_SRC}/thirdparty/dxbc dxbc EXCLUDE_FROM_ALL)\\n'
+              'endif()')
+          old_sources = """add_library(bloodframe SHARED
+            bb_lsfg.cpp
+            bb_spirv.cpp
+            ${LSFG_SRC}/src/extract/extract.cpp
+            ${LSFG_SRC}/src/extract/trans.cpp)"""
+          new_sources = """set(_bloodframe_sources
+            bb_lsfg.cpp
+            bb_spirv.cpp
+            ${LSFG_SRC}/src/extract/extract.cpp)
+          if(BLOODFRAME_NO_DXBC)
+            list(APPEND _bloodframe_sources bb_no_dxbc.cpp)
+          else()
+            list(APPEND _bloodframe_sources ${LSFG_SRC}/src/extract/trans.cpp)
+          endif()
+          add_library(bloodframe SHARED ${_bloodframe_sources})"""
+          if old_sources not in s:
+              raise SystemExit("Unexpected upstream Bloodframe source list; refusing a partial CMake patch")
+          s = s.replace(old_sources, new_sources, 1)
+          old_link = "target_link_libraries(bloodframe PRIVATE lsfg-vk-framegen pe-parse dxbc volk nativewindow log)"
+          new_link = """if(BLOODFRAME_NO_DXBC)
+            target_link_libraries(bloodframe PRIVATE lsfg-vk-framegen pe-parse volk nativewindow log)
+          else()
+            target_link_libraries(bloodframe PRIVATE lsfg-vk-framegen pe-parse dxbc volk nativewindow log)
+          endif()"""
+          if old_link not in s:
+              raise SystemExit("Unexpected upstream Bloodframe link line; refusing a partial CMake patch")
+          s = s.replace(old_link, new_link, 1)
+          if "list(APPEND _bloodframe_sources ${LSFG_SRC}/src/extract/trans.cpp)" not in s:
+              raise SystemExit("DXBC translator source exclusion was not applied")
+          cmake_path.write_text(s)
+          stub_path.write_text("""#include "extract/trans.hpp"
+          #include <stdexcept>
+          namespace Extract {
+          std::vector<uint8_t> translateShader(std::vector<uint8_t>) {
+              throw std::runtime_error("DXBC translation is unavailable; this build requires embedded SPIR-V in Lossless.dll");
+          }
+          }
+          """)
           PY
+          # Guard against the exact regression seen in CI: trans.cpp must not be in
+          # the generated target when BLOODFRAME_NO_DXBC is enabled.
+          grep -n -A12 -B2 'set(_bloodframe_sources' "$BF_SRC/android/CMakeLists.txt"
           cmake -S "$BF_SRC/android" -B "$BF_BUILD" -G Ninja \
             -DLSFG_SRC="$BF_SRC" -DBLOODFRAME_NO_DXBC=ON \
             -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake" \
@@ -108,7 +138,7 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release -DANDROID_STL=c++_shared
           cmake --build "$BF_BUILD" --target bloodframe --parallel 2
           mkdir -p "$GITHUB_WORKSPACE/build/bloodframe"
-          find "$BF_BUILD" -name libbloodframe.so -exec cp {} "$GITHUB_WORKSPACE/build/bloodframe/libbloodframe.so" \;
+          find "$BF_BUILD" -name libbloodframe.so -exec cp {} "$GITHUB_WORKSPACE/build/bloodframe/libbloodframe.so" \\;
           test -s "$GITHUB_WORKSPACE/build/bloodframe/libbloodframe.so"
           file "$GITHUB_WORKSPACE/build/bloodframe/libbloodframe.so"
 
