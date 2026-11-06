@@ -222,7 +222,7 @@ jobs:
         run: |
           APK=$(find android/app/build/outputs/apk/debug -name "*.apk" | head -n1)
           cp "$APK" hakuX-debug.apk
-          ls -la hakuX-fsr-debug.apk
+          ls -la hakuX-debug.apk
 
       - uses: actions/upload-artifact@v4
         with:
@@ -236,4 +236,4 @@ jobs:
           tag_name: hakux-build-${{ github.run_number }}
           name: hakuX build ${{ github.run_number }}
           prerelease: true
-          files: hakuX-fsr-debug.apk
+          files: hakuX-debug.apk
