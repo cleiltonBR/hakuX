@@ -180,6 +180,8 @@ static VkResult VKAPI_CALL arm_nss_create_instance(const VkInstanceCreateInfo *c
     VkResult result = create(&chained, a, out);
     if (result == VK_SUCCESS) {
         g_arm_instance = *out;
+        g_arm_driver_gdpa = (PFN_vkGetDeviceProcAddr)
+            g_arm_driver_gipa(g_arm_instance, "vkGetDeviceProcAddr");
     }
     return result;
 }
@@ -189,6 +191,9 @@ static VkResult VKAPI_CALL arm_nss_create_device(VkPhysicalDevice physical,
                                                   const VkAllocationCallbacks *a,
                                                   VkDevice *out)
 {
+    if (!g_arm_driver_gdpa) {
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
     VkLayerDeviceLink links[2] = {
         { .pNext = &links[1],
           .pfnNextGetInstanceProcAddr = g_arm_tensor.gipa,
@@ -259,8 +264,9 @@ static void *arm_nss_layers_enable(void *drv_gipa)
     }
 
     g_arm_driver_gipa = (PFN_vkGetInstanceProcAddr)drv_gipa;
-    g_arm_driver_gdpa = (PFN_vkGetDeviceProcAddr)g_arm_driver_gipa(VK_NULL_HANDLE,
-                                                                   "vkGetDeviceProcAddr");
+    /* vkGetDeviceProcAddr is instance-scoped; resolve it after instance
+     * creation, not with VK_NULL_HANDLE. */
+    g_arm_driver_gdpa = NULL;
     g_arm_driver_gpdpa = (PFN_GetPhysicalDeviceProcAddr)
         g_arm_driver_gipa(VK_NULL_HANDLE, "vk_layerGetPhysicalDeviceProcAddr");
     g_arm_instance = VK_NULL_HANDLE;
