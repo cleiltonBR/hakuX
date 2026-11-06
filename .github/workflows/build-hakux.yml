@@ -195,7 +195,7 @@ jobs:
             -DGLSLANG_EXECUTABLE="$HOST_GLSLANG/StandAlone/glslang" \
             -DGLSLANG_PATH="$DEPS/glslang" \
             -DSPIRV_CROSS_PATH="$DEPS/SPIRV-Cross" \
-            -DSPIRV_HEADERS_PATH="$DEPS/SPIRV-Headers" \\
+            -DSPIRV_HEADERS_PATH="$DEPS/SPIRV-Headers" \
             -DSPIRV-Headers_SOURCE_DIR="$DEPS/SPIRV-Headers" \
             -DSPIRV_TOOLS_PATH="$DEPS/SPIRV-Tools" \
             -DVULKAN_HEADERS_PATH="$DEPS/Vulkan-Headers" \
