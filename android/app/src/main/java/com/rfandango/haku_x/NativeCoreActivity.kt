@@ -261,6 +261,10 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     args += "cas_sharpness=${settings.casSharpness}"
     args += "nis=${if (settings.nis) 1 else 0}"
     args += "nis_sharpness=${settings.nisSharpness}"
+    // Pass the user's private DLL copy to the native Vulkan presenter.
+    AppPrefs(this).losslessDllPath.takeIf { it.isNotBlank() }?.let {
+      args += "losslessdll=$it"
+    }
     args += "aniso=${if (AppPrefs(this).anisotropyEnabled) 1 else 0}"
     args += "aniso_level=${AppPrefs(this).anisotropyLevel}"
     /* The console's video settings (widescreen, 480p/720p/1080i, the cable)
