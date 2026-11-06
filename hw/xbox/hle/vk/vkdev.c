@@ -313,7 +313,8 @@ int hle_vk_init(void)
     /* Reserve room for the extensions exposed by the two explicitly loaded
      * Arm layers. The custom Turnip path bypasses the system Vulkan loader,
      * so its layer extension lists must be queried by layer name and merged. */
-    g_autofree VkExtensionProperties *ext = g_new0(VkExtensionProperties, ne + 8);
+    const uint32_t ext_capacity = ne + 8;
+    g_autofree VkExtensionProperties *ext = g_new0(VkExtensionProperties, ext_capacity);
     vkEnumerateDeviceExtensionProperties(v->phys, NULL, &ne, ext);
     const char *ml_layers[2] = {
         "VK_LAYER_ML_Graph_Emulation", "VK_LAYER_ML_Tensor_Emulation"
@@ -321,7 +322,7 @@ int hle_vk_init(void)
     for (uint32_t layer = 0; layer < ARRAY_SIZE(ml_layers); layer++) {
         uint32_t count = 0;
         if (vkEnumerateDeviceExtensionProperties(v->phys, ml_layers[layer], &count, NULL) != VK_SUCCESS ||
-            count > 8 || ne + count > ne + 8) {
+            count > 8 || ne + count > ext_capacity) {
             continue;
         }
         VkExtensionProperties layer_ext[8];
