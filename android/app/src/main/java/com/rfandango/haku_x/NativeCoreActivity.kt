@@ -786,7 +786,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
         updateControllerVisibility()
       },
       getString(R.string.overlay_menu_controllers) to ::showPlayers,
-      "Gráficos (FSR / CAS)" to ::showRuntimeGraphics,
+      "Gráficos (FSR / CAS / NIS)" to ::showRuntimeGraphics,
     )
     if (states) {
       items += getString(R.string.overlay_menu_save_state) to { saveStates.showSlots(save = true) }
@@ -813,6 +813,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
       val current = modes.indexOf(prefs.upscaleFilter).coerceAtLeast(0)
       nativeSetUpscale(current)
       nativeSetCas(prefs.cas, prefs.casSharpness)
+      nativeSetNis(prefs.nis, prefs.nisSharpness)
     }
     val scaleValues = (1..4).toList()
     val anisoLevels = listOf(1, 2, 4, 8, 16)
@@ -823,6 +824,8 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
       "Nível anisotrópico: ${prefs.anisotropyLevel}x (reinicie o jogo)",
       "CAS: ${if (prefs.cas) "Ativado" else "Desativado"}",
       "Intensidade CAS: ${"%.1f".format(java.util.Locale.US, prefs.casSharpness)}",
+      "NIS: ${if (prefs.nis) "Ativado" else "Desativado"}",
+      "Nitidez NIS: ${(prefs.nisSharpness * 100).toInt()}%",
     )
     showMenuDialog(AlertDialog.Builder(this)
       .setTitle("Gráficos durante a gameplay")
@@ -869,6 +872,24 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
               .setTitle("Intensidade CAS")
               .setSingleChoiceItems(labels, selected) { dialog, index ->
                 prefs.casSharpness = values[index]
+                refresh()
+                dialog.dismiss()
+                showRuntimeGraphics()
+              }.setNegativeButton(android.R.string.cancel, null))
+          }
+          6 -> {
+            prefs.nis = !prefs.nis
+            refresh()
+            showRuntimeGraphics()
+          }
+          7 -> {
+            val values = (0..10).map { it / 10.0f }
+            val labels = values.map { "${(it * 100).toInt()}%" }.toTypedArray()
+            val selected = values.indexOfFirst { kotlin.math.abs(it - prefs.nisSharpness) < 0.001f }.coerceAtLeast(0)
+            showMenuDialog(AlertDialog.Builder(this)
+              .setTitle("Nitidez NIS")
+              .setSingleChoiceItems(labels, selected) { dialog, index ->
+                prefs.nisSharpness = values[index]
                 refresh()
                 dialog.dismiss()
                 showRuntimeGraphics()
