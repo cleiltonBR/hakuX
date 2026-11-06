@@ -221,19 +221,19 @@ jobs:
       - name: Nomear o APK
         run: |
           APK=$(find android/app/build/outputs/apk/debug -name "*.apk" | head -n1)
-          cp "$APK" hakuX-fsr-debug.apk
+          cp "$APK" hakuX-debug.apk
           ls -la hakuX-fsr-debug.apk
 
       - uses: actions/upload-artifact@v4
         with:
-          name: hakuX-nss-debug-apk
-          path: hakuX-fsr-debug.apk
+          name: hakuX-${{ github.ref_name == 'feature/nvidia-image-scaling' && 'nss' || 'standard' }}-debug-apk
+          path: hakuX-debug.apk
 
       - name: Publicar numa Release
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish }}
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: fsr-build-${{ github.run_number }}
-          name: hakuX FSR build ${{ github.run_number }}
+          tag_name: hakux-build-${{ github.run_number }}
+          name: hakuX build ${{ github.run_number }}
           prerelease: true
           files: hakuX-fsr-debug.apk
