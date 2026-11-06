@@ -156,11 +156,11 @@ The NV2A vertex-program translator in `hw/xbox/hle/shader/vsh.c` confirms that t
 
 ### Next gates
 
-1. Initialize the SDK submodule and its nested dependencies recursively, then run the Android ARM64 build with `-DHAKUX_NSS_SDK=ON`; fix any toolchain/API integration errors before adding runtime code.
-2. Pin/build the Arm Vulkan ML Emulation Layer for Android ARM64 and package its Graph/Tensor libraries/manifests in debug builds. Preserve Graph-before-Tensor ordering.
-3. Use the SDK's embedded quantized NSS VGF graph blobs when creating the FFX NSS context; no separate Android asset copy is required.
-4. Add opt-in Vulkan layer activation and query the actual enabled extension/feature chain; extension-name enumeration alone is insufficient.
-5. Build the color/depth/motion/history bridge and only then dispatch NSS. Keep existing NIS/FSR/SGSR paths unchanged until the NSS output is verified on-screen.
+1. Confirm the Android ARM64 `HAKUX_NSS_SDK=ON` core build and the Graph/Tensor layer build in GitHub Actions; resolve any compiler, linker, or APK-packaging failures.
+2. Run the opt-in Graph → Tensor → Turnip chain on an Android device and validate extension/feature negotiation, queue support, and runtime stability. The MLE Android build itself requires CMake 3.25 or newer.
+3. Create the FFX NSS context using the SDK's embedded quantized VGF graph blobs, then validate graph-session creation and resource requirements.
+4. Build a verified color/depth/motion/history bridge. The presenter receives only a completed color frame; evaluate optical-flow estimation or guest-state instrumentation for real motion vectors.
+5. Dispatch only when all inputs and metadata are valid, and present the actual NSS output. Keep NIS/FSR/SGSR unchanged until on-device output is verified.
 
 
 ### v1.1.1 selection note
