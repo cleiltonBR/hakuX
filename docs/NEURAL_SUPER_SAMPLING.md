@@ -98,17 +98,22 @@ The NV2A vertex-program translator in `hw/xbox/hle/shader/vsh.c` confirms that t
 
 ## SDK dependency and build integration (2026-11-06)
 
-- Added Arm Neural Graphics SDK **v1.1.0** as a Git submodule at `third_party/arm-neural-graphics-sdk`, pinned to upstream commit `aba0d109ffcfb97e380ac0a68fb11683e5561c6e`. Initialize it with `git submodule update --init --recursive`.
-- Added opt-in CMake switch `HAKUX_NSS_SDK` (default `OFF`). With Android `arm64-v8a` and CMake 3.21+, enabling it adds the SDK's `ffx-api` subproject with `vk_android_arm`, NSS enabled, and frame interpolation/optical-flow components disabled. The resulting API/backend target is linked to `hakux_hle`.
-- This is a dependency/build integration milestone, **not a working NSS renderer**. The Arm Vulkan ML Emulation Layer, its Graph/Tensor libraries and manifests, the quantized NSS VGF model, model loading, and runtime packaging are not yet integrated. No third-party layer is enabled in `vkCreateInstance`.
+- Added Arm Neural Graphics SDK **v1.1.1** as a Git submodule at `third_party/arm-neural-graphics-sdk`, pinned to upstream commit `019e99a62ea3a331fe112516190d77befc779a53`. Initialize it with `git submodule update --init --recursive`.
+- Added opt-in CMake switch `HAKUX_NSS_SDK` (default `OFF`). With Android `arm64-v8a` and CMake 3.23+, enabling it adds the SDK's `ffx-api` subproject with `vk_android_arm`, NSS enabled, frame interpolation, optical flow, and capture disabled. The Android platform variables are set explicitly because HakuX embeds the `ffx-api` subproject rather than the SDK's all-components top-level build. The resulting API/backend target is linked to `hakux_hle`.
+- This is a dependency/build integration milestone, **not a working NSS renderer**. The Arm Vulkan ML Emulation Layer, its Graph/Tensor libraries and manifests, the NSS VGF model files are present in the pinned SDK under `sdk/src/backends/vk/data_graphs/nss/`, but model loading and Android runtime packaging are not yet integrated. No third-party layer is enabled in `vkCreateInstance`.
 - The SDK's top-level CMake project also builds an optional Arm NG Vulkan layer; HakuX currently includes only `ffx-api`, so that layer is not built or packaged by this integration.
 - Arm documents Android AArch64 support, but this does not certify Adreno/Turnip as a production target. The ML Emulation Layer is useful for functional testing on Vulkan compute devices; emulation performance is not representative of production performance.
 - NSS remains disabled. The presenter still lacks a verified per-pixel motion-vector source and the temporal camera/jitter metadata needed for a valid dispatch. Never dispatch with fabricated/zero motion vectors.
 
 ### Next gates
 
-1. Initialize the submodule recursively and run the Android ARM64 build with `-DHAKUX_NSS_SDK=ON`; fix any toolchain/API integration errors before adding runtime code.
+1. Initialize the SDK submodule and its nested dependencies recursively, then run the Android ARM64 build with `-DHAKUX_NSS_SDK=ON`; fix any toolchain/API integration errors before adding runtime code.
 2. Pin/build the Arm Vulkan ML Emulation Layer for Android ARM64 and package its Graph/Tensor libraries/manifests in debug builds. Preserve Graph-before-Tensor ordering.
-3. Pin a quantized NSS model snapshot and implement safe model asset loading.
+3. Use the SDK-pinned quantized NSS VGF assets and implement safe model asset loading/packaging.
 4. Add opt-in Vulkan layer activation and query the actual enabled extension/feature chain; extension-name enumeration alone is insufficient.
 5. Build the color/depth/motion/history bridge and only then dispatch NSS. Keep existing NIS/FSR/SGSR paths unchanged until the NSS output is verified on-screen.
+
+
+### v1.1.1 selection note
+
+The upstream v1.1.1 release (30 October 2026) supersedes v1.1.0 and includes NSS LDR-input support plus optional motion-vector jitter cancellation. It also changes the NSS/NFRU source and ABI interfaces relative to v1.1.0, so HakuX pins and targets v1.1.1 before any API bridge is written. The SDK repository includes the quantized NSS VGF model files; they still need an explicit runtime asset-loading and packaging path in HakuX.
