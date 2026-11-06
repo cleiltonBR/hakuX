@@ -57,7 +57,7 @@ Arm documents the optical-flow API in Emulation Layer v0.10.0, and the Vulkan sp
 
 - Pin a compatible Arm Neural Graphics SDK release, NSS model revision, and ML Emulation Layer release.
 - Build the Android AArch64 ML emulation layers using the upstream Android packaging workflow.
-- Package the graph and tensor layers into a debug-only HakuX APK (arm64-v8a), with required manifests and libraries.
+- Package the graph and tensor layers as an Android debug Vulkan-layer APK (or the verified in-app equivalent), with required manifests and libraries. HakuX now declares Android package visibility for Arm's layer package (`com.arm.ai_ml_emulation_layer_for_vulkan`) so Android 11+ can discover it during debug-layer setup.
 - Add opt-in instance-layer activation before vkCreateInstance; keep it disabled by default.
 - Log layer discovery, enabled layers, Vulkan API version, required extension names, queried feature bits, and explicit failure reasons.
 - Verify that the HLE-created Vulkan device can be created with the layer enabled on Turnip. Do not change normal Vulkan device creation when NSS is off.
