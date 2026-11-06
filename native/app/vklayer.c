@@ -145,6 +145,96 @@ static bool arm_layer_open(HleArmLayer *layer, const char *library, const char *
     return true;
 }
 
+static VkResult VKAPI_CALL arm_tensor_next_enumerate_device_extensions(
+    VkPhysicalDevice physical, const char *layer_name, uint32_t *count,
+    VkExtensionProperties *properties)
+{
+    PFN_vkEnumerateDeviceExtensionProperties lower =
+        (PFN_vkEnumerateDeviceExtensionProperties)
+            g_arm_driver_gipa(g_arm_instance, "vkEnumerateDeviceExtensionProperties");
+    PFN_vkEnumerateDeviceExtensionProperties tensor =
+        (PFN_vkEnumerateDeviceExtensionProperties)
+            g_arm_tensor.gipa(g_arm_instance, "vkEnumerateDeviceExtensionProperties");
+    if (!lower || !tensor) {
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
+    if (layer_name) {
+        return tensor(physical, layer_name, count, properties);
+    }
+
+    /* The system loader normally merges extensions exposed by enabled layers
+     * into the NULL-layer query. Our custom Turnip chain bypasses that loader,
+     * so reproduce the Tensor-layer part for Graph's requiredExtensions check. */
+    uint32_t lower_count = 0, tensor_count = 0;
+    VkResult result = lower(physical, NULL, &lower_count, NULL);
+    if (result != VK_SUCCESS) {
+        return result;
+    }
+    result = tensor(physical, ARM_TENSOR_LAYER_NAME, &tensor_count, NULL);
+    if (result != VK_SUCCESS) {
+        return result;
+    }
+    if (!properties) {
+        *count = lower_count + tensor_count;
+        return VK_SUCCESS;
+    }
+
+    VkExtensionProperties *all =
+        (VkExtensionProperties *)calloc((size_t)lower_count + tensor_count + 1,
+                                        sizeof(VkExtensionProperties));
+    if (!all) {
+        return VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
+    uint32_t lower_written = lower_count;
+    result = lower(physical, NULL, &lower_written, all);
+    if (result != VK_SUCCESS && result != VK_INCOMPLETE) {
+        free(all);
+        return result;
+    }
+    uint32_t tensor_written = tensor_count;
+    result = tensor(physical, ARM_TENSOR_LAYER_NAME, &tensor_written,
+                    all + lower_written);
+    if (result != VK_SUCCESS && result != VK_INCOMPLETE) {
+        free(all);
+        return result;
+    }
+
+    /* Avoid duplicate names if a future driver implements the extension natively. */
+    uint32_t total = lower_written;
+    for (uint32_t i = 0; i < tensor_written; i++) {
+        bool found = false;
+        for (uint32_t j = 0; j < total; j++) {
+            if (!strcmp(all[j].extensionName, all[lower_written + i].extensionName)) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            all[total++] = all[lower_written + i];
+        }
+    }
+    uint32_t capacity = *count;
+    uint32_t copied = capacity < total ? capacity : total;
+    if (copied) {
+        memcpy(properties, all, (size_t)copied * sizeof(*properties));
+    }
+    *count = copied;
+    free(all);
+    return copied < total ? VK_INCOMPLETE : VK_SUCCESS;
+}
+
+static PFN_vkVoidFunction VKAPI_CALL arm_tensor_next_gipa(VkInstance instance,
+                                                          const char *name)
+{
+    if (!strcmp(name, "vkGetInstanceProcAddr")) {
+        return (PFN_vkVoidFunction)arm_tensor_next_gipa;
+    }
+    if (!strcmp(name, "vkEnumerateDeviceExtensionProperties")) {
+        return (PFN_vkVoidFunction)arm_tensor_next_enumerate_device_extensions;
+    }
+    return g_arm_tensor.gipa(instance, name);
+}
+
 static VkResult VKAPI_CALL arm_nss_create_instance(const VkInstanceCreateInfo *ci,
                                                     const VkAllocationCallbacks *a,
                                                     VkInstance *out)
@@ -152,7 +242,7 @@ static VkResult VKAPI_CALL arm_nss_create_instance(const VkInstanceCreateInfo *c
     /* Graph is the first layer; its next link is Tensor, then the driver. */
     VkLayerInstanceLink links[2] = {
         { .pNext = &links[1],
-          .pfnNextGetInstanceProcAddr = g_arm_tensor.gipa,
+          .pfnNextGetInstanceProcAddr = arm_tensor_next_gipa,
           .pfnNextGetPhysicalDeviceProcAddr = g_arm_tensor.gpdpa },
         { .pNext = NULL,
           .pfnNextGetInstanceProcAddr = g_arm_driver_gipa,
