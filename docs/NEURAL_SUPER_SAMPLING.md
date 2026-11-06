@@ -53,7 +53,7 @@ When the two layers expose their extensions, HakuX queries their extension lists
 
 The HLE now uses the pinned SDK Vulkan-Headers to query `VkPhysicalDeviceTensorFeaturesARM` and `VkPhysicalDeviceDataGraphFeaturesARM`. It does not mark NSS ready merely because extension names exist: the required feature bits and dependency extensions must also pass. The standard graphics floor remains independent, so a failed NSS capability check leaves the normal renderer available.
 
-This is an **ML-layer integration milestone**, not yet a working NSS image upscaler. No NSS VGF model is loaded, no graph pipeline/session is created, and no frame is dispatched. The next gates are a real Android/Turnip runtime test, API/feature/queue validation, model loading, and the frame-data bridge. The system Vulkan loader path remains separate and can use Android's documented GPU debug-layer settings.
+This is an **ML-layer integration milestone**, not yet a working NSS image upscaler. The pinned SDK compiles its NSS VGF models into generated blob-accessor sources and links them into the static SDK library; HakuX does not need loose model files in Android assets. HakuX still does not create an NSS context or graph session, and no frame is dispatched. The next gates are a real Android/Turnip runtime test, API/feature/queue validation, NSS context creation, and the frame-data bridge. The system Vulkan loader path remains separate and can use Android's documented GPU debug-layer settings.
 
 ## Custom Turnip layer-loading constraint (2026-11-06)
 
@@ -78,6 +78,10 @@ This is now the preferred feasibility prototype, ahead of instrumenting the gues
 The passive Vulkan capability log now reports `VK_ARM_data_graph_optical_flow` separately from `VK_ARM_tensors` and `VK_ARM_data_graph`. This is only an extension-presence probe; until the layers are packaged and explicitly enabled, a negative result does not prove that the emulated extension is unavailable.
 
 Arm documents the optical-flow API in Emulation Layer v0.10.0, and the Vulkan specification defines its output as forward displacement from the input image to the reference image. These details make it a plausible motion-vector source, not a substitute for end-to-end validation.
+
+## Model packaging clarification (2026-11-06)
+
+The pinned Arm SDK does not require HakuX to load a loose VGF file from Android storage. Its Vulkan CMake backend compiles NSS shader permutations and passes `data_graphs/nss/*.vgf` through the SDK's VGF parser; generated blob-accessor sources are linked into the static SDK library. The APK therefore carries the model through `libhakuxcore.so`, not an assets directory. The remaining integration work is to create and destroy the FFX NSS context against HakuX's Vulkan device, then dispatch it with correctly synchronized color, depth, motion vectors, jitter, camera parameters, and temporal history.
 
 ## Integration stages
 
@@ -144,7 +148,7 @@ The NV2A vertex-program translator in `hw/xbox/hle/shader/vsh.c` confirms that t
 
 - Added Arm Neural Graphics SDK **v1.1.1** as a Git submodule at `third_party/arm-neural-graphics-sdk`, pinned to upstream commit `019e99a62ea3a331fe112516190d77befc779a53`. Initialize it with `git submodule update --init --recursive`.
 - Added opt-in CMake switch `HAKUX_NSS_SDK` (default `OFF`). With Android `arm64-v8a` and CMake 3.23+, enabling it adds the SDK's `ffx-api` subproject with `vk_android_arm`, NSS enabled, frame interpolation, optical flow, and capture disabled. The Android platform variables are set explicitly because HakuX embeds the `ffx-api` subproject rather than the SDK's all-components top-level build. The resulting API/backend target is linked to `hakux_hle`.
-- This is a dependency/build integration milestone, **not a working NSS renderer**. The Arm Vulkan ML Emulation Layer, its Graph/Tensor libraries and manifests, the NSS VGF model files are present in the pinned SDK under `sdk/src/backends/vk/data_graphs/nss/`, but model loading and Android runtime packaging are not yet integrated. No third-party layer is enabled in `vkCreateInstance`.
+- This is a dependency/build integration milestone, **not a working NSS renderer**. The Graph/Tensor libraries are built and staged in the debug APK, and HakuX has a debug-only opt-in custom Vulkan layer chain. The SDK's NSS VGF files under `sdk/src/backends/vk/data_graphs/nss/` are compiled into generated blob-accessor sources and linked into the static SDK library; they are not loose runtime assets. NSS context creation, graph-session creation, and frame dispatch are not yet integrated.
 - The SDK's top-level CMake project also builds an optional Arm NG Vulkan layer; HakuX currently includes only `ffx-api`, so that layer is not built or packaged by this integration.
 - Arm documents Android AArch64 support, but this does not certify Adreno/Turnip as a production target. The ML Emulation Layer is useful for functional testing on Vulkan compute devices; emulation performance is not representative of production performance.
 - NSS remains disabled. The presenter still lacks a verified per-pixel motion-vector source and the temporal camera/jitter metadata needed for a valid dispatch. Never dispatch with fabricated/zero motion vectors.
@@ -153,11 +157,11 @@ The NV2A vertex-program translator in `hw/xbox/hle/shader/vsh.c` confirms that t
 
 1. Initialize the SDK submodule and its nested dependencies recursively, then run the Android ARM64 build with `-DHAKUX_NSS_SDK=ON`; fix any toolchain/API integration errors before adding runtime code.
 2. Pin/build the Arm Vulkan ML Emulation Layer for Android ARM64 and package its Graph/Tensor libraries/manifests in debug builds. Preserve Graph-before-Tensor ordering.
-3. Use the SDK-pinned quantized NSS VGF assets and implement safe model asset loading/packaging.
+3. Use the SDK's embedded quantized NSS VGF graph blobs when creating the FFX NSS context; no separate Android asset copy is required.
 4. Add opt-in Vulkan layer activation and query the actual enabled extension/feature chain; extension-name enumeration alone is insufficient.
 5. Build the color/depth/motion/history bridge and only then dispatch NSS. Keep existing NIS/FSR/SGSR paths unchanged until the NSS output is verified on-screen.
 
 
 ### v1.1.1 selection note
 
-The upstream v1.1.1 release (30 October 2026) supersedes v1.1.0 and includes NSS LDR-input support plus optional motion-vector jitter cancellation. It also changes the NSS/NFRU source and ABI interfaces relative to v1.1.0, so HakuX pins and targets v1.1.1 before any API bridge is written. The SDK repository includes the quantized NSS VGF model files; they still need an explicit runtime asset-loading and packaging path in HakuX.
+The upstream v1.1.1 release (30 October 2026) supersedes v1.1.0 and includes NSS LDR-input support plus optional motion-vector jitter cancellation. It also changes the NSS/NFRU source and ABI interfaces relative to v1.1.0, so HakuX pins and targets v1.1.1 before any API bridge is written. The SDK's build compiles the quantized NSS VGF model files into blob-accessor sources and links them into the static backend; HakuX still needs runtime NSS context creation and dispatch.
