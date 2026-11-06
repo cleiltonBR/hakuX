@@ -1,6 +1,6 @@
 # Neural Super Sampling (NSS) — HakuX integration plan
 
-Status: research and integration preparation; NSS is not yet implemented.
+Status: SDK/API build integration and opt-in Arm Graph/Tensor layer-loading path are in progress; NSS image dispatch is not yet implemented.
 
 ## Goal
 
@@ -150,6 +150,7 @@ The NV2A vertex-program translator in `hw/xbox/hle/shader/vsh.c` confirms that t
 - Added opt-in CMake switch `HAKUX_NSS_SDK` (default `OFF`). With Android `arm64-v8a` and CMake 3.23+, enabling it adds the SDK's `ffx-api` subproject with `vk_android_arm`, NSS enabled, frame interpolation, optical flow, and capture disabled. The Android platform variables are set explicitly because HakuX embeds the `ffx-api` subproject rather than the SDK's all-components top-level build. The resulting API/backend target is linked to `hakux_hle`.
 - This is a dependency/build integration milestone, **not a working NSS renderer**. The Graph/Tensor libraries are built and staged in the debug APK, and HakuX has a debug-only opt-in custom Vulkan layer chain. The SDK's NSS VGF files under `sdk/src/backends/vk/data_graphs/nss/` are compiled into generated blob-accessor sources and linked into the static SDK library; they are not loose runtime assets. NSS context creation, graph-session creation, and frame dispatch are not yet integrated.
 - The SDK's top-level CMake project also builds an optional Arm NG Vulkan layer; HakuX currently includes only `ffx-api`, so that layer is not built or packaged by this integration.
+- The separate Arm ML Emulation Layer is now built by the feature-branch Android workflow and its Graph/Tensor shared libraries are staged in the debug APK. The custom Turnip path can load them only through the explicit `HAKUX_NSS_LAYERS=1` / `debug.hakux.nsslayers=1` opt-in; the default renderer does not enable them.
 - Arm documents Android AArch64 support, but this does not certify Adreno/Turnip as a production target. The ML Emulation Layer is useful for functional testing on Vulkan compute devices; emulation performance is not representative of production performance.
 - NSS remains disabled. The presenter still lacks a verified per-pixel motion-vector source and the temporal camera/jitter metadata needed for a valid dispatch. Never dispatch with fabricated/zero motion vectors.
 
