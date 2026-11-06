@@ -112,6 +112,7 @@ static PFN_vkGetInstanceProcAddr g_arm_driver_gipa;
 static PFN_vkGetDeviceProcAddr g_arm_driver_gdpa;
 static PFN_GetPhysicalDeviceProcAddr g_arm_driver_gpdpa;
 static VkInstance g_arm_instance;
+static uint32_t g_arm_app_api_version = VK_API_VERSION_1_0;
 
 static bool debug_switch(const char *env_name, const char *property_name)
 {
@@ -232,7 +233,8 @@ static VkResult VKAPI_CALL arm_tensor_next_enumerate_device_extensions(
             for (uint32_t i = 0; i < total; i++) {
                 found |= !strcmp(all[i].extensionName, promoted[e].name);
             }
-            if (!found && physical_props.apiVersion >= promoted[e].core_version) {
+            if (!found && g_arm_app_api_version >= promoted[e].core_version &&
+                physical_props.apiVersion >= promoted[e].core_version) {
                 VkExtensionProperties property = { .specVersion = 1 };
                 snprintf(property.extensionName, sizeof(property.extensionName), "%s",
                          promoted[e].name);
@@ -316,7 +318,8 @@ static VkResult VKAPI_CALL arm_tensor_next_create_device(
     };
     bool remove[3] = { false, false, false };
     for (uint32_t e = 0; e < sizeof(promoted) / sizeof(promoted[0]); e++) {
-        remove[e] = physical_props.apiVersion >= promoted[e].core_version &&
+        remove[e] = g_arm_app_api_version >= promoted[e].core_version &&
+                    physical_props.apiVersion >= promoted[e].core_version &&
                     !arm_driver_has_extension(physical, promoted[e].name);
     }
     uint32_t kept = 0;
@@ -396,6 +399,8 @@ static VkResult VKAPI_CALL arm_nss_create_instance(const VkInstanceCreateInfo *c
         .function = VK_LOADER_DATA_CALLBACK,
         .u.pfnSetInstanceLoaderData = set_instance_data
     };
+    g_arm_app_api_version = ci->pApplicationInfo
+        ? ci->pApplicationInfo->apiVersion : VK_API_VERSION_1_0;
     VkInstanceCreateInfo chained = *ci;
     chained.pNext = &data_info;
     PFN_vkCreateInstance create =
