@@ -111,6 +111,23 @@ jobs:
             python3 tools/apply_fsr.py "$F"
           fi
 
+      - name: Gravar a integração FSR 1.0 no código-fonte
+        if: ${{ github.event_name == 'push' || inputs.apply_fsr }}
+        run: |
+          if ! grep -q P_EASU hw/xbox/hle/vk/swapchain.c; then
+            echo "ERRO: o patch FSR não foi aplicado; não há alterações para gravar."
+            exit 1
+          fi
+          if ! git diff --quiet -- hw/xbox/hle/vk/swapchain.c; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add hw/xbox/hle/vk/swapchain.c
+            git commit -m "Integrate AMD FSR 1.0 into Vulkan presenter"
+            git push origin HEAD:feature/nvidia-image-scaling
+          else
+            echo "FSR 1.0 já está gravado no código-fonte."
+          fi
+
       - name: Diagnóstico (como o CMake usa NC_DEPS)
         run: |
           grep -rn "NC_DEPS" native --include=CMakeLists.txt --include=*.cmake | head -60 || true
