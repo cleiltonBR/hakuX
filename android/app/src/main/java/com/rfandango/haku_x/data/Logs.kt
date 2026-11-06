@@ -168,31 +168,29 @@ object Logs {
     zip.closeEntry()
   }
 
-  /** The process's own logcat lines (everything it logs) appended to file, up to MAX_BYTES. */
+  /**
+   * Capture this process's logcat directly to disk. Do not pipe logcat through
+   * Process.inputStream: Android 16 on some devices has crashed in ART's
+   * Linux_readBytes while this thread was reading that pipe (SIGSEGV in
+   * log-capture). logcat owns the file descriptor and performs bounded
+   * rotation itself, so there is no JNI read loop in this process.
+   */
   private fun capture(file: File, header: String) {
     thread(isDaemon = true, name = "log-capture") {
+      var logcat: Process? = null
       try {
-        FileOutputStream(file, true).use { out ->
-          var total = file.length()
-          out.write(header.toByteArray())
-          val logcat = ProcessBuilder("logcat", "-v", "threadtime", "--pid=${Process.myPid()}")
-            .redirectErrorStream(true).start()
-          val buf = ByteArray(16384)
-          logcat.inputStream.use { input ->
-            while (true) {
-              val n = input.read(buf)
-              if (n < 0) break
-              out.write(buf, 0, n)                  /* unbuffered: on disk as it comes */
-              total += n
-              if (total >= MAX_BYTES) {
-                out.write("\n=== log stopped at ${MAX_BYTES shr 20} MB\n".toByteArray())
-                break                               /* and logcat with it, not read on for nothing */
-              }
-            }
-          }
-          logcat.destroy()
-        }
+        logcat = ProcessBuilder(
+          "logcat", "-v", "threadtime", "--pid=${Process.myPid()}",
+          "-f", file.absolutePath, "-r", (MAX_BYTES shr 10).toString(), "-n", "1"
+        ).redirectError(ProcessBuilder.Redirect.appendTo(file)).start()
+        // The marker is emitted after logcat has opened its destination.
+        Log.i(TAG, header.trimEnd())
+        logcat.waitFor()
+      } catch (e: InterruptedException) {
+        Thread.currentThread().interrupt()
+        logcat?.destroy()
       } catch (e: Exception) {
+        logcat?.destroy()
         Log.e(TAG, "logs: capture into ${file.name} failed", e)
       }
     }
@@ -214,7 +212,9 @@ object Logs {
 
   /** The pid a game log's first line names (startGame's header). */
   private fun pidOf(file: File): Int? =
-    file.bufferedReader().use { it.readLine() }?.let { PID.find(it)?.groupValues?.get(1)?.toIntOrNull() }
+    file.bufferedReader().useLines { lines ->
+      lines.take(256).mapNotNull { PID.find(it)?.groupValues?.get(1)?.toIntOrNull() }.firstOrNull()
+    }
 
   /** The game processes running now. */
   private fun liveGamePids(context: Context): Set<Int> =
