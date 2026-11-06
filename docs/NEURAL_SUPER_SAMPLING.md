@@ -94,3 +94,21 @@ The NV2A vertex-program translator in `hw/xbox/hle/shader/vsh.c` confirms that t
 2. Do not add a fake motion-vector attachment or infer motion from current-frame position alone.
 3. Before a temporal NSS dispatch, prototype one of two real data paths: (a) instrument guest transform/state history to derive previous-to-current screen-space motion where the guest pipeline provides enough information, or (b) evaluate optical flow from consecutive completed color frames as a separate compute pass. Both paths need confidence/validity handling, disocclusion treatment, and measured GPU cost.
 4. Keep NSS disabled and preserve the existing NIS/FSR/SGSR/CAS/anisotropic-filter paths until a complete input bundle and actual presented NSS output are verified.
+
+
+## SDK dependency and build integration (2026-11-06)
+
+- Added Arm Neural Graphics SDK **v1.1.0** as a Git submodule at `third_party/arm-neural-graphics-sdk`, pinned to upstream commit `aba0d109ffcfb97e380ac0a68fb11683e5561c6e`. Initialize it with `git submodule update --init --recursive`.
+- Added opt-in CMake switch `HAKUX_NSS_SDK` (default `OFF`). With Android `arm64-v8a` and CMake 3.21+, enabling it adds the SDK's `ffx-api` subproject with `vk_android_arm`, NSS enabled, and frame interpolation/optical-flow components disabled. The resulting API/backend target is linked to `hakux_hle`.
+- This is a dependency/build integration milestone, **not a working NSS renderer**. The Arm Vulkan ML Emulation Layer, its Graph/Tensor libraries and manifests, the quantized NSS VGF model, model loading, and runtime packaging are not yet integrated. No third-party layer is enabled in `vkCreateInstance`.
+- The SDK's top-level CMake project also builds an optional Arm NG Vulkan layer; HakuX currently includes only `ffx-api`, so that layer is not built or packaged by this integration.
+- Arm documents Android AArch64 support, but this does not certify Adreno/Turnip as a production target. The ML Emulation Layer is useful for functional testing on Vulkan compute devices; emulation performance is not representative of production performance.
+- NSS remains disabled. The presenter still lacks a verified per-pixel motion-vector source and the temporal camera/jitter metadata needed for a valid dispatch. Never dispatch with fabricated/zero motion vectors.
+
+### Next gates
+
+1. Initialize the submodule recursively and run the Android ARM64 build with `-DHAKUX_NSS_SDK=ON`; fix any toolchain/API integration errors before adding runtime code.
+2. Pin/build the Arm Vulkan ML Emulation Layer for Android ARM64 and package its Graph/Tensor libraries/manifests in debug builds. Preserve Graph-before-Tensor ordering.
+3. Pin a quantized NSS model snapshot and implement safe model asset loading.
+4. Add opt-in Vulkan layer activation and query the actual enabled extension/feature chain; extension-name enumeration alone is insufficient.
+5. Build the color/depth/motion/history bridge and only then dispatch NSS. Keep existing NIS/FSR/SGSR paths unchanged until the NSS output is verified on-screen.
