@@ -2,7 +2,3 @@
 	path = external/fex
 	url = https://github.com/rfandango/FEX.git
 	branch = hakuX
-
-[submodule "third_party/arm-neural-graphics-sdk"]
-	path = third_party/arm-neural-graphics-sdk
-	url = https://github.com/arm/neural-graphics-sdk-for-game-engines.git

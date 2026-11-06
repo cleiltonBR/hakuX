@@ -103,57 +103,6 @@ target_compile_options(hakux_hle PRIVATE -Wno-unused-parameter -Wno-unused-funct
 target_link_libraries(hakux_hle PUBLIC nc_glib nc_volk nc_spirv_reflect glslang SPIRV
                       glslang-default-resource-limits android log)
 
-# Optional Arm Neural Graphics SDK NSS API/backend. Kept OFF by default:
-# ordinary HakuX builds do not acquire a new Vulkan/SDK dependency.
-option(HAKUX_NSS_SDK "Build and link the pinned Arm NSS SDK for Android ARM64" OFF)
-if(HAKUX_NSS_SDK)
-  if(NOT ANDROID OR NOT CMAKE_ANDROID_ARCH_ABI STREQUAL "arm64-v8a")
-    message(FATAL_ERROR "HAKUX_NSS_SDK requires the Android arm64-v8a toolchain")
-  endif()
-  if(CMAKE_VERSION VERSION_LESS 3.23)
-    message(FATAL_ERROR "Arm Neural Graphics SDK v1.1.1 requires CMake 3.23 or newer")
-  endif()
-
-  set(HAKUX_ARM_NGSDK "${NC_REPO}/third_party/arm-neural-graphics-sdk")
-  if(NOT EXISTS "${HAKUX_ARM_NGSDK}/ffx-api/CMakeLists.txt")
-    message(FATAL_ERROR
-      "Arm Neural Graphics SDK missing. Initialize submodules recursively: "
-      "git submodule update --init --recursive")
-  endif()
-
-  # Build only the NSS component (not frame interpolation or optical flow).
-  # The separate ML Emulation Layer is a runtime dependency. The quantized NSS VGF model assets are included in the pinned SDK tree, but HakuX runtime loading/packaging is not wired yet.
-  # Use the SDK's pinned Vulkan-Headers for VK_ARM_tensors and
-  # VK_ARM_data_graph feature structures in the HLE capability chain.
-  target_include_directories(hakux_hle BEFORE PRIVATE
-    "${HAKUX_ARM_NGSDK}/sdk/include/vulkan-headers")
-
-  # The SDK's ffx-api CMake entry point is also used directly here so we can
-  # build only NSS and avoid pulling the standalone VK_LAYER_ARM_NG into the
-  # normal HakuX APK. These platform variables are normally set by the SDK's
-  # top-level CMakeLists.txt.
-  set(FFX_API_BACKEND vk_android_arm)
-  set(FFX_GRAPHICS_API vk)
-  set(FFX_OS_NAME android)
-  set(FFX_ARCH_NAME arm)
-  set(FFX_PLATFORM_NAME android_arm)
-  set(SDK_LIB_NAME ngsdk_android_arm)
-  set(FFX_GLSL ON)
-  set(FFX_NSS ON)
-  set(FFX_FI OFF)
-  set(FFX_OF OFF)
-  set(FFX_ALL OFF)
-  set(FFX_CAPTURE_ENABLED OFF)
-  add_subdirectory("${HAKUX_ARM_NGSDK}/ffx-api"
-                   "${CMAKE_CURRENT_BINARY_DIR}/arm_ngsdk_ffx_api"
-                   EXCLUDE_FROM_ALL)
-  if(NOT TARGET ngsdk_android_arm)
-    message(FATAL_ERROR "Arm NSS SDK did not define ngsdk_android_arm")
-  endif()
-  target_link_libraries(hakux_hle PUBLIC ngsdk_android_arm)
-  target_compile_definitions(hakux_hle PUBLIC HAKUX_NSS_SDK_AVAILABLE=1)
-  message(STATUS "hakuX: Arm Neural Graphics SDK v1.1.1 API/backend linked; NSS runtime remains gated")
-endif()
 
 # The MCPX APU: xemu's device (hw/xbox/mcpx/apu) ported onto the core's own
 # services (native/dev/apu/apu_base.h).

@@ -22,7 +22,6 @@ bool g_hle_aniso_enabled = true;
 float g_hle_aniso_level = 16.0f;
 static HleMutex g_queue_lock;
 static bool g_ready;
-static bool g_android_surface;
 static bool g_lost;                     /* hle_vk_lose */
 static int64_t g_lock_wait_ns;          /* hle_vk_queue_wait_ns */
 
@@ -151,20 +150,6 @@ static void caps_read(void)
     }
 }
 
-static bool nss_layers_requested(void)
-{
-    const char *e = getenv("HAKUX_NSS_LAYERS");
-    if (e && !strcmp(e, "1")) {
-        return true;
-    }
-#ifdef __ANDROID__
-    char value[PROP_VALUE_MAX] = "";
-    return hle_prop_get("debug.hakux.nsslayers", value) > 0 && !strcmp(value, "1");
-#else
-    return false;
-#endif
-}
-
 /* "-name" is in debug.hakux.caps */
 static bool caps_off(const char *name)
 {
@@ -243,40 +228,11 @@ int hle_vk_init(void)
     /* debug: a 1.3 device used as a 1.1 one (every 1.3 part from its extension
      * or vk/compat.c, as on the drivers below 1.3) */
     const bool force11 = caps_off("vk13");
-    const uint32_t loader_api = volkGetInstanceVersion();
-    const uint32_t app_api = force11 ? VK_API_VERSION_1_1 :
-        (nss_layers_requested() && loader_api >= VK_API_VERSION_1_4
-             ? VK_API_VERSION_1_4 : VK_API_VERSION_1_3);
     VkApplicationInfo app = {
         .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
         .pApplicationName = "hakuX-hle",
-        .apiVersion = app_api,
+        .apiVersion = force11 ? VK_API_VERSION_1_1 : VK_API_VERSION_1_3,
     };
-    /* Enumerate the layers visible through the active Vulkan loader.
-     * On the custom Turnip path, nc_vk_layers() can install the Arm Graph ->
-     * Tensor chain before volk initializes. It is debug-only and opt-in;
-     * ordinary launches keep the original driver path unchanged. */
-    uint32_t nlayer = 0;
-    VkResult layer_result = vkEnumerateInstanceLayerProperties(&nlayer, NULL);
-    if (layer_result == VK_SUCCESS && nlayer) {
-        g_autofree VkLayerProperties *layers = g_new(VkLayerProperties, nlayer);
-        layer_result = vkEnumerateInstanceLayerProperties(&nlayer, layers);
-        if (layer_result == VK_SUCCESS) {
-            for (uint32_t i = 0; i < nlayer; i++) {
-                hle_log("hakuX-hle-back", "vk: available instance layer: %s (%s)",
-                        layers[i].layerName, layers[i].description);
-            }
-        } else {
-            hle_log("hakuX-hle-back", "vk: instance layer enumeration failed: %s",
-                    hle_vk_result_text(layer_result));
-        }
-    } else if (layer_result == VK_SUCCESS) {
-        hle_log("hakuX-hle-back", "vk: no explicit instance layers discovered");
-    } else {
-        hle_log("hakuX-hle-back", "vk: instance layer enumeration failed: %s",
-                hle_vk_result_text(layer_result));
-    }
-
     /* the window's surface (vk/swapchain.c): where the loader has it */
     uint32_t nie = 0;
     vkEnumerateInstanceExtensionProperties(NULL, &nie, NULL);
@@ -284,12 +240,8 @@ int hle_vk_init(void)
     vkEnumerateInstanceExtensionProperties(NULL, &nie, iext);
     const char *iexts[2];
     uint32_t nix = 0;
-    g_android_surface = has_ext(iext, nie, VK_KHR_SURFACE_EXTENSION_NAME) &&
-                        has_ext(iext, nie, VK_KHR_ANDROID_SURFACE_EXTENSION_NAME);
-    hle_log("hakuX-hle-back", "vk: Android WSI instance extensions: surface=%d android_surface=%d",
-            has_ext(iext, nie, VK_KHR_SURFACE_EXTENSION_NAME),
-            has_ext(iext, nie, VK_KHR_ANDROID_SURFACE_EXTENSION_NAME));
-    if (g_android_surface) {
+    if (has_ext(iext, nie, VK_KHR_SURFACE_EXTENSION_NAME) &&
+        has_ext(iext, nie, VK_KHR_ANDROID_SURFACE_EXTENSION_NAME)) {
         iexts[nix++] = VK_KHR_SURFACE_EXTENSION_NAME;
         iexts[nix++] = VK_KHR_ANDROID_SURFACE_EXTENSION_NAME;
     }
@@ -303,13 +255,6 @@ int hle_vk_init(void)
         return -1;
     }
     volkLoadInstanceOnly(v->inst);
-    g_android_surface = g_android_surface &&
-        vkCreateAndroidSurfaceKHR && vkDestroySurfaceKHR &&
-        vkGetPhysicalDeviceSurfaceSupportKHR &&
-        vkGetPhysicalDeviceSurfaceCapabilitiesKHR &&
-        vkGetPhysicalDeviceSurfaceFormatsKHR;
-    hle_log("hakuX-hle-back", "vk: Android WSI entry points: %s",
-            g_android_surface ? "ready" : "unavailable (swapchain presentation disabled)");
     uint32_t n = 1;
     vkEnumeratePhysicalDevices(v->inst, &n, &v->phys);
     if (!n) {
@@ -339,46 +284,8 @@ int hle_vk_init(void)
 
     uint32_t ne = 0;
     vkEnumerateDeviceExtensionProperties(v->phys, NULL, &ne, NULL);
-    /* Reserve room for the extensions exposed by the two explicitly loaded
-     * Arm layers. The custom Turnip path bypasses the system Vulkan loader,
-     * so its layer extension lists must be queried by layer name and merged. */
-    const uint32_t ext_capacity = ne + 8;
-    g_autofree VkExtensionProperties *ext = g_new0(VkExtensionProperties, ext_capacity);
+    g_autofree VkExtensionProperties *ext = g_new(VkExtensionProperties, ne);
     vkEnumerateDeviceExtensionProperties(v->phys, NULL, &ne, ext);
-    const char *ml_layers[2] = {
-        "VK_LAYER_ML_Graph_Emulation", "VK_LAYER_ML_Tensor_Emulation"
-    };
-    for (uint32_t layer = 0; layer < ARRAY_SIZE(ml_layers); layer++) {
-        uint32_t count = 0;
-        if (vkEnumerateDeviceExtensionProperties(v->phys, ml_layers[layer], &count, NULL) != VK_SUCCESS ||
-            count > 8 || ne + count > ext_capacity) {
-            continue;
-        }
-        VkExtensionProperties layer_ext[8];
-        uint32_t got = count;
-        if (count && vkEnumerateDeviceExtensionProperties(v->phys, ml_layers[layer], &got, layer_ext) == VK_SUCCESS) {
-            for (uint32_t i = 0; i < got; i++) {
-                if (!has_ext(ext, ne, layer_ext[i].extensionName)) {
-                    ext[ne++] = layer_ext[i];
-                }
-            }
-        }
-    }
-    const bool arm_tensors = has_ext(ext, ne, "VK_ARM_tensors");
-    const bool arm_data_graph = has_ext(ext, ne, "VK_ARM_data_graph");
-    const bool arm_tosa = has_ext(ext, ne, "VK_ARM_data_graph_instruction_set_tosa");
-    const bool arm_optical_flow = has_ext(ext, ne, "VK_ARM_data_graph_optical_flow");
-    const bool arm_ml_layers = arm_tensors && arm_data_graph && arm_tosa;
-    const bool sync2_available = has_ext(ext, ne, VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME) ||
-                                 v->props.apiVersion >= VK_API_VERSION_1_3;
-    hle_log("hakuX-hle-back",
-            "vk: NSS probe GPU=%s vendor=%04x device=%04x driver=%u api=%u.%u.%u ARM_tensors=%d ARM_data_graph=%d ARM_tosa=%d ARM_optical_flow=%d ML_layers=%d sync2=%d",
-            v->props.deviceName, v->props.vendorID, v->props.deviceID,
-            v->props.driverVersion,
-            VK_API_VERSION_MAJOR(v->props.apiVersion),
-            VK_API_VERSION_MINOR(v->props.apiVersion),
-            VK_API_VERSION_PATCH(v->props.apiVersion),
-            arm_tensors, arm_data_graph, arm_tosa, arm_optical_flow, arm_ml_layers, sync2_available);
     bool e_vids = has_ext(ext, ne, VK_EXT_VERTEX_INPUT_DYNAMIC_STATE_EXTENSION_NAME);
     bool e_eds2 = has_ext(ext, ne, VK_EXT_EXTENDED_DYNAMIC_STATE_2_EXTENSION_NAME);
     bool e_cbc = has_ext(ext, ne, VK_EXT_CUSTOM_BORDER_COLOR_EXTENSION_NAME);
@@ -395,15 +302,10 @@ int hle_vk_init(void)
                  has_ext(ext, ne, VK_KHR_PIPELINE_LIBRARY_EXTENSION_NAME);
     bool e_lr = has_ext(ext, ne, VK_KHR_DYNAMIC_RENDERING_LOCAL_READ_EXTENSION_NAME);
     bool e_pd = has_ext(ext, ne, VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME);
-    bool e_dho = has_ext(ext, ne, "VK_KHR_deferred_host_operations");
-    bool e_m5 = has_ext(ext, ne, "VK_KHR_maintenance5");
     /* Below 1.3 (vk/compat.c): what 1.2 and 1.3 made core, from extensions;
      * a 1.2 device has 1.2's in its core (the structs are core 1.2's then) */
     const uint32_t api = force11 ? VK_API_VERSION_1_1 : v->props.apiVersion;
     const bool v13 = api >= VK_API_VERSION_1_3, v12 = api >= VK_API_VERSION_1_2;
-    const bool arm_dynamic_rendering = v13 || has_ext(ext, ne, VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
-    const bool arm_maintenance5 = e_m5 || (app_api >= VK_API_VERSION_1_4 &&
-                                               v->props.apiVersion >= VK_API_VERSION_1_4);
     bool e_tl = v12 || has_ext(ext, ne, VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME);
     bool e_di = v12 || has_ext(ext, ne, VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME);
     bool e_bda = v12 || has_ext(ext, ne, VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME);
@@ -459,10 +361,8 @@ int hle_vk_init(void)
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_LOCAL_READ_FEATURES_KHR };
     VkPhysicalDeviceVulkan13Features q13 = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES };
-    VkPhysicalDevice16BitStorageFeatures q16 = {
-        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES, .pNext = &q13 };
     VkPhysicalDeviceVulkan12Features q12 = {
-        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES, .pNext = &q16 };
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES, .pNext = &q13 };
     VkPhysicalDeviceFeatures2 q = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, .pNext = v13 ? &q12 : NULL };
     /* below 1.3: each part's own struct (Vulkan12/13Features need 1.2/1.3) */
@@ -482,10 +382,6 @@ int hle_vk_init(void)
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT };
     VkPhysicalDevicePipelineCreationCacheControlFeatures q_pcc = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_CREATION_CACHE_CONTROL_FEATURES };
-    VkPhysicalDeviceTensorFeaturesARM q_tensor = {
-        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TENSOR_FEATURES_ARM };
-    VkPhysicalDeviceDataGraphFeaturesARM q_graph = {
-        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DATA_GRAPH_FEATURES_ARM };
     VkBaseOutStructure *tail = v13 ? (VkBaseOutStructure *)&q13 : (VkBaseOutStructure *)&q;
     if (!v13) {
         if (e_tl) chain(&tail, &q_tl);
@@ -507,17 +403,7 @@ int hle_vk_init(void)
     if (e_eds3) chain(&tail, &q_eds3);
     if (e_gpl) chain(&tail, &q_gpl);
     if (e_lr) chain(&tail, &q_lr);
-    if (arm_tensors) chain(&tail, &q_tensor);
-    if (arm_data_graph) chain(&tail, &q_graph);
     vkGetPhysicalDeviceFeatures2(v->phys, &q);
-    const bool arm_nss_ready = arm_ml_layers && !force11 && v13 &&
-                               arm_dynamic_rendering && arm_maintenance5 && e_dho &&
-                               q13.synchronization2 && q13.dynamicRendering &&
-                               q12.shaderInt8 && q_tensor.tensors && q_graph.dataGraph;
-    hle_log("hakuX-hle-back",
-            "vk: NSS readiness extensions=%d int8=%d tensors=%d data_graph=%d sync2=%d dynamic_rendering=%d maintenance5=%d deferred_host_ops=%d ready=%d",
-            arm_ml_layers, q12.shaderInt8, q_tensor.tensors, q_graph.dataGraph,
-            q13.synchronization2, q13.dynamicRendering, arm_maintenance5, e_dho, arm_nss_ready);
     /* the limits the bindless set and the samplers need (Vulkan 1.2's: a 1.1
      * device fails the floor without them) */
     VkPhysicalDeviceCustomBorderColorPropertiesEXT p_cbc = {
@@ -637,8 +523,7 @@ int hle_vk_init(void)
     c->cache_control = v13 ? q13.pipelineCreationCacheControl
                            : e_pcc && q_pcc.pipelineCreationCacheControl;
     c->occl_precise = q.features.occlusionQueryPrecise;
-    c->swapchain = g_android_surface && nix &&
-                   has_ext(ext, ne, VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+    c->swapchain = nix && has_ext(ext, ne, VK_KHR_SWAPCHAIN_EXTENSION_NAME);
     VkFormatProperties fp;
     vkGetPhysicalDeviceFormatProperties(v->phys, VK_FORMAT_R16G16_SSCALED, &fp);
     c->sscaled = fp.bufferFeatures & VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT;
@@ -691,32 +576,19 @@ int hle_vk_init(void)
         .sType = q_gpl.sType, .graphicsPipelineLibrary = VK_TRUE };
     VkPhysicalDeviceDynamicRenderingLocalReadFeaturesKHR f_lr = {
         .sType = q_lr.sType, .dynamicRenderingLocalRead = VK_TRUE };
-    VkPhysicalDeviceTensorFeaturesARM f_tensor = {
-        .sType = q_tensor.sType,
-        .shaderTensorAccess = q_tensor.shaderTensorAccess,
-        .tensors = q_tensor.tensors };
-    VkPhysicalDeviceDataGraphFeaturesARM f_graph = {
-        .sType = q_graph.sType, .dataGraph = q_graph.dataGraph };
     VkPhysicalDeviceVulkan13Features f13 = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
         .synchronization2 = VK_TRUE, .dynamicRendering = VK_TRUE,
         .pipelineCreationCacheControl = c->cache_control,
         /* SPIR-V 1.6: glslang makes a discard a demote */
         .shaderDemoteToHelperInvocation = q13.shaderDemoteToHelperInvocation };
-    VkPhysicalDevice16BitStorageFeatures f16 = {
-        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES,
-        .pNext = &f13,
-        .storageBuffer16BitAccess = arm_nss_ready && q16.storageBuffer16BitAccess,
-        .uniformAndStorageBuffer16BitAccess = arm_nss_ready && q16.uniformAndStorageBuffer16BitAccess };
     VkPhysicalDeviceVulkan12Features f12 = {
-        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES, .pNext = &f16,
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES, .pNext = &f13,
         .timelineSemaphore = VK_TRUE, .bufferDeviceAddress = c->bda,
         .runtimeDescriptorArray = VK_TRUE, .descriptorBindingPartiallyBound = VK_TRUE,
         .descriptorBindingSampledImageUpdateAfterBind = VK_TRUE,
         .shaderSampledImageArrayNonUniformIndexing = VK_TRUE,
-        .hostQueryReset = c->host_query_reset,
-        .shaderInt8 = arm_nss_ready ? VK_TRUE : VK_FALSE,
-        .shaderFloat16 = arm_nss_ready && q12.shaderFloat16 };
+        .hostQueryReset = c->host_query_reset };
     VkPhysicalDeviceFeatures2 f = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, .pNext = v13 ? &f12 : NULL };
     /* below 1.3: the parts' own structs (no demote: SPIR-V 1.3 discards) */
@@ -748,8 +620,6 @@ int hle_vk_init(void)
     f.features.textureCompressionBC = q.features.textureCompressionBC;
     f.features.samplerAnisotropy = c->aniso;
     f.features.occlusionQueryPrecise = c->occl_precise;
-    f.features.shaderStorageImageExtendedFormats =
-        arm_nss_ready && q.features.shaderStorageImageExtendedFormats;
     f_vids.pNext = NULL;
     f_vids.vertexInputDynamicState = VK_TRUE;
     tail = v13 ? (VkBaseOutStructure *)&f13 : (VkBaseOutStructure *)&f;
@@ -773,10 +643,6 @@ int hle_vk_init(void)
     if (c->eds3) chain(&tail, &f_eds3);
     if (c->gpl) chain(&tail, &f_gpl);
     if (c->fbfetch) chain(&tail, &f_lr);
-    if (arm_nss_ready) {
-        chain(&tail, &f_tensor);
-        chain(&tail, &f_graph);
-    }
 
     const char *exts[32];
     uint32_t nx = 0;
@@ -822,18 +688,6 @@ int hle_vk_init(void)
     }
     if (c->swapchain) {
         exts[nx++] = VK_KHR_SWAPCHAIN_EXTENSION_NAME;
-    }
-    /* Arm's sample requires dynamic rendering, maintenance5, deferred host
-     * operations, and the emulated Tensor/Data Graph extensions. Core-promoted
-     * names are stripped by the custom layer bridge when Turnip does not list
-     * them separately. Enable this set only after all feature probes pass. */
-    if (arm_nss_ready) {
-        exts[nx++] = VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME;
-        exts[nx++] = "VK_KHR_maintenance5";
-        exts[nx++] = "VK_KHR_deferred_host_operations";
-        exts[nx++] = "VK_ARM_data_graph";
-        exts[nx++] = "VK_ARM_data_graph_instruction_set_tosa";
-        exts[nx++] = "VK_ARM_tensors";
     }
     float prio = 1.0f;
     VkDeviceQueueCreateInfo qci = {
