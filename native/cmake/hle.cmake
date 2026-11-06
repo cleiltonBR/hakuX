@@ -110,8 +110,8 @@ if(HAKUX_NSS_SDK)
   if(NOT ANDROID OR NOT CMAKE_ANDROID_ARCH_ABI STREQUAL "arm64-v8a")
     message(FATAL_ERROR "HAKUX_NSS_SDK requires the Android arm64-v8a toolchain")
   endif()
-  if(CMAKE_VERSION VERSION_LESS 3.21)
-    message(FATAL_ERROR "Arm Neural Graphics SDK v1.1.0 requires CMake 3.21 or newer")
+  if(CMAKE_VERSION VERSION_LESS 3.23)
+    message(FATAL_ERROR "Arm Neural Graphics SDK v1.1.1 requires CMake 3.23 or newer")
   endif()
 
   set(HAKUX_ARM_NGSDK "${NC_REPO}/third_party/arm-neural-graphics-sdk")
@@ -124,11 +124,22 @@ if(HAKUX_NSS_SDK)
   # Build only the NSS component (not frame interpolation or optical flow).
   # The separate ML Emulation Layer and quantized NSS model are runtime
   # dependencies and are intentionally not assumed to be present here.
-  set(FFX_API_BACKEND vk_android_arm CACHE STRING "" FORCE)
-  set(FFX_NSS ON CACHE BOOL "" FORCE)
-  set(FFX_FI OFF CACHE BOOL "" FORCE)
-  set(FFX_OF OFF CACHE BOOL "" FORCE)
-  set(FFX_ALL OFF CACHE BOOL "" FORCE)
+  # The SDK's ffx-api CMake entry point is also used directly here so we can
+  # build only NSS and avoid pulling the standalone VK_LAYER_ARM_NG into the
+  # normal HakuX APK. These platform variables are normally set by the SDK's
+  # top-level CMakeLists.txt.
+  set(FFX_API_BACKEND vk_android_arm)
+  set(FFX_GRAPHICS_API vk)
+  set(FFX_OS_NAME android)
+  set(FFX_ARCH_NAME arm)
+  set(FFX_PLATFORM_NAME android_arm)
+  set(SDK_LIB_NAME ngsdk_android_arm)
+  set(FFX_GLSL ON)
+  set(FFX_NSS ON)
+  set(FFX_FI OFF)
+  set(FFX_OF OFF)
+  set(FFX_ALL OFF)
+  set(FFX_CAPTURE_ENABLED OFF)
   add_subdirectory("${HAKUX_ARM_NGSDK}/ffx-api"
                    "${CMAKE_CURRENT_BINARY_DIR}/arm_ngsdk_ffx_api"
                    EXCLUDE_FROM_ALL)
