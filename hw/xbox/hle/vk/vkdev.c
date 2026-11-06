@@ -251,11 +251,10 @@ int hle_vk_init(void)
         .pApplicationName = "hakuX-hle",
         .apiVersion = app_api,
     };
-    /* Enumerate explicit Vulkan layers before instance creation. NSS may
-     * use Arm's ML graph/tensor emulation layers on Turnip; merely having
-     * Vulkan compute is not enough. Keep this diagnostic passive: do not
-     * enable third-party layers until their Android packaging and ordering
-     * have been verified. */
+    /* Enumerate the layers visible through the active Vulkan loader.
+     * On the custom Turnip path, nc_vk_layers() can install the Arm Graph ->
+     * Tensor chain before volk initializes. It is debug-only and opt-in;
+     * ordinary launches keep the original driver path unchanged. */
     uint32_t nlayer = 0;
     VkResult layer_result = vkEnumerateInstanceLayerProperties(&nlayer, NULL);
     if (layer_result == VK_SUCCESS && nlayer) {
