@@ -176,7 +176,7 @@ static VkResult VKAPI_CALL arm_tensor_next_enumerate_device_extensions(
     }
 
     VkExtensionProperties *all =
-        (VkExtensionProperties *)calloc((size_t)lower_count + tensor_count + 1,
+        (VkExtensionProperties *)calloc((size_t)lower_count + tensor_count + 4,
                                         sizeof(VkExtensionProperties));
     if (!all) {
         return VK_ERROR_OUT_OF_HOST_MEMORY;
@@ -210,27 +210,34 @@ static VkResult VKAPI_CALL arm_tensor_next_enumerate_device_extensions(
         }
     }
 
-    /* Arm Graph requires VK_KHR_synchronization2 by name. Vulkan 1.3 makes
-     * that functionality core, even on drivers that no longer enumerate the
-     * promoted extension name. Advertise the core capability to Graph; the
-     * Tensor-next device wrapper below removes the synthetic name before the
-     * request reaches such a driver. */
+    /* The SDK sample asks for these promoted names even when the driver
+     * exposes their functionality through Vulkan core. Advertise them to the
+     * upper Graph layer, then strip synthetic names before driver creation. */
     PFN_vkGetPhysicalDeviceProperties get_props =
         (PFN_vkGetPhysicalDeviceProperties)
             g_arm_driver_gipa(g_arm_instance, "vkGetPhysicalDeviceProperties");
     if (get_props) {
         VkPhysicalDeviceProperties physical_props;
         get_props(physical, &physical_props);
-        bool has_sync2_name = false;
-        for (uint32_t i = 0; i < total; i++) {
-            has_sync2_name |= !strcmp(all[i].extensionName,
-                                      VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
-        }
-        if (!has_sync2_name && physical_props.apiVersion >= VK_API_VERSION_1_3) {
-            VkExtensionProperties sync2 = { .specVersion = 1 };
-            snprintf(sync2.extensionName, sizeof(sync2.extensionName), "%s",
-                     VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
-            all[total++] = sync2;
+        const struct {
+            const char *name;
+            uint32_t core_version;
+        } promoted[] = {
+            { VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME, VK_API_VERSION_1_3 },
+            { VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME, VK_API_VERSION_1_3 },
+            { "VK_KHR_maintenance5", VK_API_VERSION_1_4 }
+        };
+        for (uint32_t e = 0; e < sizeof(promoted) / sizeof(promoted[0]); e++) {
+            bool found = false;
+            for (uint32_t i = 0; i < total; i++) {
+                found |= !strcmp(all[i].extensionName, promoted[e].name);
+            }
+            if (!found && physical_props.apiVersion >= promoted[e].core_version) {
+                VkExtensionProperties property = { .specVersion = 1 };
+                snprintf(property.extensionName, sizeof(property.extensionName), "%s",
+                         promoted[e].name);
+                all[total++] = property;
+            }
         }
     }
 
@@ -249,7 +256,7 @@ static VkResult VKAPI_CALL arm_tensor_next_enumerate_device_extensions(
     return copied < total ? VK_INCOMPLETE : VK_SUCCESS;
 }
 
-static bool arm_driver_has_sync2_extension(VkPhysicalDevice physical)
+static bool arm_driver_has_extension(VkPhysicalDevice physical, const char *name)
 {
     PFN_vkEnumerateDeviceExtensionProperties enumerate =
         (PFN_vkEnumerateDeviceExtensionProperties)
@@ -271,8 +278,7 @@ static bool arm_driver_has_sync2_extension(VkPhysicalDevice physical)
     bool found = false;
     if (result == VK_SUCCESS || result == VK_INCOMPLETE) {
         for (uint32_t i = 0; i < written; i++) {
-            if (!strcmp(extensions[i].extensionName,
-                        VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME)) {
+            if (!strcmp(extensions[i].extensionName, name)) {
                 found = true;
                 break;
             }
@@ -294,22 +300,38 @@ static VkResult VKAPI_CALL arm_tensor_next_create_device(
     PFN_vkGetPhysicalDeviceProperties get_props =
         (PFN_vkGetPhysicalDeviceProperties)
             g_arm_driver_gipa(g_arm_instance, "vkGetPhysicalDeviceProperties");
-    if (!get_props || arm_driver_has_sync2_extension(physical)) {
+    if (!get_props) {
         return create(physical, ci, allocator, device);
     }
 
     VkPhysicalDeviceProperties physical_props;
     get_props(physical, &physical_props);
-    if (physical_props.apiVersion < VK_API_VERSION_1_3) {
-        return create(physical, ci, allocator, device);
+    const struct {
+        const char *name;
+        uint32_t core_version;
+    } promoted[] = {
+        { VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME, VK_API_VERSION_1_3 },
+        { VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME, VK_API_VERSION_1_3 },
+        { "VK_KHR_maintenance5", VK_API_VERSION_1_4 }
+    };
+    bool remove[3] = { false, false, false };
+    for (uint32_t e = 0; e < sizeof(promoted) / sizeof(promoted[0]); e++) {
+        remove[e] = physical_props.apiVersion >= promoted[e].core_version &&
+                    !arm_driver_has_extension(physical, promoted[e].name);
     }
-
     uint32_t kept = 0;
     for (uint32_t i = 0; i < ci->enabledExtensionCount; i++) {
-        if (strcmp(ci->ppEnabledExtensionNames[i],
-                   VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME)) {
+        bool synthetic = false;
+        for (uint32_t e = 0; e < sizeof(promoted) / sizeof(promoted[0]); e++) {
+            synthetic |= remove[e] &&
+                         !strcmp(ci->ppEnabledExtensionNames[i], promoted[e].name);
+        }
+        if (!synthetic) {
             kept++;
         }
+    }
+    if (kept == ci->enabledExtensionCount) {
+        return create(physical, ci, allocator, device);
     }
     const char **names = (const char **)calloc(kept ? kept : 1, sizeof(char *));
     if (!names) {
@@ -317,8 +339,12 @@ static VkResult VKAPI_CALL arm_tensor_next_create_device(
     }
     uint32_t at = 0;
     for (uint32_t i = 0; i < ci->enabledExtensionCount; i++) {
-        if (strcmp(ci->ppEnabledExtensionNames[i],
-                   VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME)) {
+        bool synthetic = false;
+        for (uint32_t e = 0; e < sizeof(promoted) / sizeof(promoted[0]); e++) {
+            synthetic |= remove[e] &&
+                         !strcmp(ci->ppEnabledExtensionNames[i], promoted[e].name);
+        }
+        if (!synthetic) {
             names[at++] = ci->ppEnabledExtensionNames[i];
         }
     }
