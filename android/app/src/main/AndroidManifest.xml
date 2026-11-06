@@ -13,6 +13,11 @@
   <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
   <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
 
+  <!-- Package visibility for Arm ML Emulation Layer Vulkan layer APK (debug NSS testing). -->
+  <queries>
+    <package android:name="com.arm.ai_ml_emulation_layer_for_vulkan" />
+  </queries>
+
   <application
     android:name=".HakuXApplication"
     android:label="@string/app_name"
