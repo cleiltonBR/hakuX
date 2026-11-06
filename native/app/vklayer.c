@@ -427,7 +427,7 @@ static VkResult VKAPI_CALL arm_nss_create_device(VkPhysicalDevice physical,
     }
     VkLayerDeviceLink links[2] = {
         { .pNext = &links[1],
-          .pfnNextGetInstanceProcAddr = g_arm_tensor.gipa,
+          .pfnNextGetInstanceProcAddr = arm_tensor_next_gipa,
           .pfnNextGetDeviceProcAddr = g_arm_tensor.gdpa },
         { .pNext = NULL,
           .pfnNextGetInstanceProcAddr = g_arm_driver_gipa,
