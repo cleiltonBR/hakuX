@@ -235,7 +235,7 @@ static VkResult VKAPI_CALL arm_tensor_next_enumerate_device_extensions(
         } promoted[] = {
             { VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME, VK_API_VERSION_1_3 },
             { VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME, VK_API_VERSION_1_3 },
-            { "VK_KHR_maintenance5", VK_API_VERSION_1_4 }
+            { "VK_KHR_maintenance5", VK_MAKE_API_VERSION(0, 1, 4, 0) }
         };
         for (uint32_t e = 0; e < sizeof(promoted) / sizeof(promoted[0]); e++) {
             bool found = false;
@@ -323,7 +323,7 @@ static VkResult VKAPI_CALL arm_tensor_next_create_device(
     } promoted[] = {
         { VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME, VK_API_VERSION_1_3 },
         { VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME, VK_API_VERSION_1_3 },
-        { "VK_KHR_maintenance5", VK_API_VERSION_1_4 }
+        { "VK_KHR_maintenance5", VK_MAKE_API_VERSION(0, 1, 4, 0) }
     };
     bool remove[3] = { false, false, false };
     for (uint32_t e = 0; e < sizeof(promoted) / sizeof(promoted[0]); e++) {
