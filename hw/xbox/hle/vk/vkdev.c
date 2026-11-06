@@ -150,6 +150,20 @@ static void caps_read(void)
     }
 }
 
+static bool nss_layers_requested(void)
+{
+    const char *e = getenv("HAKUX_NSS_LAYERS");
+    if (e && !strcmp(e, "1")) {
+        return true;
+    }
+#ifdef __ANDROID__
+    char value[PROP_VALUE_MAX] = "";
+    return hle_prop_get("debug.hakux.nsslayers", value) > 0 && !strcmp(value, "1");
+#else
+    return false;
+#endif
+}
+
 /* "-name" is in debug.hakux.caps */
 static bool caps_off(const char *name)
 {
@@ -228,10 +242,14 @@ int hle_vk_init(void)
     /* debug: a 1.3 device used as a 1.1 one (every 1.3 part from its extension
      * or vk/compat.c, as on the drivers below 1.3) */
     const bool force11 = caps_off("vk13");
+    const uint32_t loader_api = volkGetInstanceVersion();
+    const uint32_t app_api = force11 ? VK_API_VERSION_1_1 :
+        (nss_layers_requested() && loader_api >= VK_API_VERSION_1_4
+             ? VK_API_VERSION_1_4 : VK_API_VERSION_1_3);
     VkApplicationInfo app = {
         .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
         .pApplicationName = "hakuX-hle",
-        .apiVersion = force11 ? VK_API_VERSION_1_1 : VK_API_VERSION_1_3,
+        .apiVersion = app_api,
     };
     /* Enumerate explicit Vulkan layers before instance creation. NSS may
      * use Arm's ML graph/tensor emulation layers on Turnip; merely having
@@ -373,7 +391,8 @@ int hle_vk_init(void)
     const uint32_t api = force11 ? VK_API_VERSION_1_1 : v->props.apiVersion;
     const bool v13 = api >= VK_API_VERSION_1_3, v12 = api >= VK_API_VERSION_1_2;
     const bool arm_dynamic_rendering = v13 || has_ext(ext, ne, VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
-    const bool arm_maintenance5 = e_m5 || api >= VK_API_VERSION_1_4;
+    const bool arm_maintenance5 = e_m5 || (app_api >= VK_API_VERSION_1_4 &&
+                                               v->props.apiVersion >= VK_API_VERSION_1_4);
     bool e_tl = v12 || has_ext(ext, ne, VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME);
     bool e_di = v12 || has_ext(ext, ne, VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME);
     bool e_bda = v12 || has_ext(ext, ne, VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME);
