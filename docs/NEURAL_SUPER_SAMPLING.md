@@ -35,6 +35,20 @@ Pin exact SDK, model, and emulation-layer revisions before importing binaries or
 - `hw/xbox/hle/vk/draw.c`: guest depth surfaces can be recognized as shadow-buffer textures, and depth-write barriers exist for local framebuffer reads.
 - Remaining blocker: the presenter in `swapchain.c` consumes the completed color frame, not a synchronized color+depth+motion bundle. We have not yet found a verified per-pixel motion-vector source or camera jitter/near/far/FOV metadata. Therefore NSS still must not be dispatched.
 
+## Arm ML layer build and opt-in loading (2026-11-06)
+
+The feature-branch Android workflow now builds Arm's ML Emulation Layer from pinned source revision `0b23341697bc11646b1ea6f10d08843069083c81`, using the Vulkan SDK 1.4.357.0 dependency set, for `arm64-v8a`. It stages `libVkLayer_Graph.so` and `libVkLayer_Tensor.so` in the debug APK only. This is intentionally separate from the main app's default native libraries and does not change release APK packaging.
+
+The custom Turnip loader now has a debug-only opt-in path:
+- Set `HAKUX_NSS_LAYERS=1` in the native process environment, or set Android property `debug.hakux.nsslayers=1`.
+- HakuX loads the Arm Graph and Tensor libraries, negotiates their Vulkan layer interfaces, and chains them in the documented order Graph → Tensor → Turnip.
+- The existing Khronos validation-layer path remains unchanged. Enabling both custom chains at once is rejected for now.
+- If either Arm library is missing or negotiation fails, HakuX falls back to the original driver entry point and logs the reason.
+
+When the two layers expose their extensions, HakuX queries their extension lists by layer name, merges the reported extensions into its capability probe, and enables the graph, TOSA, optical-flow (when exposed), and tensor extension names at device creation only on a physical Vulkan 1.3+ device. The Arm layer intercepts these extensions before forwarding device creation to Turnip.
+
+This is an **ML-layer integration milestone**, not yet a working NSS image upscaler. No NSS VGF model is loaded, no graph pipeline/session is created, and no frame is dispatched. The next gates are a real Android/Turnip runtime test, API/feature/queue validation, model loading, and the frame-data bridge. The system Vulkan loader path remains separate and can use Android's documented GPU debug-layer settings.
+
 ## Custom Turnip layer-loading constraint (2026-11-06)
 
 A code review of `native/app/vklayer.c` and the debug-layer README found an important integration constraint: HakuX loads Turnip through adrenotools and passes the driver's own `vkGetInstanceProcAddr` directly to the core. This bypasses Android's normal Vulkan loader and its GPU debug-layer settings. HakuX currently has a custom one-layer chain for Khronos validation, and it intentionally preserves Turnip's dispatchable-object first word.
