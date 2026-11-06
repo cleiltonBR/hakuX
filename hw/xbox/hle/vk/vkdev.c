@@ -447,8 +447,10 @@ int hle_vk_init(void)
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_LOCAL_READ_FEATURES_KHR };
     VkPhysicalDeviceVulkan13Features q13 = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES };
+    VkPhysicalDevice16BitStorageFeatures q16 = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES, .pNext = &q13 };
     VkPhysicalDeviceVulkan12Features q12 = {
-        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES, .pNext = &q13 };
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES, .pNext = &q16 };
     VkPhysicalDeviceFeatures2 q = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, .pNext = v13 ? &q12 : NULL };
     /* below 1.3: each part's own struct (Vulkan12/13Features need 1.2/1.3) */
@@ -689,16 +691,19 @@ int hle_vk_init(void)
         /* SPIR-V 1.6: glslang makes a discard a demote */
         .shaderDemoteToHelperInvocation = q13.shaderDemoteToHelperInvocation };
     VkPhysicalDeviceVulkan12Features f12 = {
-        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES, .pNext = &f13,
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES, .pNext = &f16,
         .timelineSemaphore = VK_TRUE, .bufferDeviceAddress = c->bda,
         .runtimeDescriptorArray = VK_TRUE, .descriptorBindingPartiallyBound = VK_TRUE,
         .descriptorBindingSampledImageUpdateAfterBind = VK_TRUE,
         .shaderSampledImageArrayNonUniformIndexing = VK_TRUE,
         .hostQueryReset = c->host_query_reset,
         .shaderInt8 = arm_nss_ready ? VK_TRUE : VK_FALSE,
-        .shaderFloat16 = arm_nss_ready && q12.shaderFloat16,
-        .storageBuffer16BitAccess = arm_nss_ready && q12.storageBuffer16BitAccess,
-        .uniformAndStorageBuffer16BitAccess = arm_nss_ready && q12.uniformAndStorageBuffer16BitAccess };
+        .shaderFloat16 = arm_nss_ready && q12.shaderFloat16 };
+    VkPhysicalDevice16BitStorageFeatures f16 = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES,
+        .pNext = &f13,
+        .storageBuffer16BitAccess = arm_nss_ready && q16.storageBuffer16BitAccess,
+        .uniformAndStorageBuffer16BitAccess = arm_nss_ready && q16.uniformAndStorageBuffer16BitAccess };
     VkPhysicalDeviceFeatures2 f = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, .pNext = v13 ? &f12 : NULL };
     /* below 1.3: the parts' own structs (no demote: SPIR-V 1.3 discards) */
