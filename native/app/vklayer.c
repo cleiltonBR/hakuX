@@ -174,10 +174,6 @@ static VkResult VKAPI_CALL arm_tensor_next_enumerate_device_extensions(
     if (result != VK_SUCCESS) {
         return result;
     }
-    if (!properties) {
-        *count = lower_count + tensor_count;
-        return VK_SUCCESS;
-    }
 
     VkExtensionProperties *all =
         (VkExtensionProperties *)calloc((size_t)lower_count + tensor_count + 1,
@@ -212,6 +208,12 @@ static VkResult VKAPI_CALL arm_tensor_next_enumerate_device_extensions(
         if (!found) {
             all[total++] = all[lower_written + i];
         }
+    }
+
+    if (!properties) {
+        *count = total;
+        free(all);
+        return VK_SUCCESS;
     }
     uint32_t capacity = *count;
     uint32_t copied = capacity < total ? capacity : total;
