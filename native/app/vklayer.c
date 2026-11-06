@@ -136,8 +136,12 @@ static bool arm_layer_open(HleArmLayer *layer, const char *library, const char *
     };
     if (!negotiate || negotiate(&ni) != VK_SUCCESS ||
         !ni.pfnGetInstanceProcAddr || !ni.pfnGetDeviceProcAddr) {
-        nc_log("hakuX-app", "NSS layers: %s unavailable (%s)", label,
-               layer->handle ? "layer negotiation failed" : dlerror());
+        const char *reason = layer->handle ? "layer negotiation failed" : dlerror();
+        nc_log("hakuX-app", "NSS layers: %s unavailable (%s)", label, reason);
+        if (layer->handle) {
+            dlclose(layer->handle);
+        }
+        memset(layer, 0, sizeof(*layer));
         return false;
     }
     layer->gipa = ni.pfnGetInstanceProcAddr;
@@ -496,6 +500,10 @@ static void *arm_nss_layers_enable(void *drv_gipa)
         return drv_gipa;
     }
     if (!arm_layer_open(&g_arm_tensor, ARM_TENSOR_LAYER_LIB, ARM_TENSOR_LAYER_NAME)) {
+        if (g_arm_graph.handle) {
+            dlclose(g_arm_graph.handle);
+            memset(&g_arm_graph, 0, sizeof(g_arm_graph));
+        }
         return drv_gipa;
     }
 
