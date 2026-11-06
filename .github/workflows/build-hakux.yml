@@ -154,7 +154,7 @@ jobs:
           PREFIX="$BUILD/install"
           mkdir -p "$DEPS"
 
-          git clone --depth 1 https://github.com/arm/ai-ml-emulation-layer-for-vulkan.git "$ROOT"
+          git clone https://github.com/arm/ai-ml-emulation-layer-for-vulkan.git "$ROOT"
           git -C "$ROOT" checkout 0b23341697bc11646b1ea6f10d08843069083c81
 
           for spec in \
