@@ -797,9 +797,6 @@ int hle_vk_init(void)
         exts[nx++] = "VK_KHR_deferred_host_operations";
         exts[nx++] = "VK_ARM_data_graph";
         exts[nx++] = "VK_ARM_data_graph_instruction_set_tosa";
-        if (arm_optical_flow) {
-            exts[nx++] = "VK_ARM_data_graph_optical_flow";
-        }
         exts[nx++] = "VK_ARM_tensors";
     }
     float prio = 1.0f;
