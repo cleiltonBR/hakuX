@@ -177,7 +177,8 @@ jobs:
             -DENABLE_GLSLANG_BINARIES=ON \
             -DBUILD_TESTING=OFF \
             -DSPIRV-Headers_SOURCE_DIR="$DEPS/SPIRV-Headers" \
-            -DSPIRV-Tools_SOURCE_DIR="$DEPS/SPIRV-Tools"
+            -DSPIRV-Tools_SOURCE_DIR="$DEPS/SPIRV-Tools" \
+            -DALLOW_EXTERNAL_SPIRV_TOOLS=ON
           cmake --build "$HOST_GLSLANG" --target glslang-standalone --parallel 2
           test -x "$HOST_GLSLANG/StandAlone/glslang"
 
