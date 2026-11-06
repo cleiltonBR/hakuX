@@ -826,6 +826,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
       "Intensidade CAS: ${"%.1f".format(java.util.Locale.US, prefs.casSharpness)}",
       "NIS: ${if (prefs.nis) "Ativado" else "Desativado"}",
       "Nitidez NIS: ${(prefs.nisSharpness * 100).toInt()}%",
+      "Lossless.dll: ${if (prefs.losslessDllPath.isBlank()) "Não selecionada" else "Arquivo selecionado"}",
     )
     showMenuDialog(AlertDialog.Builder(this)
       .setTitle("Gráficos durante a gameplay")
@@ -895,9 +896,44 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
                 showRuntimeGraphics()
               }.setNegativeButton(android.R.string.cancel, null))
           }
+          8 -> chooseLosslessDll()
         }
       }
       .setNegativeButton(android.R.string.cancel, null))
+  }
+
+  private fun chooseLosslessDll() {
+    val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+      addCategory(Intent.CATEGORY_OPENABLE)
+      type = "*/*"
+      putExtra(Intent.EXTRA_TITLE, "Lossless.dll")
+    }
+    startActivityForResult(intent, REQUEST_LOSSLESS_DLL)
+  }
+
+  @Deprecated("The SDL activity still uses the legacy result callback for this document picker.")
+  override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+    super.onActivityResult(requestCode, resultCode, data)
+    if (requestCode != REQUEST_LOSSLESS_DLL || resultCode != RESULT_OK) return
+    val uri = data?.data ?: return
+    try {
+      val targetDir = File(filesDir, "lsfg").apply { mkdirs() }
+      val target = File(targetDir, "Lossless.dll")
+      contentResolver.openInputStream(uri)?.use { input ->
+        target.outputStream().use { output -> input.copyTo(output) }
+      } ?: throw IllegalStateException("Não foi possível abrir o arquivo selecionado.")
+      val validPe = target.inputStream().use { it.read() == 0x4D && it.read() == 0x5A }
+      if (!validPe) {
+        target.delete()
+        throw IllegalArgumentException("O arquivo selecionado não é uma DLL PE válida.")
+      }
+      AppPrefs(this).losslessDllPath = target.absolutePath
+      Toast.makeText(this, "Lossless.dll importada. O motor LSFG ainda precisa ser conectado ao apresentador Vulkan.", Toast.LENGTH_LONG).show()
+      showRuntimeGraphics()
+    } catch (e: Exception) {
+      Log.e(TAG, "Lossless.dll import failed", e)
+      Toast.makeText(this, "Falha ao importar Lossless.dll: ${e.message}", Toast.LENGTH_LONG).show()
+    }
   }
 
   /** The players the core has a controller plugged in for (bit n: player n + 1). */
@@ -1289,6 +1325,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     const val PREF_CAS_SHARPNESS = "cas_sharpness"
     const val PREF_NIS = "nis_enabled"
     const val PREF_NIS_SHARPNESS = "nis_sharpness"
+    private const val REQUEST_LOSSLESS_DLL = 0x4C53
     const val PREF_UPSCALE = "upscale_filter"
     const val PREF_ANISO = "anisotropy_enabled"
     const val PREF_ANISO_LEVEL = "anisotropy_level"

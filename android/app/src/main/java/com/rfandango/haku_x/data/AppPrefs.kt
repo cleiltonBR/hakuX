@@ -120,6 +120,11 @@ class AppPrefs(context: Context) {
     get() = sp.getFloat(NativeCoreActivity.PREF_NIS_SHARPNESS, 0.5f).coerceIn(0.0f, 1.0f)
     set(value) = sp.edit { putFloat(NativeCoreActivity.PREF_NIS_SHARPNESS, value.coerceIn(0.0f, 1.0f)) }
 
+  /** Private app copy of the user's own Lossless.dll; empty until selected. */
+  var losslessDllPath: String
+    get() = sp.getString(KEY_LOSSLESS_DLL_PATH, "") ?: ""
+    set(value) = sp.edit { putString(KEY_LOSSLESS_DLL_PATH, value) }
+
   /** How a picture smaller than the screen is scaled up: bilinear, SGSR or FSR. */
   var upscaleFilter: String
     get() = sp.getString(NativeCoreActivity.PREF_UPSCALE, NativeCoreActivity.UPSCALE_BILINEAR)
@@ -273,6 +278,7 @@ class AppPrefs(context: Context) {
     const val THEME_DARK = "dark"
     private const val KEY_DVD_URI = "dvdUri"
     private const val KEY_DVD_PATH = "dvdPath"
+    private const val KEY_LOSSLESS_DLL_PATH = "lossless_dll_path"
     private const val KEY_SCREEN_FORMAT = "video_screen_format"
     private const val KEY_480P = "video_480p"
     private const val KEY_720P = "video_720p"

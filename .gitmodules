@@ -2,3 +2,7 @@
 	path = external/fex
 	url = https://github.com/rfandango/FEX.git
 	branch = hakuX
+
+[submodule "third_party/bloodframe"]
+	path = third_party/bloodframe
+	url = https://github.com/ducvd89/bloodframe.git
