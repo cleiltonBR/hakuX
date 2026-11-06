@@ -1623,12 +1623,13 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
             if (fsr_easu) {
                 src = g_ps.fs_view;
             }
-            if (cas && cas_sharpness > 0.0f) {
-                p = P_RCAS;
-                pc[4] = exp2f(-cas_sharpness); /* RCAS strength in stops */
-            } else {
-                p = P_BILINEAR; /* EASU or native-resolution FSR without sharpening */
-            }
+            /* FSR 1.0 is EASU followed by RCAS. RCAS must not depend on
+             * the separate CAS toggle, otherwise selecting FSR silently
+             * falls back to bilinear whenever CAS is disabled. Use the CAS
+             * slider when enabled; otherwise keep a mild FSR default. */
+            p = P_RCAS;
+            const float fsr_sharpness = (cas && cas_sharpness > 0.0f) ? cas_sharpness : 0.2f;
+            pc[4] = exp2f(-fsr_sharpness); /* RCAS strength in stops */
         } else if (!nis_done && (rx < 0.99f || ry < 0.99f) && upscale == HLE_UPSCALE_SGSR && g_ps.pipe[P_SGSR]) {
             p = P_SGSR;
             pc[4] = 1.0f / (float)g_ps.f.w;
