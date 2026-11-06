@@ -122,8 +122,7 @@ if(HAKUX_NSS_SDK)
   endif()
 
   # Build only the NSS component (not frame interpolation or optical flow).
-  # The separate ML Emulation Layer and quantized NSS model are runtime
-  # dependencies and are intentionally not assumed to be present here.
+  # The separate ML Emulation Layer is a runtime dependency. The quantized NSS VGF model assets are included in the pinned SDK tree, but HakuX runtime loading/packaging is not wired yet.
   # The SDK's ffx-api CMake entry point is also used directly here so we can
   # build only NSS and avoid pulling the standalone VK_LAYER_ARM_NG into the
   # normal HakuX APK. These platform variables are normally set by the SDK's
@@ -148,7 +147,7 @@ if(HAKUX_NSS_SDK)
   endif()
   target_link_libraries(hakux_hle PUBLIC ngsdk_android_arm)
   target_compile_definitions(hakux_hle PUBLIC HAKUX_NSS_SDK_AVAILABLE=1)
-  message(STATUS "hakuX: Arm Neural Graphics SDK v1.1.0 API/backend linked; NSS runtime remains gated")
+  message(STATUS "hakuX: Arm Neural Graphics SDK v1.1.1 API/backend linked; NSS runtime remains gated")
 endif()
 
 # The MCPX APU: xemu's device (hw/xbox/mcpx/apu) ported onto the core's own
