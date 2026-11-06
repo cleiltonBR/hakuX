@@ -175,8 +175,12 @@ jobs:
       - name: Copiar as bibliotecas para o app
         run: bash tools/native/app-libs.sh
 
-      - name: Compilar o APK (debug, assinatura temporária)
+      - name: Compilar o APK (debug, assinatura permanente)
         working-directory: android
+        env:
+          HAKUX_STORE_PASSWORD: ${{ secrets.HAKUX_STORE_PASSWORD }}
+          HAKUX_KEY_ALIAS: ${{ secrets.HAKUX_KEY_ALIAS }}
+          HAKUX_KEY_PASSWORD: ${{ secrets.HAKUX_KEY_PASSWORD }}
         run: |
           chmod +x ./gradlew
           # Retry transient Maven Central / GitHub release gateway failures.
