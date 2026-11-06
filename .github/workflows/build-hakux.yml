@@ -15,9 +15,9 @@ on:
         type: boolean
         default: true
       publish:
-        description: "Publicar o APK numa Release (mais fácil de baixar no celular)"
+        description: "Publicar o APK numa Release (deixe desativado durante os testes)"
         type: boolean
-        default: true
+        default: false
 
 permissions:
   contents: write
