@@ -45,7 +45,7 @@ jobs:
       - name: Ferramentas (CMake, Ninja)
         run: |
           sudo apt-get update
-          sudo apt-get install -y ninja-build cmake python3
+          sudo apt-get install -y ninja-build cmake python3 glslang-tools
           cmake --version
 
       - name: Android SDK 36 + NDK 29
@@ -144,6 +144,58 @@ jobs:
             -DHAKUX_NSS_SDK=${{ (github.ref_name == 'feature/nvidia-image-scaling' || github.head_ref == 'feature/nvidia-image-scaling') && 'ON' || 'OFF' }}
           ninja -C build/native/core hakuxcore
 
+      - name: Compilar Arm ML Emulation Layer para Android (NSS)
+        if: ${{ github.ref_name == 'feature/nvidia-image-scaling' || github.head_ref == 'feature/nvidia-image-scaling' }}
+        run: |
+          set -euo pipefail
+          ROOT="$GITHUB_WORKSPACE/third_party/arm-ml-emulation-layer-for-vulkan"
+          DEPS="$RUNNER_TEMP/arm-mlel-deps"
+          BUILD="$GITHUB_WORKSPACE/build/arm-mlel"
+          PREFIX="$BUILD/install"
+          mkdir -p "$DEPS"
+
+          git clone --depth 1 https://github.com/arm/ai-ml-emulation-layer-for-vulkan.git "$ROOT"
+          git -C "$ROOT" checkout 0b23341697bc11646b1ea6f10d08843069083c81
+
+          for spec in \
+            "glslang KhronosGroup/glslang" \
+            "SPIRV-Cross KhronosGroup/SPIRV-Cross" \
+            "SPIRV-Headers KhronosGroup/SPIRV-Headers" \
+            "SPIRV-Tools KhronosGroup/SPIRV-Tools" \
+            "Vulkan-Headers KhronosGroup/Vulkan-Headers"; do
+            set -- $spec
+            git clone --depth 1 --branch vulkan-sdk-1.4.357.0 "https://github.com/$2.git" "$DEPS/$1"
+          done
+          git clone --depth 1 --branch v3.12.0 https://github.com/nlohmann/json.git "$DEPS/json"
+
+          cmake -S "$ROOT" -B "$BUILD" -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a \
+            -DANDROID_PLATFORM=android-28 \
+            -DANDROID_ALLOW_UNDEFINED_SYMBOLS=ON \
+            -DANDROID_PIE=ON \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="$PREFIX" \
+            -DCMAKE_INSTALL_LIBDIR=lib \
+            -DVMEL_USE_FLOAT_AS_DOUBLE=ON \
+            -DVMEL_TESTS_ENABLE=OFF \
+            -DGLSLANG_EXECUTABLE="$(command -v glslangValidator)" \
+            -DGLSLANG_PATH="$DEPS/glslang" \
+            -DSPIRV_CROSS_PATH="$DEPS/SPIRV-Cross" \
+            -DSPIRV_HEADERS_PATH="$DEPS/SPIRV-Headers" \
+            -DSPIRV_TOOLS_PATH="$DEPS/SPIRV-Tools" \
+            -DVULKAN_HEADERS_PATH="$DEPS/Vulkan-Headers" \
+            -DJSON_PATH="$DEPS/json"
+          cmake --build "$BUILD" --target VkLayer_Graph VkLayer_Tensor --parallel 2
+          cmake --install "$BUILD" --prefix "$PREFIX"
+          test -s "$PREFIX/lib/libVkLayer_Graph.so"
+          test -s "$PREFIX/lib/libVkLayer_Tensor.so"
+          mkdir -p android/app/src/debug/jniLibs/arm64-v8a
+          cp "$PREFIX/lib/libVkLayer_Graph.so" android/app/src/debug/jniLibs/arm64-v8a/
+          cp "$PREFIX/lib/libVkLayer_Tensor.so" android/app/src/debug/jniLibs/arm64-v8a/
+          echo "Arm NSS layers built and staged for the debug APK."
+          ls -lh android/app/src/debug/jniLibs/arm64-v8a/libVkLayer_*.so
+
       - name: Copiar as bibliotecas para o app
         run: bash tools/native/app-libs.sh
 
@@ -174,7 +226,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: hakuX-fsr-debug-apk
+          name: hakuX-nss-debug-apk
           path: hakuX-fsr-debug.apk
 
       - name: Publicar numa Release
