@@ -690,6 +690,11 @@ int hle_vk_init(void)
         .pipelineCreationCacheControl = c->cache_control,
         /* SPIR-V 1.6: glslang makes a discard a demote */
         .shaderDemoteToHelperInvocation = q13.shaderDemoteToHelperInvocation };
+    VkPhysicalDevice16BitStorageFeatures f16 = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES,
+        .pNext = &f13,
+        .storageBuffer16BitAccess = arm_nss_ready && q16.storageBuffer16BitAccess,
+        .uniformAndStorageBuffer16BitAccess = arm_nss_ready && q16.uniformAndStorageBuffer16BitAccess };
     VkPhysicalDeviceVulkan12Features f12 = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES, .pNext = &f16,
         .timelineSemaphore = VK_TRUE, .bufferDeviceAddress = c->bda,
@@ -699,11 +704,6 @@ int hle_vk_init(void)
         .hostQueryReset = c->host_query_reset,
         .shaderInt8 = arm_nss_ready ? VK_TRUE : VK_FALSE,
         .shaderFloat16 = arm_nss_ready && q12.shaderFloat16 };
-    VkPhysicalDevice16BitStorageFeatures f16 = {
-        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES,
-        .pNext = &f13,
-        .storageBuffer16BitAccess = arm_nss_ready && q16.storageBuffer16BitAccess,
-        .uniformAndStorageBuffer16BitAccess = arm_nss_ready && q16.uniformAndStorageBuffer16BitAccess };
     VkPhysicalDeviceFeatures2 f = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, .pNext = v13 ? &f12 : NULL };
     /* below 1.3: the parts' own structs (no demote: SPIR-V 1.3 discards) */
