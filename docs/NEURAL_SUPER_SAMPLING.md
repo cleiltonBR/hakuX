@@ -39,6 +39,8 @@ Pin exact SDK, model, and emulation-layer revisions before importing binaries or
 
 The feature-branch Android workflow now builds Arm's ML Emulation Layer from pinned source revision `0b23341697bc11646b1ea6f10d08843069083c81`, using the Vulkan SDK 1.4.357.0 dependency set, for `arm64-v8a`. It stages `libVkLayer_Graph.so` and `libVkLayer_Tensor.so` in the debug APK only. This is intentionally separate from the main app's default native libraries and does not change release APK packaging.
 
+The custom layer chain also reproduces the Vulkan loader's NULL-layer device-extension merge for the Tensor layer. This is required because Arm's Graph layer declares `VK_ARM_tensors` as a dependency and checks for it while creating the device; simply querying each layer by name is not sufficient for the custom loader.
+
 The custom Turnip loader now has a debug-only opt-in path:
 - Set `HAKUX_NSS_LAYERS=1` in the native process environment, or set Android property `debug.hakux.nsslayers=1`.
 - HakuX loads the Arm Graph and Tensor libraries, negotiates their Vulkan layer interfaces, and chains them in the documented order Graph → Tensor → Turnip.
