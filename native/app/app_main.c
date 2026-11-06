@@ -621,6 +621,11 @@ EXPORT int SDL_main(int argc, char *argv[])
         }
         if (!strncmp(argv[i], "nis=", 4)) nis_enabled = atoi(argv[i] + 4) != 0;
         if (!strncmp(argv[i], "nis_sharpness=", 14)) nis_sharpness = strtof(argv[i] + 14, NULL);
+        /* The user's private Lossless.dll copy is consumed by the Vulkan presenter. */
+        if (!strncmp(argv[i], "losslessdll=", 12) && argv[i][12]) {
+            setenv("HAKUX_LOSSLESS_DLL", argv[i] + 12, 1);
+            nc_log("hakuX-app", "LSFG: Lossless.dll path configured");
+        }
 #ifdef CONFIG_VULKAN
         if (!strncmp(argv[i], "aniso=", 6)) {
             g_hle_aniso_enabled = atoi(argv[i] + 6) != 0;
