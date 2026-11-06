@@ -35,6 +35,22 @@ Pin exact SDK, model, and emulation-layer revisions before importing binaries or
 - `hw/xbox/hle/vk/draw.c`: guest depth surfaces can be recognized as shadow-buffer textures, and depth-write barriers exist for local framebuffer reads.
 - Remaining blocker: the presenter in `swapchain.c` consumes the completed color frame, not a synchronized color+depth+motion bundle. We have not yet found a verified per-pixel motion-vector source or camera jitter/near/far/FOV metadata. Therefore NSS still must not be dispatched.
 
+## Optical-flow motion-vector route (2026-11-06)
+
+A promising alternative to reconstructing guest motion vectors has been identified: Arm ML Emulation Layer **v0.10.0** adds the `VK_ARM_data_graph_optical_flow` API. Its optical-flow graph node estimates forward 2D displacement between a current input image and a reference image, and exposes flow-vector and optional cost outputs. This may provide a real motion field from consecutive completed HakuX color frames, without pretending that the Xbox guest vertex shader already supplies previous-frame positions.
+
+This is now the preferred feasibility prototype, ahead of instrumenting the guest vertex pipeline, but it is **not yet an NSS-ready motion-vector source**. Before using it, HakuX must:
+- Build and package both Arm Graph and Tensor emulation layers; enable Graph before Tensor.
+- Confirm that the selected Vulkan loader/Turnip stack exposes the optical-flow extension after the layers are enabled.
+- Query the graph operation, queue-family properties, image formats, grid size, and required usage flags instead of assuming formats or dimensions.
+- Feed correctly ordered current/reference frames and validate the API's forward-flow direction against the motion-vector convention expected by NSS.
+- Track flow confidence/cost, disocclusion, camera cuts, scaling, and frame timing; reject low-confidence or stale vectors.
+- Measure the compute cost on Adreno/Turnip. The emulation layer implements ML extensions using Vulkan compute, so availability does not imply hardware optical-flow acceleration or a performance win.
+
+The passive Vulkan capability log now reports `VK_ARM_data_graph_optical_flow` separately from `VK_ARM_tensors` and `VK_ARM_data_graph`. This is only an extension-presence probe; until the layers are packaged and explicitly enabled, a negative result does not prove that the emulated extension is unavailable.
+
+Arm documents the optical-flow API in Emulation Layer v0.10.0, and the Vulkan specification defines its output as forward displacement from the input image to the reference image. These details make it a plausible motion-vector source, not a substitute for end-to-end validation.
+
 ## Integration stages
 
 ### Stage 1 — capability and packaging proof
