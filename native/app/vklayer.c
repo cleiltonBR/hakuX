@@ -160,7 +160,12 @@ static VkResult VKAPI_CALL arm_tensor_next_enumerate_device_extensions(
         return VK_ERROR_INITIALIZATION_FAILED;
     }
     if (layer_name) {
-        return tensor(physical, layer_name, count, properties);
+        /* The Tensor layer owns only its own layer-name query. Preserve the
+         * driver's answers for all other explicit layer names; Graph handles
+         * its own name before reaching this next-layer bridge. */
+        return !strcmp(layer_name, ARM_TENSOR_LAYER_NAME)
+            ? tensor(physical, layer_name, count, properties)
+            : lower(physical, layer_name, count, properties);
     }
 
     /* The system loader normally merges extensions exposed by enabled layers
