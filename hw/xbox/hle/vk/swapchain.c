@@ -917,7 +917,13 @@ static void drop_window(void)
         vkDestroySurfaceKHR(g_hvk.inst, g_ps.surf, NULL);
         g_ps.surf = VK_NULL_HANDLE;
     }
-    g_ps.win = NULL;
+    /* Keep the Android window alive for the entire lifetime of its Vulkan
+     * surface. SDL exposes a borrowed ANativeWindow pointer; the surface can
+     * outlive the frame in which that pointer was obtained. */
+    if (g_ps.win) {
+        ANativeWindow_release(g_ps.win);
+        g_ps.win = NULL;
+    }
 }
 
 static bool make_swapchain(uint32_t w, uint32_t h)
@@ -1115,11 +1121,15 @@ bool hle_present_begin(struct ANativeWindow *win, uint32_t *w, uint32_t *h)
                 hle_log("hakuX-hle-back", "present: VK_KHR_android_surface entry point is null; refusing null call");
                 return false;
             }
+            /* The SDL window property is borrowed. Acquire our own reference
+             * before creating a Vulkan surface that may survive this frame. */
+            ANativeWindow_acquire(win);
             VkAndroidSurfaceCreateInfoKHR sci = { .sType = VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR,
                                                   .window = win };
             const VkResult surface_result = create_surface(g_hvk.inst, &sci, NULL, &g_ps.surf);
             if (surface_result != VK_SUCCESS) {
                 g_ps.surf = VK_NULL_HANDLE;
+                ANativeWindow_release(win);
                 g_ps.lost_ns = hle_now_ns();
                 hle_log("hakuX-hle-back", "present: vkCreateAndroidSurfaceKHR failed: %d", surface_result);
             } else {
