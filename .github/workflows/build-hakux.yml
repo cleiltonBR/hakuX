@@ -70,10 +70,47 @@ jobs:
           git -C external/fex submodule update --init External/fmt External/range-v3 \
             External/rpmalloc External/unordered_dense External/xxhash Source/Common/cpp-optparse
 
-      - name: LSFG backend status
+      - name: Build Bloodframe LSFG backend (SPIR-V first, DXBC optional)
         run: |
-          echo "Bloodframe build is temporarily disabled: upstream DXBC submodule is inaccessible."
-          echo "The Android APK build will continue without claiming frame generation is active."
+          set -euo pipefail
+          BF_SRC="$GITHUB_WORKSPACE/../bloodframe"
+          BF_BUILD="$GITHUB_WORKSPACE/build/bloodframe"
+          git clone --depth 1 https://github.com/ducvd89/bloodframe.git "$BF_SRC"
+          git -C "$BF_SRC" submodule update --init --depth 1 thirdparty/pe-parse thirdparty/volk
+          # This hakuX build uses the Lossless.dll's embedded FP16/FP32 SPIR-V.
+          # Keep DXBC translation as a graceful unavailable fallback, not a build dependency:
+          # the upstream DXBC submodule is currently inaccessible from CI.
+          python3 - "$BF_SRC/android/CMakeLists.txt" "$BF_SRC/android/bb_no_dxbc.cpp" <<'PY'
+          import pathlib, sys
+          cmake = pathlib.Path(sys.argv[1])
+          stub = pathlib.Path(sys.argv[2])
+          s = cmake.read_text()
+          s = s.replace(
+              'add_subdirectory(${LSFG_SRC}/thirdparty/dxbc dxbc EXCLUDE_FROM_ALL)',
+              'option(BLOODFRAME_NO_DXBC "Build using embedded Lossless.dll SPIR-V only" OFF)\nif(NOT BLOODFRAME_NO_DXBC)\n  add_subdirectory(${LSFG_SRC}/thirdparty/dxbc dxbc EXCLUDE_FROM_ALL)\nendif()')
+          s = s.replace(
+              '  ${LSFG_SRC}/src/extract/trans.cpp)',
+              '  ${LSFG_SRC}/src/extract/trans.cpp)\nif(BLOODFRAME_NO_DXBC)\n  list(REMOVE_ITEM _bloodframe_sources ${LSFG_SRC}/src/extract/trans.cpp)\n  list(APPEND _bloodframe_sources ${CMAKE_CURRENT_LIST_DIR}/bb_no_dxbc.cpp)\nendif()')
+          s = s.replace('add_library(bloodframe SHARED\n', 'set(_bloodframe_sources\n')
+          s = s.replace('  bb_lsfg.cpp\n', '  bb_lsfg.cpp\n')
+          s = s.replace('  ${LSFG_SRC}/src/extract/trans.cpp)\nif(BLOODFRAME_NO_DXBC)', '  ${LSFG_SRC}/src/extract/trans.cpp)\nadd_library(bloodframe SHARED ${_bloodframe_sources})\nif(BLOODFRAME_NO_DXBC)')
+          s = s.replace('target_link_libraries(bloodframe PRIVATE lsfg-vk-framegen pe-parse dxbc volk nativewindow log)',
+                        'if(BLOODFRAME_NO_DXBC)\n  target_link_libraries(bloodframe PRIVATE lsfg-vk-framegen pe-parse volk nativewindow log)\nelse()\n  target_link_libraries(bloodframe PRIVATE lsfg-vk-framegen pe-parse dxbc volk nativewindow log)\nendif()')
+          if 'BLOODFRAME_NO_DXBC' not in s or 'bb_no_dxbc.cpp' not in s:
+              raise SystemExit('Could not apply the DXBC-optional Bloodframe CMake patch')
+          cmake.write_text(s)
+          stub.write_text('''#include "extract/trans.hpp"\n#include <stdexcept>\nnamespace Extract {\nstd::vector<uint8_t> translateShader(std::vector<uint8_t>) {\n  throw std::runtime_error("This build supports embedded Lossless.dll SPIR-V only; DXBC translation is unavailable");\n}\n}\n''')
+          PY
+          cmake -S "$BF_SRC/android" -B "$BF_BUILD" -G Ninja \
+            -DLSFG_SRC="$BF_SRC" -DBLOODFRAME_NO_DXBC=ON \
+            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-30 \
+            -DCMAKE_BUILD_TYPE=Release -DANDROID_STL=c++_shared
+          cmake --build "$BF_BUILD" --target bloodframe --parallel 2
+          mkdir -p "$GITHUB_WORKSPACE/build/bloodframe"
+          find "$BF_BUILD" -name libbloodframe.so -exec cp {} "$GITHUB_WORKSPACE/build/bloodframe/libbloodframe.so" \\;
+          test -s "$GITHUB_WORKSPACE/build/bloodframe/libbloodframe.so"
+          file "$GITHUB_WORKSPACE/build/bloodframe/libbloodframe.so"
 
       - name: Dependências do núcleo (NC_DEPS, versões do README)
         run: |

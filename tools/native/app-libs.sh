@@ -29,6 +29,11 @@ out="$here/android/app/src/main/jniLibs/arm64-v8a"
 mkdir -p "$out"
 "$strip" -o "$out/libhakuxcore.so" "$build/libhakuxcore.so"
 "$strip" -o "$out/libSDL3.so" "$build/sdl3/libSDL3.so"
+# Optional Lossless Scaling frame-generation backend (loaded only when enabled).
+if [ -s "$here/build/bloodframe/libbloodframe.so" ]; then
+  "$strip" -o "$out/libbloodframe.so" "$here/build/bloodframe/libbloodframe.so"
+  echo "Packaged libbloodframe.so (ARM64)"
+fi
 # adrenotools' hook libraries: custom Vulkan drivers (Turnip) load through
 # them from the app's native library directory.
 for h in main_hook file_redirect_hook gsl_alloc_hook kgsl_context_hook hook_impl; do
