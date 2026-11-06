@@ -179,13 +179,14 @@ object Logs {
     thread(isDaemon = true, name = "log-capture") {
       var logcat: Process? = null
       try {
-        logcat = ProcessBuilder(
+        val process = ProcessBuilder(
           "logcat", "-v", "threadtime", "--pid=${Process.myPid()}",
           "-f", file.absolutePath, "-r", (MAX_BYTES shr 10).toString(), "-n", "1"
         ).redirectError(ProcessBuilder.Redirect.appendTo(file)).start()
+        logcat = process
         // The marker is emitted after logcat has opened its destination.
         Log.i(TAG, header.trimEnd())
-        logcat.waitFor()
+        process.waitFor()
       } catch (e: InterruptedException) {
         Thread.currentThread().interrupt()
         logcat?.destroy()
