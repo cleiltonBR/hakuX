@@ -108,7 +108,7 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release -DANDROID_STL=c++_shared
           cmake --build "$BF_BUILD" --target bloodframe --parallel 2
           mkdir -p "$GITHUB_WORKSPACE/build/bloodframe"
-          find "$BF_BUILD" -name libbloodframe.so -exec cp {} "$GITHUB_WORKSPACE/build/bloodframe/libbloodframe.so" \\;
+          find "$BF_BUILD" -name libbloodframe.so -exec cp {} "$GITHUB_WORKSPACE/build/bloodframe/libbloodframe.so" \;
           test -s "$GITHUB_WORKSPACE/build/bloodframe/libbloodframe.so"
           file "$GITHUB_WORKSPACE/build/bloodframe/libbloodframe.so"
 
