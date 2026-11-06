@@ -123,6 +123,11 @@ if(HAKUX_NSS_SDK)
 
   # Build only the NSS component (not frame interpolation or optical flow).
   # The separate ML Emulation Layer is a runtime dependency. The quantized NSS VGF model assets are included in the pinned SDK tree, but HakuX runtime loading/packaging is not wired yet.
+  # Use the SDK's pinned Vulkan-Headers for VK_ARM_tensors and
+  # VK_ARM_data_graph feature structures in the HLE capability chain.
+  target_include_directories(hakux_hle BEFORE PRIVATE
+    "${HAKUX_ARM_NGSDK}/sdk/include/vulkan-headers")
+
   # The SDK's ffx-api CMake entry point is also used directly here so we can
   # build only NSS and avoid pulling the standalone VK_LAYER_ARM_NG into the
   # normal HakuX APK. These platform variables are normally set by the SDK's
