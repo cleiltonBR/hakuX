@@ -1104,12 +1104,24 @@ bool hle_present_begin(struct ANativeWindow *win, uint32_t *w, uint32_t *h)
     if (win != g_ps.win && (!win || hle_now_ns() - g_ps.lost_ns > 250000000ll)) {
         drop_window();
         if (win) {
+            PFN_vkCreateAndroidSurfaceKHR create_surface = vkCreateAndroidSurfaceKHR;
+            if (!create_surface && g_hvk.inst) {
+                create_surface = (PFN_vkCreateAndroidSurfaceKHR)
+                    vkGetInstanceProcAddr(g_hvk.inst, "vkCreateAndroidSurfaceKHR");
+            }
+            if (!create_surface) {
+                g_ps.lost_ns = hle_now_ns();
+                g_ps.failed = true;
+                hle_log("hakuX-hle-back", "present: VK_KHR_android_surface entry point is null; refusing null call");
+                return false;
+            }
             VkAndroidSurfaceCreateInfoKHR sci = { .sType = VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR,
                                                   .window = win };
-            if (vkCreateAndroidSurfaceKHR(g_hvk.inst, &sci, NULL, &g_ps.surf) != VK_SUCCESS) {
+            const VkResult surface_result = create_surface(g_hvk.inst, &sci, NULL, &g_ps.surf);
+            if (surface_result != VK_SUCCESS) {
                 g_ps.surf = VK_NULL_HANDLE;
                 g_ps.lost_ns = hle_now_ns();
-                hle_log("hakuX-hle-back", "present: no surface for the window");
+                hle_log("hakuX-hle-back", "present: vkCreateAndroidSurfaceKHR failed: %d", surface_result);
             } else {
                 g_ps.win = win;
             }
