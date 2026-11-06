@@ -35,6 +35,14 @@ Pin exact SDK, model, and emulation-layer revisions before importing binaries or
 - `hw/xbox/hle/vk/draw.c`: guest depth surfaces can be recognized as shadow-buffer textures, and depth-write barriers exist for local framebuffer reads.
 - Remaining blocker: the presenter in `swapchain.c` consumes the completed color frame, not a synchronized color+depth+motion bundle. We have not yet found a verified per-pixel motion-vector source or camera jitter/near/far/FOV metadata. Therefore NSS still must not be dispatched.
 
+## Custom Turnip layer-loading constraint (2026-11-06)
+
+A code review of `native/app/vklayer.c` and the debug-layer README found an important integration constraint: HakuX loads Turnip through adrenotools and passes the driver's own `vkGetInstanceProcAddr` directly to the core. This bypasses Android's normal Vulkan loader and its GPU debug-layer settings. HakuX currently has a custom one-layer chain for Khronos validation, and it intentionally preserves Turnip's dispatchable-object first word.
+
+Therefore, merely shipping Arm's Graph/Tensor layer APK, adding Android package visibility, or setting Android GPU debug-layer properties will not enable the layers on the custom Turnip path. NSS testing on Turnip requires extending the app's custom Vulkan layer chain to load both Arm libraries, negotiate their layer interfaces, preserve the driver's dispatch data, and link Graph before Tensor. The package-visibility declaration is only useful for Android's system-loader path; it is not the solution for the custom-driver path.
+
+Do not modify the existing validation-layer path by replacing it with an untested multi-layer chain. The Arm chain must be implemented as an independent, opt-in debug path and tested with validation both off and on. The system-driver path can continue to use Android's GPU debug-layer mechanism where supported.
+
 ## Optical-flow motion-vector route (2026-11-06)
 
 A promising alternative to reconstructing guest motion vectors has been identified: Arm ML Emulation Layer **v0.10.0** adds the `VK_ARM_data_graph_optical_flow` API. Its optical-flow graph node estimates forward 2D displacement between a current input image and a reference image, and exposes flow-vector and optional cost outputs. This may provide a real motion field from consecutive completed HakuX color frames, without pretending that the Xbox guest vertex shader already supplies previous-frame positions.
