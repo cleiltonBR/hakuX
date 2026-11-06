@@ -64,11 +64,13 @@ jobs:
           echo "ANDROID_NDK_ROOT=${ANDROID_HOME}/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
           echo "NDK_HOME=${ANDROID_HOME}/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
 
-      - name: Submódulos (FEX e os dele)
+      - name: Submódulos (FEX, Arm NSS SDK e dependências)
         run: |
           git submodule update --init external/fex
           git -C external/fex submodule update --init External/fmt External/range-v3 \
             External/rpmalloc External/unordered_dense External/xxhash Source/Common/cpp-optparse
+          git submodule update --init third_party/arm-neural-graphics-sdk
+          git -C third_party/arm-neural-graphics-sdk submodule update --init --recursive
 
       - name: Dependências do núcleo (NC_DEPS, versões do README)
         run: |
