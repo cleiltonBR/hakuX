@@ -310,24 +310,45 @@ int hle_vk_init(void)
 
     uint32_t ne = 0;
     vkEnumerateDeviceExtensionProperties(v->phys, NULL, &ne, NULL);
-    g_autofree VkExtensionProperties *ext = g_new(VkExtensionProperties, ne);
+    /* Reserve room for the extensions exposed by the two explicitly loaded
+     * Arm layers. The custom Turnip path bypasses the system Vulkan loader,
+     * so its layer extension lists must be queried by layer name and merged. */
+    g_autofree VkExtensionProperties *ext = g_new0(VkExtensionProperties, ne + 8);
     vkEnumerateDeviceExtensionProperties(v->phys, NULL, &ne, ext);
-    /* NSS capability probe only. These extensions are not enabled here:
-     * their presence alone does not prove the emulation layer is active or
-     * that the SDK's graph/tensor features can be created. */
+    const char *ml_layers[2] = {
+        "VK_LAYER_ML_Graph_Emulation", "VK_LAYER_ML_Tensor_Emulation"
+    };
+    for (uint32_t layer = 0; layer < ARRAY_SIZE(ml_layers); layer++) {
+        uint32_t count = 0;
+        if (vkEnumerateDeviceExtensionProperties(v->phys, ml_layers[layer], &count, NULL) != VK_SUCCESS ||
+            count > 8 || ne + count > ne + 8) {
+            continue;
+        }
+        VkExtensionProperties layer_ext[8];
+        uint32_t got = count;
+        if (count && vkEnumerateDeviceExtensionProperties(v->phys, ml_layers[layer], &got, layer_ext) == VK_SUCCESS) {
+            for (uint32_t i = 0; i < got; i++) {
+                if (!has_ext(ext, ne, layer_ext[i].extensionName)) {
+                    ext[ne++] = layer_ext[i];
+                }
+            }
+        }
+    }
     const bool arm_tensors = has_ext(ext, ne, "VK_ARM_tensors");
     const bool arm_data_graph = has_ext(ext, ne, "VK_ARM_data_graph");
+    const bool arm_tosa = has_ext(ext, ne, "VK_ARM_data_graph_instruction_set_tosa");
     const bool arm_optical_flow = has_ext(ext, ne, "VK_ARM_data_graph_optical_flow");
+    const bool arm_ml_layers = arm_tensors && arm_data_graph && arm_tosa;
     const bool sync2_available = has_ext(ext, ne, VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME) ||
                                  v->props.apiVersion >= VK_API_VERSION_1_3;
     hle_log("hakuX-hle-back",
-            "vk: NSS probe GPU=%s vendor=%04x device=%04x driver=%u api=%u.%u.%u ARM_tensors=%d ARM_data_graph=%d ARM_optical_flow=%d sync2=%d (not enabled)",
+            "vk: NSS probe GPU=%s vendor=%04x device=%04x driver=%u api=%u.%u.%u ARM_tensors=%d ARM_data_graph=%d ARM_tosa=%d ARM_optical_flow=%d ML_layers=%d sync2=%d",
             v->props.deviceName, v->props.vendorID, v->props.deviceID,
             v->props.driverVersion,
             VK_API_VERSION_MAJOR(v->props.apiVersion),
             VK_API_VERSION_MINOR(v->props.apiVersion),
             VK_API_VERSION_PATCH(v->props.apiVersion),
-            arm_tensors, arm_data_graph, arm_optical_flow, sync2_available);
+            arm_tensors, arm_data_graph, arm_tosa, arm_optical_flow, arm_ml_layers, sync2_available);
     bool e_vids = has_ext(ext, ne, VK_EXT_VERTEX_INPUT_DYNAMIC_STATE_EXTENSION_NAME);
     bool e_eds2 = has_ext(ext, ne, VK_EXT_EXTENDED_DYNAMIC_STATE_2_EXTENSION_NAME);
     bool e_cbc = has_ext(ext, ne, VK_EXT_CUSTOM_BORDER_COLOR_EXTENSION_NAME);
@@ -730,6 +751,18 @@ int hle_vk_init(void)
     }
     if (c->swapchain) {
         exts[nx++] = VK_KHR_SWAPCHAIN_EXTENSION_NAME;
+    }
+    /* The Arm emulation layers implement these extension names themselves and
+     * strip them before forwarding device creation to Turnip. Enable them only
+     * when both layers were discovered and the real device meets their 1.3
+     * minimum. The ordinary HLE path never enables or depends on NSS. */
+    if (arm_ml_layers && !force11 && v->props.apiVersion >= VK_API_VERSION_1_3) {
+        exts[nx++] = "VK_ARM_data_graph";
+        exts[nx++] = "VK_ARM_data_graph_instruction_set_tosa";
+        if (arm_optical_flow) {
+            exts[nx++] = "VK_ARM_data_graph_optical_flow";
+        }
+        exts[nx++] = "VK_ARM_tensors";
     }
     float prio = 1.0f;
     VkDeviceQueueCreateInfo qci = {
