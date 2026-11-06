@@ -22,6 +22,7 @@ bool g_hle_aniso_enabled = true;
 float g_hle_aniso_level = 16.0f;
 static HleMutex g_queue_lock;
 static bool g_ready;
+static bool g_android_surface;
 static bool g_lost;                     /* hle_vk_lose */
 static int64_t g_lock_wait_ns;          /* hle_vk_queue_wait_ns */
 
@@ -283,8 +284,12 @@ int hle_vk_init(void)
     vkEnumerateInstanceExtensionProperties(NULL, &nie, iext);
     const char *iexts[2];
     uint32_t nix = 0;
-    if (has_ext(iext, nie, VK_KHR_SURFACE_EXTENSION_NAME) &&
-        has_ext(iext, nie, VK_KHR_ANDROID_SURFACE_EXTENSION_NAME)) {
+    g_android_surface = has_ext(iext, nie, VK_KHR_SURFACE_EXTENSION_NAME) &&
+                        has_ext(iext, nie, VK_KHR_ANDROID_SURFACE_EXTENSION_NAME);
+    hle_log("hakuX-hle-back", "vk: Android WSI instance extensions: surface=%d android_surface=%d",
+            has_ext(iext, nie, VK_KHR_SURFACE_EXTENSION_NAME),
+            has_ext(iext, nie, VK_KHR_ANDROID_SURFACE_EXTENSION_NAME));
+    if (g_android_surface) {
         iexts[nix++] = VK_KHR_SURFACE_EXTENSION_NAME;
         iexts[nix++] = VK_KHR_ANDROID_SURFACE_EXTENSION_NAME;
     }
@@ -298,6 +303,13 @@ int hle_vk_init(void)
         return -1;
     }
     volkLoadInstanceOnly(v->inst);
+    g_android_surface = g_android_surface &&
+        vkCreateAndroidSurfaceKHR && vkDestroySurfaceKHR &&
+        vkGetPhysicalDeviceSurfaceSupportKHR &&
+        vkGetPhysicalDeviceSurfaceCapabilitiesKHR &&
+        vkGetPhysicalDeviceSurfaceFormatsKHR;
+    hle_log("hakuX-hle-back", "vk: Android WSI entry points: %s",
+            g_android_surface ? "ready" : "unavailable (swapchain presentation disabled)");
     uint32_t n = 1;
     vkEnumeratePhysicalDevices(v->inst, &n, &v->phys);
     if (!n) {
@@ -625,7 +637,8 @@ int hle_vk_init(void)
     c->cache_control = v13 ? q13.pipelineCreationCacheControl
                            : e_pcc && q_pcc.pipelineCreationCacheControl;
     c->occl_precise = q.features.occlusionQueryPrecise;
-    c->swapchain = nix && has_ext(ext, ne, VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+    c->swapchain = g_android_surface && nix &&
+                   has_ext(ext, ne, VK_KHR_SWAPCHAIN_EXTENSION_NAME);
     VkFormatProperties fp;
     vkGetPhysicalDeviceFormatProperties(v->phys, VK_FORMAT_R16G16_SSCALED, &fp);
     c->sscaled = fp.bufferFeatures & VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT;
