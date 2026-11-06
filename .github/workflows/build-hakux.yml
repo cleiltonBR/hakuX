@@ -73,6 +73,10 @@ jobs:
       - name: Bloodframe (Lossless Scaling Frame Generation para Android)
         run: |
           git submodule update --init third_party/bloodframe
+          # The original GitHub host for PancakeTAS/dxbc is no longer reachable.
+          # Use the maintained Codeberg mirror while preserving the pinned gitlink SHA.
+          git -C third_party/bloodframe config -f .gitmodules submodule.thirdparty/dxbc.url https://codeberg.org/PancakeTAS/dxbc.git
+          git -C third_party/bloodframe submodule sync -- thirdparty/dxbc
           git -C third_party/bloodframe submodule update --init thirdparty/dxbc thirdparty/pe-parse thirdparty/volk
           cmake -S third_party/bloodframe -B build/bloodframe -G Ninja \
             -DBLOODFRAME=ON \
