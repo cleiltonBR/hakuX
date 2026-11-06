@@ -70,27 +70,10 @@ jobs:
           git -C external/fex submodule update --init External/fmt External/range-v3 \
             External/rpmalloc External/unordered_dense External/xxhash Source/Common/cpp-optparse
 
-      - name: Bloodframe (Lossless Scaling Frame Generation para Android)
+      - name: LSFG backend status
         run: |
-          git submodule update --init third_party/bloodframe
-          # The original GitHub host for PancakeTAS/dxbc is no longer reachable.
-          # Use the maintained Codeberg mirror while preserving the pinned gitlink SHA.
-          git -C third_party/bloodframe config -f .gitmodules submodule.thirdparty/dxbc.url https://codeberg.org/PancakeTAS/dxbc.git
-          git -C third_party/bloodframe submodule sync -- thirdparty/dxbc
-          git -C third_party/bloodframe submodule update --init thirdparty/dxbc thirdparty/pe-parse thirdparty/volk
-          cmake -S third_party/bloodframe -B build/bloodframe -G Ninja \
-            -DBLOODFRAME=ON \
-            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake" \
-            -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-30 \
-            -DANDROID_STL=c++_shared -DCMAKE_BUILD_TYPE=Release
-          cmake --build build/bloodframe --target bloodframe --parallel 2
-          mkdir -p android/app/src/main/jniLibs/arm64-v8a android/app/src/main/assets/licenses
-          cp build/bloodframe/android/libbloodframe.so android/app/src/main/jniLibs/arm64-v8a/
-          cp "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/libc++_shared.so" android/app/src/main/jniLibs/arm64-v8a/
-          cp third_party/bloodframe/LICENSE.md android/app/src/main/assets/licenses/bloodframe-lsfg-vk.LICENSE.md
-          cp third_party/bloodframe/thirdparty/dxbc/LICENSE.md android/app/src/main/assets/licenses/bloodframe-dxbc.LICENSE
-          cp third_party/bloodframe/thirdparty/pe-parse/LICENSE android/app/src/main/assets/licenses/bloodframe-pe-parse.LICENSE
-          cp third_party/bloodframe/thirdparty/volk/LICENSE.md android/app/src/main/assets/licenses/bloodframe-volk.LICENSE.md
+          echo "Bloodframe build is temporarily disabled: upstream DXBC submodule is inaccessible."
+          echo "The Android APK build will continue without claiming frame generation is active."
 
       - name: Dependências do núcleo (NC_DEPS, versões do README)
         run: |
