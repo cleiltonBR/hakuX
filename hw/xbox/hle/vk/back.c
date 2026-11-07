@@ -75,7 +75,8 @@ static struct {
     int32_t in_pass;                            /* its query in the open pass, -1 none */
     uint32_t parts[VIS_MAX_PARTS], nparts;
     struct {
-        uint32_t index, div, nparts, parts[VIS_MAX_PARTS];
+        uint32_t index, nparts, parts[VIS_MAX_PARTS];
+        uint64_t div;                          /* exact fixed-point pixel-area divisor */
         uint32_t report;                        /* guest PA of the device's report, 0 none */
         uint64_t after;                         /* HLE_SURF_PARKED until submitted */
         uint64_t expect;                        /* the value its poller waits for */
@@ -173,8 +174,10 @@ static void cmd_vis_end(const HleCmdVis *c)
     p->index = c->index;
     HleVkSurf *vrt = hle_surf_get(g_back.rt);
     uint32_t vsc2 = vrt ? vrt->scale2 : g_hle_rscale2;
-    uint32_t vsc = (vsc2 + 1u) / 2u;
-    p->div = MAX(c->div, 1u) * vsc * vsc;               /* guest pixels */
+    /* Query samples are host pixels. scale2 stores twice the scale, so
+     * guest-pixel area is scale2^2 / 4. Keep the divisor rational instead
+     * of rounding 1.5x to 2x (or 2.5x to 3x). */
+    p->div = (uint64_t)MAX(c->div, 1u) * vsc2 * vsc2;
     p->report = c->report;
     p->expect = c->expect;
     p->nparts = g_vis.nparts;
@@ -213,7 +216,7 @@ static void vis_reap(uint64_t completed)
                 sum += n;
             }
         }
-        uint32_t count = (uint32_t)(sum / p->div);
+        uint32_t count = (uint32_t)((sum * 4u) / MAX(p->div, 1u));
         {   /* debug: HAKUX_HLE_VISALL=1 (or debug.hakux.visall=1, live)
              * reports every test fully visible; HAKUX_HLE_VISLOG=<n> (or a new
              * debug.hakux.vislog=<n>) logs the next n results */
