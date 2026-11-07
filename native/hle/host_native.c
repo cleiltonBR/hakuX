@@ -153,7 +153,7 @@ static int g_render_scale = 1;
 
 void nc_hle_set_render_scale(int scale)
 {
-    __atomic_store_n(&g_render_scale, scale < 1 ? 1 : scale > 4 ? 4 : scale, __ATOMIC_RELEASE);
+    __atomic_store_n(&g_render_scale, scale < 1 ? 1 : scale > 8 ? 8 : scale, __ATOMIC_RELEASE);
 }
 
 int hle_host_render_scale(void)
