@@ -85,7 +85,7 @@ class AppPrefs(context: Context) {
     get() = sp.getBoolean(NativeCoreActivity.PREF_SHOW_HITCHES, true)
     set(value) = sp.edit { putBoolean(NativeCoreActivity.PREF_SHOW_HITCHES, value) }
 
-  /** The HLE GPU's render scale, 1-4x the title's resolution (read at game start). */
+  /** The HLE GPU's render scale, 1-8x the title's resolution (read at game start). */
   var renderScale: Int
     get() = sp.getInt(NativeCoreActivity.PREF_SCALE, NativeCoreActivity.DEFAULT_SCALE)
     set(value) = sp.edit { putInt(NativeCoreActivity.PREF_SCALE, value) }
