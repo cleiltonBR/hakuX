@@ -1045,10 +1045,16 @@ static bool make_swapchain(uint32_t w, uint32_t h)
         for (unsigned i = 0; i < P_FXAA; i++) {
             if (g_ps.pipe[i]) {
                 T.vkDestroyPipeline(g_hvk.dev, g_ps.pipe[i], NULL);
+                g_ps.pipe[i] = VK_NULL_HANDLE;
             }
             g_ps.pipe[i] = pipeline(g_ps.fs[i], fmt.format);
         }
         g_ps.pipe_fmt = fmt.format;
+        hle_log("hakuX-hle-back",
+                "present: output pipelines format=%d (bilinear=%d area=%d SGSR=%d RCAS=%d)",
+                fmt.format, g_ps.pipe[P_BILINEAR] != VK_NULL_HANDLE,
+                g_ps.pipe[P_AREA] != VK_NULL_HANDLE, g_ps.pipe[P_SGSR] != VK_NULL_HANDLE,
+                g_ps.pipe[P_RCAS] != VK_NULL_HANDLE);
     }
     g_ps.fmt = fmt.format;
     hle_log("hakuX-hle-back", "present: swapchain %ux%u (the window %ux%u, turned %u degrees), %u images, "
@@ -1291,7 +1297,9 @@ static bool fsr_target(uint32_t w, uint32_t h)
         hle_log("hakuX-hle-back", "present: no %ux%u FSR image: FSR off", w, h);
         T.vkDestroyImage(g_hvk.dev, g_ps.fs_img, NULL);
         g_ps.fs_img = VK_NULL_HANDLE;
-        g_ps.pipe[P_EASU] = VK_NULL_HANDLE;
+        /* Keep the EASU pipeline: allocation may succeed on a later frame
+         * (for example after the window extent changes or memory pressure
+         * clears). A transient target failure must not permanently disable FSR. */
         return false;
     }
     g_ps.fs_w = w;
@@ -1594,7 +1602,7 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
     bool use_fsr = false;
     bool fsr_easu = false;
 #if HAKUX_FSR
-    if (g_ps.have && !nis_done && upscale == HLE_UPSCALE_FSR && g_ps.pipe[P_EASU] && g_ps.pipe[P_RCAS]) {
+    if (g_ps.have && !nis_done && upscale == HLE_UPSCALE_FSR && g_ps.pipe[P_EASU]) {
         const float fvw = sx * (float)ww, fvh = sy * (float)wh;
         const bool fdown = (g_ps.f.w > fvw * 1.01f || g_ps.f.h > fvh * 1.01f) && average && g_ps.pipe[P_AREA];
         const bool fup = (float)g_ps.f.w < fvw * 0.99f || (float)g_ps.f.h < fvh * 0.99f;
@@ -1645,13 +1653,23 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
             if (fsr_easu) {
                 src = g_ps.fs_view;
             }
-            /* FSR 1.0 is EASU followed by RCAS. RCAS must not depend on
-             * the separate CAS toggle, otherwise selecting FSR silently
-             * falls back to bilinear whenever CAS is disabled. Use the CAS
-             * slider when enabled; otherwise keep a mild FSR default. */
-            p = P_RCAS;
-            const float fsr_sharpness = (cas && cas_sharpness > 0.0f) ? cas_sharpness : 0.2f;
-            pc[4] = exp2f(-fsr_sharpness); /* RCAS strength in stops */
+            /* EASU is the upscaler and must remain useful even if the
+             * output-format RCAS pipeline is unavailable. RCAS/CAS is a
+             * separate optional sharpening pass; never let its failure
+             * disable the actual FSR enlargement. */
+            if (g_ps.pipe[P_RCAS]) {
+                p = P_RCAS;
+                const float fsr_sharpness = (cas && cas_sharpness > 0.0f) ? cas_sharpness : 0.2f;
+                pc[4] = exp2f(-fsr_sharpness); /* RCAS strength in stops */
+            } else {
+                p = P_BILINEAR; /* EASU result is already at output resolution */
+                static bool reported_rcas_unavailable;
+                if (!reported_rcas_unavailable) {
+                    hle_log("hakuX-hle-back",
+                            "FSR: EASU active; RCAS/CAS output pipeline unavailable, using neutral final copy");
+                    reported_rcas_unavailable = true;
+                }
+            }
         } else if (!nis_done && (rx < 0.99f || ry < 0.99f) && upscale == HLE_UPSCALE_SGSR && g_ps.pipe[P_SGSR]) {
             p = P_SGSR;
             pc[4] = 1.0f / (float)g_ps.f.w;
