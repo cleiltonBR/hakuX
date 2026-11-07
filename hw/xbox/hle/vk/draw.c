@@ -3965,9 +3965,13 @@ void hle_draw_cmd_draw(const HleCmdDraw *c, VkCommandBuffer cb, uint32_t rt_id, 
         /* SetScissors' rectangle replaces the viewport as the clip */
         int32_t x1 = MAX(vpc->cx1, 0), y1 = MAX(vpc->cy1, 0);
         int32_t x2 = MIN(vpc->cx2, (int32_t)tw), y2 = MIN(vpc->cy2, (int32_t)th);
-        sc = (VkRect2D){ { x1 * (int32_t)rs, y1 * (int32_t)rs },
-                         { x2 > x1 ? (uint32_t)(x2 - x1) * rs : 0,
-                           y2 > y1 ? (uint32_t)(y2 - y1) * rs : 0 } };
+        uint32_t sx1 = hle_scale2_floor((uint32_t)x1, rs2);
+        uint32_t sy1 = hle_scale2_floor((uint32_t)y1, rs2);
+        uint32_t sx2 = hle_scale2_ceil((uint32_t)MAX(x2, 0), rs2);
+        uint32_t sy2 = hle_scale2_ceil((uint32_t)MAX(y2, 0), rs2);
+        sc = (VkRect2D){ { (int32_t)sx1, (int32_t)sy1 },
+                         { sx2 > sx1 ? sx2 - sx1 : 0,
+                           sy2 > sy1 ? sy2 - sy1 : 0 } };
     }
     if (g_hle_gpucut == 1 || g_hle_gpucut == 4) {
         sc = (VkRect2D){ { 0, 0 }, { 1, 1 } };  /* debug: next to no fragments */
