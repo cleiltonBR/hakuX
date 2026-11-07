@@ -1,19 +1,14 @@
-# Coloque em .github/workflows/build-hakux.yml no SEU fork de rfandango/hakuX.
-# Roda à mão: aba Actions > "Build hakuX (APK)" > Run workflow.
-# Segue o android/README.md do hakuX: núcleo nativo (CMake + NDK 29), depois o APK (Gradle).
+# Build automatizado do hakuX: núcleo nativo (CMake + NDK 29) e APK (Gradle).
+# A validação da branch de escalas não grava patches nem altera outras branches.
 name: Build hakuX (APK)
 
 on:
   push:
-    branches: [master, feature/nvidia-image-scaling]
+    branches: [master, feature/nvidia-image-scaling, feature/resolution-scales-1x-8x]
   pull_request:
-    branches: [master]
+    branches: [master, feature/nvidia-image-scaling]
   workflow_dispatch:
     inputs:
-      apply_fsr:
-        description: "Compatibilidade: aplicar o patch FSR caso o código ainda não o contenha"
-        type: boolean
-        default: true
       publish:
         description: "Publicar o APK numa Release (deixe desativado durante os testes)"
         type: boolean
@@ -138,22 +133,8 @@ jobs:
             python3 tools/apply_fsr.py "$F"
           fi
 
-      - name: Gravar a integração FSR 1.0 no código-fonte
-        if: ${{ github.event_name == 'push' || inputs.apply_fsr }}
-        run: |
-          if ! grep -q P_EASU hw/xbox/hle/vk/swapchain.c; then
-            echo "ERRO: o patch FSR não foi aplicado; não há alterações para gravar."
-            exit 1
-          fi
-          if ! git diff --quiet -- hw/xbox/hle/vk/swapchain.c; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add hw/xbox/hle/vk/swapchain.c
-            git commit -m "Integrate AMD FSR 1.0 into Vulkan presenter"
-            git push origin HEAD:feature/nvidia-image-scaling
-          else
-            echo "FSR 1.0 já está gravado no código-fonte."
-          fi
+      # Não gravar alterações de preparação FSR de volta no repositório.
+      # O patch, se necessário, permanece apenas no workspace desta execução.
 
       - name: Diagnóstico (como o CMake usa NC_DEPS)
         run: |

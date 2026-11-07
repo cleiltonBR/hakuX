@@ -249,7 +249,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     if (settings.uncapped) {
       args += "uncap"
     }
-    /* The HLE GPU's render scale, 1-4x the title's resolution. */
+    /* The HLE GPU's render scale, 1-8x the title's resolution. */
     args += "scale=${settings.renderScale}"
     /* The picture's shape: auto (the game's), 4:3, 16:9 or stretch. */
     args += "aspect=${settings.aspectRatio}"
@@ -815,10 +815,10 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
       nativeSetCas(prefs.cas, prefs.casSharpness)
       nativeSetNis(prefs.nis, prefs.nisSharpness)
     }
-    val scaleValues = (1..4).toList()
+    val scaleValues = (1..8).toList()
     val anisoLevels = listOf(1, 2, 4, 8, 16)
     val entries = arrayOf(
-      "Escala de resolução: ${prefs.renderScale}x (reinicie o jogo para aplicar)",
+      "Escala de resolução: ${prefs.renderScale}x (${640 * prefs.renderScale}×${480 * prefs.renderScale} em 480p; reinicie o jogo)",
       "Filtro: ${modeNames[modes.indexOf(prefs.upscaleFilter).coerceAtLeast(0)]}",
       "Filtro anisotrópico: ${if (prefs.anisotropyEnabled) "Ativado" else "Desativado"} (reinicie o jogo)",
       "Nível anisotrópico: ${prefs.anisotropyLevel}x (reinicie o jogo)",
@@ -833,7 +833,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
         when (which) {
           0 -> showMenuDialog(AlertDialog.Builder(this)
             .setTitle("Escala de resolução")
-            .setSingleChoiceItems(scaleValues.map { "${it}x" }.toTypedArray(), (prefs.renderScale - 1).coerceIn(0, 3)) { dialog, selected ->
+            .setSingleChoiceItems(scaleValues.map { "${it}x (${640 * it}×${480 * it} em 480p)" }.toTypedArray(), (prefs.renderScale - 1).coerceIn(0, 7)) { dialog, selected ->
               val scale = scaleValues[selected]
               prefs.renderScale = scale
               dialog.dismiss()

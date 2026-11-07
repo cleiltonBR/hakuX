@@ -20,7 +20,7 @@ VkResult hle_tl_sem_wait(VkSemaphore sem, uint64_t value, uint64_t timeout_ns);
  * (hle_tl_gap, back.h). */
 void hle_tl_gap_serve(void);
 
-/* Resolution scale (the surface_scale setting, 1-4, read at DEVICE_CREATE):
+/* Resolution scale (the surface_scale setting, 1-8, read at DEVICE_CREATE):
  * every render target and depth surface is rendered at d.w * scale by
  * d.h * scale. Guest-facing values stay in guest pixels (D3D viewports,
  * clear rects, readbacks, visibility counts) and are converted where the
