@@ -90,6 +90,23 @@ class AppPrefs(context: Context) {
     get() = sp.getInt(NativeCoreActivity.PREF_SCALE, NativeCoreActivity.DEFAULT_SCALE)
     set(value) = sp.edit { putInt(NativeCoreActivity.PREF_SCALE, value) }
 
+  /**
+   * Experimental fixed-point render scale: 1 = 0.5x, 2 = 1x, ... 16 = 8x.
+   * Kept separate from renderScale until the native renderer supports half steps.
+   * Existing installations migrate their integer setting without changing it.
+   */
+  var renderScaleHalfSteps: Int
+    get() {
+      if (sp.contains(KEY_RENDER_SCALE_HALF)) {
+        return sp.getInt(KEY_RENDER_SCALE_HALF, 2).coerceIn(1, 16)
+      }
+      val migrated = sp.getInt(NativeCoreActivity.PREF_SCALE, NativeCoreActivity.DEFAULT_SCALE)
+        .coerceIn(1, 8) * 2
+      sp.edit { putInt(KEY_RENDER_SCALE_HALF, migrated) }
+      return migrated
+    }
+    set(value) = sp.edit { putInt(KEY_RENDER_SCALE_HALF, value.coerceIn(1, 16)) }
+
   /** The picture's shape: auto, 4:3, 16:9 or stretch (read at game start). */
   var aspectRatio: String
     get() = sp.getString(NativeCoreActivity.PREF_ASPECT, NativeCoreActivity.ASPECT_AUTO) ?: NativeCoreActivity.ASPECT_AUTO
@@ -265,6 +282,7 @@ class AppPrefs(context: Context) {
     private const val KEY_SETUP_COMPLETE = "setup_complete"
     private const val KEY_PREVIOUS_MIGRATED = "previous_version_migrated"
     private const val KEY_SHOW_FPS = "show_fps"
+    private const val KEY_RENDER_SCALE_HALF = "render_scale_half"
     private const val KEY_CONSOLE_TIMING = "console_timing"
     private const val KEY_THEME = "app_theme"
     private const val KEY_TURNIP_NOTE = "turnip_note_shown"
