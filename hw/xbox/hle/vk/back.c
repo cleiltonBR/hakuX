@@ -844,10 +844,12 @@ static void flush_idle(void)
 }
 
 uint32_t g_hle_rscale = 1;
+uint32_t g_hle_rscale2 = 2;
 
 static void cmd_device(const HleCmdDevice *c, bool reset)
 {
     uint32_t scale = MIN(MAX(hle_host_render_scale(), 1), 8);
+    uint32_t scale2 = MIN(MAX(hle_host_render_scale2(), 1), 16);
     /* A Reset replaces only the device's surfaces (the front end destroys the
      * old ones by OBJ_DESTROY): the title's own render targets and textures
      * keep their images. A new scale resizes every image. */
@@ -858,6 +860,7 @@ static void cmd_device(const HleCmdDevice *c, bool reset)
         hle_surf_destroy_all();
     }
     g_hle_rscale = scale;
+    g_hle_rscale2 = scale2;
     for (uint32_t i = 0; i < c->nsurf && i < HLE_CMD_MAX_SURF; i++) {
         hle_surf_define(&c->surf[i]);
     }

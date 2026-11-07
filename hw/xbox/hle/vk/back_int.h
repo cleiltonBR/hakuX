@@ -26,6 +26,31 @@ void hle_tl_gap_serve(void);
  * clear rects, readbacks, visibility counts) and are converted where the
  * image is used. */
 extern uint32_t g_hle_rscale;
+/* Fixed-point global scale (2 = 1x); kept separate while legacy consumers
+ * continue to use g_hle_rscale. */
+extern uint32_t g_hle_rscale2;
+
+/* Integer-only scale conversions. Extents round up so the final partial
+ * host pixel is retained; half-open rectangle ends use the same rule. */
+static inline uint32_t hle_scale2_extent(uint32_t guest, uint32_t scale2)
+{
+    return (uint32_t)(((uint64_t)guest * scale2 + 1u) / 2u);
+}
+
+static inline uint32_t hle_scale2_floor(uint32_t guest, uint32_t scale2)
+{
+    return (uint32_t)(((uint64_t)guest * scale2) / 2u);
+}
+
+static inline uint32_t hle_scale2_ceil(uint32_t guest, uint32_t scale2)
+{
+    return hle_scale2_extent(guest, scale2);
+}
+
+static inline uint32_t hle_scale2_unmap(uint32_t host, uint32_t scale2)
+{
+    return scale2 ? (uint32_t)(((uint64_t)host * 2u) / scale2) : 0u;
+}
 
 /* surf.c */
 typedef struct HleVkSurf {
@@ -33,7 +58,8 @@ typedef struct HleVkSurf {
     uint32_t id;
     HleSurfDesc d;
     uint32_t w, h;              /* image extent (views: their level's), scaled */
-    uint32_t scale;             /* host pixels per guest pixel (hle_surf_define) */
+    uint32_t scale;             /* legacy integer host pixels per guest pixel */
+    uint32_t scale2;            /* exact fixed-point scale (2 = 1x); staged backend migration */
     VkFormat fmt;
     VkImageAspectFlags aspect;
     uint32_t texel_bytes;
