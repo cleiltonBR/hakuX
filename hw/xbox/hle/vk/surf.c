@@ -569,8 +569,8 @@ VkImage hle_surf_down(VkCommandBuffer cb, HleVkSurf *o, VkImageLayout layout,
     VkImageBlit2 r = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2,
         .srcSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, level, layer, 1 },
-        .srcOffsets = { { 0, 0, 0 }, { (int32_t)MAX(o->w >> level, 1u),
-                                       (int32_t)MAX(o->h >> level, 1u), 1 } },
+        .srcOffsets = { { 0, 0, 0 }, { (int32_t)hle_scale2_extent(MAX(o->d.w >> level, 1u), o->scale2),
+                                       (int32_t)hle_scale2_extent(MAX(o->d.h >> level, 1u), o->scale2), 1 } },
         .dstSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 },
         .dstOffsets = { { 0, 0, 0 }, { (int32_t)w, (int32_t)h, 1 } } };
     VkBlitImageInfo2 bi = {
