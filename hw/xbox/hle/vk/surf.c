@@ -378,8 +378,11 @@ static bool ensure_view(HleVkSurf *s)
     s->owner_img = o->img;
     s->scale = o->scale;
     s->scale2 = o->scale2;
-    s->w = hle_scale2_extent(MAX(o->d.w >> s->d.level, 1u), s->scale2);
-    s->h = hle_scale2_extent(MAX(o->d.h >> s->d.level, 1u), s->scale2);
+    /* Vulkan mip extents are derived from the allocated base image extent
+     * with integer right shifts (floor), not by independently rounding the
+     * guest mip dimensions. Keep view metadata identical to the real subresource. */
+    s->w = MAX(o->w >> s->d.level, 1u);
+    s->h = MAX(o->h >> s->d.level, 1u);
     s->fmt = o->fmt;
     s->aspect = o->aspect;
     s->texel_bytes = o->texel_bytes;
@@ -569,8 +572,8 @@ VkImage hle_surf_down(VkCommandBuffer cb, HleVkSurf *o, VkImageLayout layout,
     VkImageBlit2 r = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2,
         .srcSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, level, layer, 1 },
-        .srcOffsets = { { 0, 0, 0 }, { (int32_t)hle_scale2_extent(MAX(o->d.w >> level, 1u), o->scale2),
-                                       (int32_t)hle_scale2_extent(MAX(o->d.h >> level, 1u), o->scale2), 1 } },
+        .srcOffsets = { { 0, 0, 0 }, { (int32_t)MAX(o->w >> level, 1u),
+                                       (int32_t)MAX(o->h >> level, 1u), 1 } },
         .dstSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 },
         .dstOffsets = { { 0, 0, 0 }, { (int32_t)w, (int32_t)h, 1 } } };
     VkBlitImageInfo2 bi = {
