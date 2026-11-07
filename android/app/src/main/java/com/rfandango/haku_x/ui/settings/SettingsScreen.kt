@@ -300,7 +300,8 @@ fun SettingsScreen(
         headlineContent = { Text(stringResource(R.string.settings_scale)) },
         supportingContent = {
           Text(
-            stringResource(R.string.settings_scale_value, scale) + ". " +
+            scaleLabel(scale) + " (480p example). " +
+              stringResource(R.string.settings_scale_desc) + " " +
               stringResource(R.string.settings_applies_next_start)
           )
         },
@@ -536,10 +537,15 @@ private fun themeLabel(value: String) = when (value) {
 }
 
 /** The render scales: native, then 2x to 4x. */
-internal val SCALES = (1..4).toList()
+internal val SCALES = (1..8).toList()
 
 @Composable
-internal fun scaleLabel(value: Int) = if (value == 1) stringResource(R.string.settings_scale_native) else "${value}x"
+internal fun scaleLabel(value: Int): String {
+  val safe = value.coerceIn(1, 8)
+  val dimensions = "${640 * safe}×${480 * safe}"
+  return if (safe == 1) "${stringResource(R.string.settings_scale_native)} · $dimensions"
+         else "${safe}x · $dimensions"
+}
 
 internal val ASPECTS = listOf("auto", "4:3", "16:9", "stretch")
 
