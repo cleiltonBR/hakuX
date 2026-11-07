@@ -6,7 +6,7 @@ on:
   push:
     branches: [master, feature/nvidia-image-scaling, feature/resolution-scales-1x-8x, feature/fractional-resolution-scales]
   pull_request:
-    branches: [master, feature/nvidia-image-scaling]
+    branches: [master, feature/nvidia-image-scaling, feature/resolution-scales-1x-8x]
   workflow_dispatch:
     inputs:
       publish:
