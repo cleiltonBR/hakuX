@@ -283,8 +283,8 @@ HleVkSurf *hle_surf_define(const HleSurfDesc *d)
             s->scale2 = surf_scale2(d, s->aspect);
             /* Keep legacy extents until every coordinate/readback consumer
              * has migrated to scale2. This metadata is not yet a live mode. */
-            s->w = d->w * s->scale;
-            s->h = d->h * s->scale;
+            s->w = hle_scale2_extent(d->w, s->scale2);
+            s->h = hle_scale2_extent(d->h, s->scale2);
             s->layout = VK_IMAGE_LAYOUT_UNDEFINED;
             s->general = d->parent || owner_kind(d);
             s->nlevels = s->nfaces = 1;
@@ -378,8 +378,8 @@ static bool ensure_view(HleVkSurf *s)
     s->owner_img = o->img;
     s->scale = o->scale;
     s->scale2 = o->scale2;
-    s->w = MAX(o->w >> s->d.level, 1u);
-    s->h = MAX(o->h >> s->d.level, 1u);
+    s->w = hle_scale2_extent(MAX(o->d.w >> s->d.level, 1u), s->scale2);
+    s->h = hle_scale2_extent(MAX(o->d.h >> s->d.level, 1u), s->scale2);
     s->fmt = o->fmt;
     s->aspect = o->aspect;
     s->texel_bytes = o->texel_bytes;
