@@ -351,9 +351,9 @@ static inline const char *hle_push_glsl(void)
  * image pixel's: the texel is covered, or not, whole. */
 #define HLE_TEXEL_EDGE_FLAG 4096u
 #define HLE_TEXEL_EDGE_GLSL(v) \
-    "  { float rsc = float((pc.flags >> 16) & 255u) * 0.5;\\n" \\
-    "    if (rsc > 1.0 && (pc.flags & 4096u) == 0u)\\n" \\
-    "      " v " -= vec2(equal(fract(" v "), vec2(0.5))) * (0.5 - 0.5 / rsc); }\\n"
+    "  { float rsc = float((pc.flags >> 16) & 255u) * 0.5;\n" \
+    "    if (rsc > 1.0 && (pc.flags & 4096u) == 0u)\n" \
+    "      " v " -= vec2(equal(fract(" v "), vec2(0.5))) * (0.5 - 0.5 / rsc); }\n"
 
 /* GLSL source into buf (NUL-terminated); returns its length, or 0 if it did
  * not fit. */
