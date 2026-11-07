@@ -229,7 +229,7 @@ static void vis_reap(uint64_t completed)
                 g_vis_dbg.nlog--;
                 hle_log("hakuX-hle-back", "vis index %u: %u (parts %u, div %u, report %08x, "
                         "after %llu, expect %llu, completed %llu, swap %llu)",
-                        p->index, count, p->nparts, p->div, p->report,
+                        p->index, count, p->nparts, (unsigned long long)p->div, p->report,
                         (unsigned long long)p->after, (unsigned long long)p->expect,
                         (unsigned long long)completed, (unsigned long long)g_back.st.swaps);
             }
