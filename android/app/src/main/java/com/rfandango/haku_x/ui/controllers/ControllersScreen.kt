@@ -21,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import com.rfandango.haku_x.R
+import com.rfandango.haku_x.data.AppPrefs
 import com.rfandango.haku_x.data.Controllers
 import com.rfandango.haku_x.data.PlayerSlot
 import com.rfandango.haku_x.ui.common.ChoiceDialog
@@ -28,6 +29,7 @@ import com.rfandango.haku_x.ui.common.EmptyText
 import com.rfandango.haku_x.ui.common.Hint
 import com.rfandango.haku_x.ui.common.Section
 import com.rfandango.haku_x.ui.common.SubScreen
+import com.rfandango.haku_x.ui.common.SwitchItem
 
 /** The connected controllers, kept current while the screen shows. */
 @Composable
@@ -56,6 +58,7 @@ internal fun rememberControllers(): List<InputDevice> {
 fun ControllersScreen(onBack: () -> Unit, onMap: (deviceId: Int) -> Unit) {
   val context = LocalContext.current
   var config by remember { mutableStateOf(Controllers.load(context)) }
+  var vibrationEnabled by remember { mutableStateOf(AppPrefs(context).controllerVibration) }
   val devices = rememberControllers()
   var picking by remember { mutableStateOf<Int?>(null) }
 
@@ -67,6 +70,16 @@ fun ControllersScreen(onBack: () -> Unit, onMap: (deviceId: Int) -> Unit) {
   SubScreen(title = stringResource(R.string.controllers_title), onBack = onBack) { padding ->
     Column(Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState())) {
       Hint(stringResource(R.string.controllers_desc))
+      Section(stringResource(R.string.controllers_vibration_section))
+      SwitchItem(
+        title = stringResource(R.string.controllers_vibration_title),
+        summary = stringResource(R.string.controllers_vibration_desc),
+        checked = vibrationEnabled,
+        onChange = { enabled ->
+          vibrationEnabled = enabled
+          AppPrefs(context).controllerVibration = enabled
+        },
+      )
       val assigned = config.assign(devices)
       val byId = devices.associateBy { it.id }
       Section(stringResource(R.string.controllers_players))
