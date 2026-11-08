@@ -70,6 +70,11 @@ class AppPrefs(context: Context) {
     get() = sp.getBoolean(KEY_SHOW_FPS, true)
     set(value) = sp.edit { putBoolean(KEY_SHOW_FPS, value) }
 
+  /** Automatically fetch and cache original Xbox box-front artwork for the game library. */
+  var automatic3dCovers: Boolean
+    get() = sp.getBoolean(KEY_AUTOMATIC_3D_COVERS, true)
+    set(value) = sp.edit { putBoolean(KEY_AUTOMATIC_3D_COVERS, value) }
+
   /** The library's note recommending a Turnip driver was shown (once: GpuDriverHelper.turnipRecommended). */
   var turnipNoteShown: Boolean
     get() = sp.getBoolean(KEY_TURNIP_NOTE, false)
@@ -281,6 +286,7 @@ class AppPrefs(context: Context) {
     private const val KEY_SETUP_COMPLETE = "setup_complete"
     private const val KEY_PREVIOUS_MIGRATED = "previous_version_migrated"
     private const val KEY_SHOW_FPS = "show_fps"
+    private const val KEY_AUTOMATIC_3D_COVERS = "automatic_3d_covers"
     private const val KEY_RENDER_SCALE_HALF = "render_scale_half"
     private const val KEY_CONSOLE_TIMING = "console_timing"
     private const val KEY_THEME = "app_theme"
