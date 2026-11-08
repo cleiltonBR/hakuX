@@ -808,7 +808,19 @@ void NVScaler(NVU2 blockIdx, NVU threadIdx)
             op.y += corr;
             op.z += corr;
 #endif
-            NVTEX_STORE(out_texture, dstCoord, NVCLAMP(op));
+            // hakuX dispatches ceil-divided workgroups for arbitrary Android surface sizes.
+            // The SDK kernel otherwise writes the whole final 32x24 tile, even when
+            // the output image ends partway through it. Keep stores inside the image.
+#if NIS_VIEWPORT_SUPPORT
+            if (dstCoord.x < float(kOutputViewportOriginX + kOutputViewportWidth) &&
+                dstCoord.y < float(kOutputViewportOriginY + kOutputViewportHeight))
+#else
+            if (dstCoord.x < float(kOutputViewportWidth) &&
+                dstCoord.y < float(kOutputViewportHeight))
+#endif
+            {
+                NVTEX_STORE(out_texture, dstCoord, NVCLAMP(op));
+            }
         }
     }
 }
