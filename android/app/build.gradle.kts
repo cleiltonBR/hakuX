@@ -94,6 +94,20 @@ android {
         "proguard-debug.pro"
       )
     }
+    seriesXTest {
+      applicationIdSuffix = ".seriesx"
+      resValue("string", "app_name", "HakuX Series X Test")
+      isDebuggable = true
+      isMinifyEnabled = true
+      proguardFiles(
+        getDefaultProguardFile("proguard-android-optimize.txt"),
+        "proguard-rules.pro",
+        "proguard-debug.pro"
+      )
+      if (hasCiKeystore) {
+        signingConfig = signingConfigs.getByName("ci")
+      }
+    }
     release {
       resValue("string", "app_name", "hakuX")
       isMinifyEnabled = true
