@@ -1,5 +1,7 @@
 package com.rfandango.haku_x.ui.settings
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -96,6 +98,13 @@ fun GameSettingsScreen(gameKey: String, title: String, onBack: () -> Unit) {
     mutableStateMapOf<GameSetting, String?>().apply { GameSetting.entries.forEach { put(it, overrides[it]) } }
   }
   var editing by remember { mutableStateOf<Overridable?>(null) }
+  val coverPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+    if (uri != null) {
+      runCatching { context.contentResolver.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+      overrides[GameSetting.CUSTOM_3D_COVER] = uri.toString()
+      values[GameSetting.CUSTOM_3D_COVER] = uri.toString()
+    }
+  }
 
   SubScreen(
     title = stringResource(R.string.game_settings_title),
@@ -124,6 +133,18 @@ fun GameSettingsScreen(gameKey: String, title: String, onBack: () -> Unit) {
         Text("Configurações individuais deste jogo", style = MaterialTheme.typography.bodySmall, color = Color(0xFFBEC8BE), modifier = Modifier.padding(top = 6.dp))
       }
 
+      Section("CAPA 3D DO JOGO")
+      ListItem(
+        headlineContent = { Text("Capa 3D personalizada") },
+        supportingContent = { Text(if (values[GameSetting.CUSTOM_3D_COVER] != null) "Imagem escolhida do armazenamento do celular" else "Usar a capa automática ou escolher uma imagem do celular") },
+        modifier = Modifier.clickable { coverPicker.launch(arrayOf("image/*")) },
+      )
+      if (values[GameSetting.CUSTOM_3D_COVER] != null) {
+        TextButton(onClick = {
+          overrides[GameSetting.CUSTOM_3D_COVER] = null
+          values[GameSetting.CUSTOM_3D_COVER] = null
+        }, modifier = Modifier.padding(horizontal = 16.dp)) { Text("Remover capa personalizada") }
+      }
       Hint(stringResource(R.string.game_settings_desc))
       for ((section, items) in SECTIONS) {
         Section(stringResource(section))
