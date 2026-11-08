@@ -35,6 +35,8 @@ void nc_present_set_cas(bool on);
 void nc_present_set_cas_sharpness(float sharpness);
 /* NVIDIA Image Scaling: independent toggle and SDK sharpness, 0-100%. */
 void nc_present_set_nis(bool on, float sharpness);
+/* Request HDR10 output (the Vulkan surface decides whether it is supported). */
+void nc_present_set_hdr(bool on);
 /* Frames the title presented per second over the last half second, their
  * average interval, and the last one's (ms). */
 void nc_present_stats(float *fps, float *avg_ms, float *last_ms);
