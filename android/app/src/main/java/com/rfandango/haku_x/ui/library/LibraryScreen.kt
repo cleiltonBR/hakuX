@@ -146,7 +146,18 @@ fun LibraryScreen(
 
   Scaffold { padding ->
     Column(Modifier.padding(padding).fillMaxSize()) {
-      // No title bar: the dashboard button, the search field and the settings button share the top row.
+      // A compact console-style identity above the library controls.
+      Column(
+        Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 8.dp),
+      ) {
+        Text("hakuX", style = MaterialTheme.typography.headlineSmall)
+        Text(
+          "XBOX GAME LIBRARY",
+          style = MaterialTheme.typography.labelSmall,
+          color = MaterialTheme.colorScheme.primary,
+        )
+      }
+      // Dashboard, search, refresh and settings stay immediately accessible.
       Row(
         Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, top = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -291,7 +302,7 @@ private fun GameList(
   // One column in portrait, two side by side in landscape.
   val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
   val colors = MaterialTheme.colorScheme
-  val shape = remember { RoundedCornerShape(12.dp) }
+  val shape = remember { RoundedCornerShape(16.dp) }
   val iconShape = ThumbnailShape
   val titleStyle = MaterialTheme.typography.titleMedium.copy(color = colors.onSurface)
   val idStyle = SMALL_PRINT.copy(fontFamily = FontFamily.Monospace, color = colors.onSurfaceVariant)
@@ -299,8 +310,8 @@ private fun GameList(
     columns = GridCells.Fixed(if (landscape) 2 else 1),
     modifier = Modifier.fillMaxSize(),
     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp),
-    horizontalArrangement = Arrangement.spacedBy(8.dp),
-    verticalArrangement = Arrangement.spacedBy(6.dp),
+    horizontalArrangement = Arrangement.spacedBy(10.dp),
+    verticalArrangement = Arrangement.spacedBy(10.dp),
   ) {
     items(games, key = { it.uri.toString() }) { game ->
       val disc = info[game.uri]
@@ -310,7 +321,7 @@ private fun GameList(
           Modifier
             .fillMaxWidth()
             .clip(shape)
-            .background(colors.surface)
+             .background(colors.surfaceContainerLow)
             .border(if (focused) 2.dp else 1.dp, if (focused) colors.primary else colors.outlineVariant, shape)
             .onFocusChanged { focused = it.isFocused }
             // a controller's Y, or its select (sent as Menu), opens the menu
@@ -326,7 +337,7 @@ private fun GameList(
                 menuFor = game.uri
               },
             )
-            .padding(start = 8.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
+            .padding(start = 12.dp, end = 14.dp, top = 12.dp, bottom = 12.dp),
           verticalAlignment = Alignment.CenterVertically,
         ) {
           TitleIcon(game, icons[game.uri], iconShape, colors.surfaceVariant, colors.onSurfaceVariant)
