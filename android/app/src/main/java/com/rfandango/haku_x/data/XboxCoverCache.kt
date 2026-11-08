@@ -82,7 +82,7 @@ object XboxCoverCache {
   private fun loadX1Cover(context: Context, gameTitle: String, cacheDir: File, titleId: String): Bitmap? {
     if (gameTitle.isBlank()) return null
     val index = File(cacheDir, "x1_covers_index.json")
-    val api = "https://api.github.com/repos/izzy2lost/X1_Covers/contents"
+    val api = "https://api.github.com/repos/izzy2lost/X1_Covers/contents?per_page=1000"
     val entries = try {
       val json = if (index.isFile && System.currentTimeMillis() - index.lastModified() < 24L * 60 * 60 * 1000) {
         index.readText()
