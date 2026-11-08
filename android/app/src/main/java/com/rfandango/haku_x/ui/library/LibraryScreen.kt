@@ -8,6 +8,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -25,6 +26,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -67,6 +69,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Shape
@@ -272,6 +275,77 @@ private fun DashboardInstallDialog(j: DashboardInstall, onStart: () -> Unit, onD
 }
 
 /**
+ * Console-style featured title: a strong editorial hero above the complete library.
+ * It reuses the game's own disc icon and launches the same game action as its card.
+ */
+@Composable
+private fun FeaturedGameCard(game: Game, icon: ImageBitmap?, onLaunch: () -> Unit) {
+  val shape = RoundedCornerShape(22.dp)
+  Row(
+    Modifier
+      .fillMaxWidth()
+      .height(184.dp)
+      .clip(shape)
+      .background(
+        Brush.linearGradient(
+          listOf(Color(0xFF202A21), Color(0xFF101411), Color(0xFF080A08)),
+        ),
+      )
+      .border(1.dp, Color(0xFF344A35), shape)
+      .clickable(onClick = onLaunch)
+      .padding(horizontal = 20.dp, vertical = 18.dp),
+    verticalAlignment = Alignment.CenterVertically,
+  ) {
+    Column(Modifier.weight(1f)) {
+      Text(
+        "HAKUX  /  XBOX SERIES X",
+        style = MaterialTheme.typography.labelSmall,
+        color = Color(0xFF8BD889),
+        letterSpacing = 1.2.sp,
+      )
+      Spacer(Modifier.height(12.dp))
+      Text(
+        game.title,
+        style = MaterialTheme.typography.headlineSmall,
+        color = Color.White,
+        maxLines = 2,
+        overflow = TextOverflow.Ellipsis,
+      )
+      Spacer(Modifier.height(10.dp))
+      Text(
+        "INICIAR JOGO  ›",
+        style = MaterialTheme.typography.labelLarge,
+        color = Color(0xFF9BE69A),
+        letterSpacing = 0.8.sp,
+      )
+    }
+    Spacer(Modifier.width(12.dp))
+    Box(
+      Modifier
+        .size(112.dp)
+        .clip(RoundedCornerShape(16.dp))
+        .background(Color(0xFF29362A)),
+      contentAlignment = Alignment.Center,
+    ) {
+      if (icon != null) {
+        Image(
+          icon,
+          contentDescription = null,
+          contentScale = ContentScale.Fit,
+          modifier = Modifier.fillMaxSize().padding(8.dp),
+        )
+      } else {
+        Text(
+          game.title.firstOrNull { it.isLetterOrDigit() }?.uppercase() ?: "?",
+          style = MaterialTheme.typography.displayMedium,
+          color = Color(0xFF9BE69A),
+        )
+      }
+    }
+  }
+}
+
+/**
  * The games, as cards. A fast scroll brings several cards in a frame, and the
  * debug build's Compose code runs interpreted (a debuggable app is never
  * compiled ahead of time), so each card is kept cheap to compose: a bordered
@@ -313,6 +387,21 @@ private fun GameList(
     horizontalArrangement = Arrangement.spacedBy(10.dp),
     verticalArrangement = Arrangement.spacedBy(10.dp),
   ) {
+    item(span = { GridItemSpan(maxLineSpan) }) {
+      FeaturedGameCard(
+        game = games.first(),
+        icon = icons[games.first().uri],
+        onLaunch = { onLaunch(games.first()) },
+      )
+    }
+    item(span = { GridItemSpan(maxLineSpan) }) {
+      Text(
+        "TODOS OS JOGOS",
+        style = MaterialTheme.typography.labelLarge,
+        color = colors.onSurfaceVariant,
+        modifier = Modifier.padding(top = 4.dp, bottom = 2.dp),
+      )
+    }
     items(games, key = { it.uri.toString() }) { game ->
       val disc = info[game.uri]
       var focused by remember { mutableStateOf(false) }
