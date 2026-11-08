@@ -81,24 +81,34 @@ object XboxCoverCache {
    */
   private fun loadX1Cover(context: Context, gameTitle: String, cacheDir: File, titleId: String): Bitmap? {
     if (gameTitle.isBlank()) return null
-    val index = File(cacheDir, "x1_covers_index.json")
-    val api = "https://api.github.com/repos/izzy2lost/X1_Covers/contents?per_page=1000"
+    // GitHub caps contents listings at 100 entries per page; per_page=1000
+    // silently returns only the first 100 covers. Walk every page and cache
+    // the complete root index for 24 hours.
+    val index = File(cacheDir, "x1_covers_index_v2.json")
     val entries = try {
-      val json = if (index.isFile && System.currentTimeMillis() - index.lastModified() < 24L * 60 * 60 * 1000) {
-        index.readText()
+      val cached = index.isFile && System.currentTimeMillis() - index.lastModified() < 24L * 60 * 60 * 1000
+      if (cached) {
+        JSONArray(index.readText())
       } else {
-        val connection = (URL(api).openConnection() as HttpURLConnection).apply {
-          connectTimeout = 10000
-          readTimeout = 20000
-          setRequestProperty("Accept", "application/vnd.github+json")
-          setRequestProperty("User-Agent", "hakuX-Android/1.0")
+        val all = JSONArray()
+        for (page in 1..20) {
+          val api = "https://api.github.com/repos/izzy2lost/X1_Covers/contents?per_page=100&page=$page"
+          val connection = (URL(api).openConnection() as HttpURLConnection).apply {
+            connectTimeout = 10000
+            readTimeout = 20000
+            setRequestProperty("Accept", "application/vnd.github+json")
+            setRequestProperty("User-Agent", "hakuX-Android/1.0")
+          }
+          val rows = try {
+            if (connection.responseCode !in 200..299) throw IllegalStateException("GitHub X1_Covers HTTP ${connection.responseCode}")
+            JSONArray(connection.inputStream.bufferedReader().use { it.readText() })
+          } finally { connection.disconnect() }
+          for (i in 0 until rows.length()) all.put(rows.getJSONObject(i))
+          if (rows.length() < 100) break
         }
-        try {
-          if (connection.responseCode !in 200..299) return null
-          connection.inputStream.bufferedReader().use { it.readText() }.also { index.writeText(it) }
-        } finally { connection.disconnect() }
+        index.writeText(all.toString())
+        all
       }
-      JSONArray(json)
     } catch (e: Exception) {
       Log.w(TAG, "Could not load X1_Covers index", e)
       return null
