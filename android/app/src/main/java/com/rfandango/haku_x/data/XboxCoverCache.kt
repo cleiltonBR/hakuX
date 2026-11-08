@@ -50,7 +50,9 @@ object XboxCoverCache {
         instanceFollowRedirects = true
         setRequestProperty("User-Agent", "hakuX-Android/1.0")
       }
-      connection.inputStream.use { input -> temp.outputStream().use(input::copyTo) }
+      connection.inputStream.use { input ->
+        temp.outputStream().use { output -> input.copyTo(output) }
+      }
       connection.disconnect()
       val bitmap = BitmapFactory.decodeFile(temp.absolutePath) ?: run {
         temp.delete()
