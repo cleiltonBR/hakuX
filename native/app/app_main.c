@@ -323,10 +323,10 @@ EXPORT JNIEXPORT jboolean JNICALL Java_com_rfandango_haku_1x_NativeCoreActivity_
 /* NIS status for the in-game debug overlay. */
 EXPORT JNIEXPORT jintArray JNICALL Java_com_rfandango_haku_1x_NativeCoreActivity_nativeGetNisStatus(JNIEnv *env, jclass cls)
 {
-    jint values[9];
+    jint values[12];
     nc_present_nis_status((int *)values);
-    jintArray result = (*env)->NewIntArray(env, 9);
-    if (result) (*env)->SetIntArrayRegion(env, result, 0, 9, values);
+    jintArray result = (*env)->NewIntArray(env, 12);
+    if (result) (*env)->SetIntArrayRegion(env, result, 0, 12, values);
     return result;
 }
 
