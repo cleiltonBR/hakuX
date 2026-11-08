@@ -515,6 +515,9 @@
   <string name="controllers_title">Physical controllers</string>
   <string name="controllers_settings_desc">Which controller plays as which of the four players, and each controller\'s buttons.</string>
   <string name="controllers_desc">Up to four controllers, as on the Xbox. A game uses these settings when it starts; its menu (Controllers) changes the players while it runs.</string>
+  <string name="controllers_vibration_section">Vibration</string>
+  <string name="controllers_vibration_title">Controller vibration</string>
+  <string name="controllers_vibration_desc">Send game rumble to supported physical controllers, including Bluetooth gamepads.</string>
   <string name="controllers_players">Players</string>
   <string name="controllers_player">Player %1$d</string>
   <string name="controllers_auto">Automatic: the next controller connected</string>
