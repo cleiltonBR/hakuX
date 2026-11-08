@@ -96,6 +96,7 @@ fun SettingsScreen(
   var prebuildShaders by remember { mutableStateOf(prefs.prebuildShaders) }
   var consoleTiming by remember { mutableStateOf(prefs.consoleTiming) }
   var showFps by remember { mutableStateOf(prefs.showFps) }
+  var automatic3dCovers by remember { mutableStateOf(prefs.automatic3dCovers) }
   var showHitches by remember { mutableStateOf(prefs.showHitches) }
   var scale by remember { mutableIntStateOf(prefs.renderScaleHalfSteps) }
   var aspect by remember { mutableStateOf(prefs.aspectRatio) }
@@ -194,6 +195,12 @@ fun SettingsScreen(
         replacing = null
         pickFolder.launch(folders.lastOrNull())
       }
+      SwitchItem(
+        title = "Carregar capas 3D automaticamente",
+        summary = "Baixa e guarda as capas frontais dos jogos de Xbox. Requer internet na primeira carga; as capas ficam em cache no aparelho.",
+        checked = automatic3dCovers,
+        onChange = { automatic3dCovers = it; prefs.automatic3dCovers = it },
+      )
 
       Section(stringResource(R.string.settings_section_controls))
       ListItem(
