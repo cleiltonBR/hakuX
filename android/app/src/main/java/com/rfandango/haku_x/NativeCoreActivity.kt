@@ -1,5 +1,6 @@
 package com.rfandango.haku_x
 
+import android.app.ActivityManager
 import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
@@ -72,6 +73,11 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
   private var nisView: TextView? = null
   /* the settings' overlays, read as the game comes back (onResume) */
   private var fpsOn = false
+  private var ramOn = false
+  private var fsrOn = true
+  private var nisOn = true
+  private var casOn = true
+  private var gpuOn = true
   private var hitchesOn = false
   private val fpsHandler = Handler(Looper.getMainLooper())
   /** The overlays' redraws and the game's GPU work (the controls' and the lines below). */
@@ -89,12 +95,22 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
       }
       linesWantedSince = 0L
       val s = nativeGetFrameStats()
+      val metrics = mutableListOf<String>()
       if (fpsOn && s != null && s.size >= 3) {
-        var text = "FPS: %.0f  |  %.1fms avg  /  %.1fms last".format(s[0], s[1], s[2])
-        if (s[1] > 0f && s[2] > 2f * s[1]) {
-          text += " *" /* the last frame took over twice the average */
-        }
-        fpsView?.text = text
+        var fpsText = "FPS: %.0f | %.1fms médio / %.1fms último".format(java.util.Locale.US, s[0], s[1], s[2])
+        if (s[1] > 0f && s[2] > 2f * s[1]) fpsText += " *"
+        metrics += fpsText
+      }
+      if (ramOn) {
+        val memory = ActivityManager.MemoryInfo()
+        (getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager).getMemoryInfo(memory)
+        val usedMb = (memory.totalMem - memory.availMem).coerceAtLeast(0L) / (1024f * 1024f)
+        val totalMb = memory.totalMem / (1024f * 1024f)
+        metrics += "RAM: %.0f / %.0f MB".format(java.util.Locale.US, usedMb, totalMb)
+      }
+      fpsView?.let { v ->
+        v.text = metrics.joinToString("   |   ")
+        v.setTextColor(Color.rgb(16, 124, 16))
       }
       nisView?.let { v ->
         val n = nativeGetNisStatus()
@@ -120,10 +136,19 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
             else -> "ON / RCAS não aplicado"
           }
           val sharpness = "%.2f".format(java.util.Locale.US, n[10] / 100.0)
-          v.text = "Filtro: $path | NIS: $nisState | CAS: $casState ($sharpness)\nGPU: ${if (n[0] == 1) "OK" else "INDISPONÍVEL"} | NIS ${n[4]}x${n[5]} → ${n[6]}x${n[7]} | FSR ${n[12]}x${n[13]} | motivo: $reason"
+          val status = mutableListOf<String>()
+          if (fsrOn) status += "FSR: $path • ${n[12]}x${n[13]}"
+          if (nisOn) status += "NIS: $nisState • ${n[4]}x${n[5]} → ${n[6]}x${n[7]}"
+          if (casOn) status += "CAS: $casState • nitidez $sharpness"
+          if (gpuOn) status += "GPU: ${if (n[0] == 1) "OK" else "INDISPONÍVEL"} • motivo: $reason"
+          v.text = status.joinToString("\n")
+        } else {
+          v.text = ""
         }
+        v.setTextColor(Color.rgb(16, 124, 16))
       }
       hitchView?.takeIf { hitchesOn }?.let { v ->
+        v.setTextColor(Color.rgb(16, 124, 16))
         val hitches = nativeGetHleHitches()
         if (hitches.isNotEmpty()) {
           v.text = hitches
@@ -472,9 +497,8 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     syncPause() /* where it stopped (onPause), unless the menu is open */
     hideSystemBars()
     val prefs = getSharedPreferences("x1box_prefs", Context.MODE_PRIVATE)
-    fpsOn = prefs.getBoolean("show_fps", true)
+    reloadOverlayPreferences()
     hitchesOn = BuildConfig.DEBUG && prefs.getBoolean(PREF_SHOW_HITCHES, true)
-    fpsView?.visibility = if (fpsOn) View.VISIBLE else View.GONE
     if (!hitchesOn) hitchView?.visibility = View.GONE
     fpsHandler.removeCallbacks(fpsRunnable)
     if (fpsOn || hitchesOn || BuildConfig.DEBUG) {
@@ -601,7 +625,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
       setShadowLayer(2f, 1f, 1f, Color.BLACK)
       setPadding(16, 8, 16, 8)
       setBackgroundColor(Color.argb(100, 0, 0, 0))
-      maxLines = 1
+      maxLines = 2
     }
     val params = RelativeLayout.LayoutParams(
       RelativeLayout.LayoutParams.WRAP_CONTENT,
@@ -613,35 +637,37 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     mLayout?.addView(fps, params)
     fpsView = fps
 
-    if (!BuildConfig.DEBUG) {
-      return
+    var statusAnchorId = fps.id
+    if (BuildConfig.DEBUG) {
+      val hitch = TextView(this).apply {
+        id = View.generateViewId()
+        text = ""
+        visibility = View.GONE
+        setTextColor(Color.rgb(16, 124, 16))
+        setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f)
+        typeface = Typeface.MONOSPACE
+        setShadowLayer(2f, 1f, 1f, Color.BLACK)
+        setPadding(16, 6, 16, 6)
+        setBackgroundColor(Color.argb(100, 0, 0, 0))
+        maxLines = 3
+      }
+      val hitchParams = RelativeLayout.LayoutParams(
+        RelativeLayout.LayoutParams.WRAP_CONTENT,
+        RelativeLayout.LayoutParams.WRAP_CONTENT,
+      ).apply {
+        addRule(RelativeLayout.BELOW, fps.id)
+        addRule(RelativeLayout.ALIGN_PARENT_START)
+        alignWithParent = true
+        topMargin = 4
+      }
+      mLayout?.addView(hitch, hitchParams)
+      hitchView = hitch
+      statusAnchorId = hitch.id
     }
-    val hitch = TextView(this).apply {
-      id = View.generateViewId()
-      text = ""
-      visibility = View.GONE
-      setTextColor(Color.WHITE)
-      setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f)
-      typeface = Typeface.MONOSPACE
-      setShadowLayer(2f, 1f, 1f, Color.BLACK)
-      setPadding(16, 6, 16, 6)
-      setBackgroundColor(Color.argb(100, 0, 0, 0))
-      maxLines = 3
-    }
-    val hitchParams = RelativeLayout.LayoutParams(
-      RelativeLayout.LayoutParams.WRAP_CONTENT,
-      RelativeLayout.LayoutParams.WRAP_CONTENT,
-    ).apply {
-      addRule(RelativeLayout.BELOW, fps.id)
-      addRule(RelativeLayout.ALIGN_PARENT_START)
-      alignWithParent = true            /* the top when the FPS counter is gone */
-      topMargin = 4
-    }
-    mLayout?.addView(hitch, hitchParams)
-    hitchView = hitch
 
     val nis = TextView(this).apply {
-      text = "NIS: aguardando dados"
+      id = View.generateViewId()
+      text = ""
       visibility = View.VISIBLE
       setTextColor(Color.rgb(16, 124, 16))
       setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f)
@@ -649,21 +675,36 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
       setShadowLayer(2f, 1f, 1f, Color.BLACK)
       setPadding(16, 6, 16, 6)
       setBackgroundColor(Color.argb(150, 0, 0, 0))
-      maxLines = 2
+      maxLines = 6
     }
     val nisParams = RelativeLayout.LayoutParams(
       RelativeLayout.LayoutParams.WRAP_CONTENT,
       RelativeLayout.LayoutParams.WRAP_CONTENT,
     ).apply {
-      addRule(RelativeLayout.BELOW, hitch.id)
+      addRule(RelativeLayout.BELOW, statusAnchorId)
       addRule(RelativeLayout.ALIGN_PARENT_START)
       topMargin = 4
     }
     mLayout?.addView(nis, nisParams)
     nisView = nis
+    reloadOverlayPreferences()
   }
 
-  /** The run's cheats in the manifest's order (nativeSetCheat's index), and the game's key; empty: none. */
+  /** Reloads the per-device choices for the in-game performance/status overlay. */
+  private fun reloadOverlayPreferences() {
+    val prefs = getSharedPreferences("x1box_prefs", Context.MODE_PRIVATE)
+    fpsOn = prefs.getBoolean("show_fps", true)
+    ramOn = prefs.getBoolean("overlay_show_ram", false)
+    fsrOn = prefs.getBoolean("overlay_show_fsr", true)
+    nisOn = prefs.getBoolean("overlay_show_nis", true)
+    casOn = prefs.getBoolean("overlay_show_cas", true)
+    gpuOn = prefs.getBoolean("overlay_show_gpu", true)
+    hitchesOn = BuildConfig.DEBUG && prefs.getBoolean(PREF_SHOW_HITCHES, true)
+    fpsView?.visibility = if (fpsOn || ramOn) View.VISIBLE else View.GONE
+    nisView?.visibility = if (fsrOn || nisOn || casOn || gpuOn) View.VISIBLE else View.GONE
+    hitchView?.visibility = if (hitchesOn) View.VISIBLE else View.GONE
+  }
+
   @Volatile private var runCheats: List<CheatInfo> = emptyList()
   @Volatile private var runKey = ""
 
@@ -901,12 +942,14 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
       getString(R.string.overlay_menu_edit) to "Editar a posição e o tamanho dos controles",
       getString(if (shown) R.string.overlay_menu_hide else R.string.overlay_menu_show) to "Mostrar ou ocultar os controles na tela",
       getString(R.string.overlay_menu_controllers) to "Configurar jogadores e controles conectados",
+      "Informações na tela" to "Escolha FPS, RAM, FSR, NIS, CAS e GPU",
       "Imagem e gráficos" to "FSR 1.0, CAS, NIS, resolução e filtros"
     )
     val actions = mutableListOf<() -> Unit>(
       ::editControls,
       { controlsShown = !shown; updateControllerVisibility() },
       ::showPlayers,
+      ::showRuntimeOverlayOptions,
       ::showRuntimeGraphics
     )
     if (states) {
@@ -923,6 +966,51 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     items += getString(exit) to "Fechar o jogo"
     actions += ::exitGame
     showSeriesXMenu("Menu rápido", items) { actions[it]() }
+  }
+
+  /** Selects independently which performance and graphics details appear over gameplay. */
+  private fun showRuntimeOverlayOptions() {
+    val prefs = getSharedPreferences("x1box_prefs", Context.MODE_PRIVATE)
+    data class OverlayChoice(val title: String, val description: String, val key: String, val default: Boolean)
+    val choices = listOf(
+      OverlayChoice("FPS e tempo de quadro", "Taxa de quadros, média e duração do último quadro", "show_fps", true),
+      OverlayChoice("Uso de RAM", "Memória usada e memória total do aparelho", "overlay_show_ram", false),
+      OverlayChoice("FSR", "Modo FidelityFX e resolução de saída", "overlay_show_fsr", true),
+      OverlayChoice("NIS", "Estado do NIS e dimensões de entrada/saída", "overlay_show_nis", true),
+      OverlayChoice("CAS", "Estado do CAS/RCAS e intensidade de nitidez", "overlay_show_cas", true),
+      OverlayChoice("GPU e diagnóstico", "Disponibilidade da GPU e motivo de não execução", "overlay_show_gpu", true)
+    )
+    fun render() {
+      val entries = mutableListOf<Pair<String, String>>()
+      entries += "ATIVAR TODAS" to "Exibir todos os indicadores"
+      entries += "DESATIVAR TODAS" to "Ocultar todos os indicadores"
+      choices.forEach { choice ->
+        val enabled = prefs.getBoolean(choice.key, choice.default)
+        entries += (if (enabled) "✓  " else "○  ") + choice.title to
+          choice.description + if (enabled) " • ATIVADO" else " • DESATIVADO"
+      }
+      if (BuildConfig.DEBUG) {
+        val enabled = prefs.getBoolean(PREF_SHOW_HITCHES, true)
+        entries += (if (enabled) "✓  " else "○  ") + "Monitor de travamentos" to
+          "Diagnóstico de stutters e bloqueios • " + if (enabled) "ATIVADO" else "DESATIVADO"
+      }
+      showSeriesXMenu("Informações na tela", entries) { index ->
+        when (index) {
+          0 -> choices.forEach { prefs.edit().putBoolean(it.key, true).apply() }
+          1 -> choices.forEach { prefs.edit().putBoolean(it.key, false).apply() }
+          in 2 until 2 + choices.size -> {
+            val choice = choices[index - 2]
+            prefs.edit().putBoolean(choice.key, !prefs.getBoolean(choice.key, choice.default)).apply()
+          }
+          else -> if (BuildConfig.DEBUG) {
+            prefs.edit().putBoolean(PREF_SHOW_HITCHES, !prefs.getBoolean(PREF_SHOW_HITCHES, true)).apply()
+          }
+        }
+        reloadOverlayPreferences()
+        render()
+      }
+    }
+    render()
   }
 
   /** FSR/RCAS controls applied immediately to the running Vulkan presenter. */
