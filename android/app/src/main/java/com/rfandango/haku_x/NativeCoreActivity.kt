@@ -93,10 +93,29 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
       }
       nisView?.let { v ->
         val n = nativeGetNisStatus()
-        if (n != null && n.size >= 9) {
+        if (n != null && n.size >= 14) {
           val reason = when (n[3]) { 1 -> "recursos/pipeline"; 2 -> "dimensões"; 3 -> "imagem de saída"; 4 -> "configuração"; 5 -> "escala fora de 0,5–1,0"; else -> "nenhum" }
-          val path = when (n[8]) { 4 -> "NIS nitidez"; 3 -> "NIS"; 2 -> "SGSR"; 1 -> "redução"; else -> "bilinear" }
-          v.text = "NIS ${if (n[1] == 1) "ON" else "OFF"} | GPU ${if (n[0] == 1) "OK" else "INDISPONÍVEL"} | ${if (n[2] == 1) "EXECUTADO" else "NÃO EXECUTADO"}\n${n[4]}x${n[5]} → ${n[6]}x${n[7]} | saída: $path | motivo: $reason"
+          val path = when (n[8]) {
+            8 -> "FSR 1.0 (sem EASU necessário)"
+            7 -> "FSR 1.0 (RCAS)"
+            6 -> "FSR 1.0 (EASU + RCAS)"
+            5 -> "FSR 1.0 (EASU)"
+            4 -> "NIS nitidez"
+            3 -> "NIS"
+            2 -> "SGSR"
+            1 -> "redução"
+            else -> "Bilinear"
+          }
+          val nisState = if (n[1] == 1) {
+            if (n[2] == 1) "ON (executado)" else "ON (não executado)"
+          } else "OFF"
+          val casState = when {
+            n[9] == 0 -> "OFF"
+            n[11] == 1 -> "ON / RCAS aplicado"
+            else -> "ON / RCAS não aplicado"
+          }
+          val sharpness = "%.2f".format(java.util.Locale.US, n[10] / 100.0)
+          v.text = "Filtro: $path | NIS: $nisState | CAS: $casState ($sharpness)\nGPU: ${if (n[0] == 1) "OK" else "INDISPONÍVEL"} | NIS ${n[4]}x${n[5]} → ${n[6]}x${n[7]} | FSR ${n[12]}x${n[13]} | motivo: $reason"
         }
       }
       hitchView?.takeIf { hitchesOn }?.let { v ->

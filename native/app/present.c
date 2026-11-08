@@ -127,7 +127,7 @@ void nc_present_stats(float *fps, float *avg_ms, float *last_ms)
     *last_ms = g_last_ms;
 }
 
-void nc_present_nis_status(int status[9])
+void nc_present_nis_status(int status[12])
 {
     hle_present_nis_status(status);
 }
