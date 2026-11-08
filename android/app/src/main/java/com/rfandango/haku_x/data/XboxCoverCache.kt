@@ -13,13 +13,14 @@ import java.util.Locale
 /**
  * Original Xbox front-cover artwork.
  *
- * MobCat's public Xbox Title ID database resolves a disc Title ID to its XMID
- * and provides the artwork URL. Images are cached per Title ID in app-private
- * storage. Network failures are not negatively cached, so the next refresh retries.
+ * MobCat's API maps a Title ID to one or more XMIDs. The actual scans and
+ * thumbnails are stored in the repository's cover/<publisher>/ and
+ * thumbnail/<publisher>/ folders, named with that XMID.
  */
 object XboxCoverCache {
   private const val TAG = "hakuX-covers"
   private const val API = "https://mobcat.zip/XboxIDs/api.php"
+  private const val RAW = "https://raw.githubusercontent.com/MobCat/MobCats-original-xbox-game-list/main"
 
   /** Blocking; callers must use Dispatchers.IO. */
   fun load(context: Context, titleId: Long): Bitmap? {
@@ -28,74 +29,89 @@ object XboxCoverCache {
     val dir = File(context.applicationContext.filesDir, "xbox_cover_cache")
     if (!dir.exists() && !dir.mkdirs()) return null
     val cached = File(dir, "$id.jpg")
-    if (cached.isFile) return BitmapFactory.decodeFile(cached.absolutePath)
-    val missing = File(dir, "$id.missing")
-    if (missing.isFile) return null
-
-    val coverUrl = try {
-      resolveCoverUrl(id)
-    } catch (e: Exception) {
-      Log.w(TAG, "Could not resolve cover for $id", e)
-      return null
-    } ?: run {
-      missing.writeText("not found")
-      return null
+    if (cached.isFile) {
+      BitmapFactory.decodeFile(cached.absolutePath)?.let { return it }
+      cached.delete()
     }
 
-    val temp = File(dir, "$id.tmp")
-    try {
-      val connection = (URL(coverUrl).openConnection() as HttpURLConnection).apply {
-        connectTimeout = 8000
-        readTimeout = 12000
-        instanceFollowRedirects = true
-        setRequestProperty("User-Agent", "hakuX-Android/1.0")
-      }
-      connection.inputStream.use { input ->
-        temp.outputStream().use { output -> input.copyTo(output) }
-      }
-      connection.disconnect()
-      val bitmap = BitmapFactory.decodeFile(temp.absolutePath) ?: run {
-        temp.delete()
-        return null
-      }
+    // Do not permanently cache misses: the previous implementation used an
+    // unsupported API response shape and could poison this cache forever.
+    File(dir, "$id.missing").delete()
+
+    val xmid = try {
+      resolveXmids(id).firstOrNull()
+    } catch (e: Exception) {
+      Log.w(TAG, "Could not resolve Title ID $id", e)
+      return null
+    } ?: return null
+
+    val publisher = xmid.take(2)
+    val candidates = listOf(
+      "$RAW/cover/$publisher/$xmid.jpg",
+      "$RAW/thumbnail/$publisher/$xmid.jpg",
+    )
+    for (imageUrl in candidates) {
+      val bitmap = downloadBitmap(imageUrl, File(dir, "$id.tmp")) ?: continue
+      val temp = File(dir, "$id.tmp")
       if (!temp.renameTo(cached)) {
         temp.copyTo(cached, overwrite = true)
         temp.delete()
       }
+      Log.i(TAG, "Loaded cover for Title ID $id (XMID $xmid)")
       return bitmap
-    } catch (e: Exception) {
-      temp.delete()
-      Log.w(TAG, "Could not download cover for $id", e)
-      return null
     }
+    Log.i(TAG, "No cover scan or thumbnail available for Title ID $id (XMID $xmid)")
+    return null
   }
 
-  private fun resolveCoverUrl(id: String): String? {
-    val connection = (URL("$API?id=$id&imgs=1").openConnection() as HttpURLConnection).apply {
-      connectTimeout = 8000
-      readTimeout = 12000
+  private fun resolveXmids(id: String): List<String> {
+    val connection = (URL("$API?id=$id").openConnection() as HttpURLConnection).apply {
+      connectTimeout = 10000
+      readTimeout = 15000
       instanceFollowRedirects = true
       setRequestProperty("Accept", "application/json")
       setRequestProperty("User-Agent", "hakuX-Android/1.0")
     }
-    val body = connection.inputStream.bufferedReader().use { it.readText() }
-    connection.disconnect()
-    val rows = JSONArray(body)
-    for (i in 0 until rows.length()) {
-      val row = rows.optJSONObject(i) ?: continue
-      val images = row.optJSONObject("imgs") ?: continue
-      val keys = images.keys()
-      var fallback: String? = null
-      while (keys.hasNext()) {
-        val item = images.optJSONObject(keys.next()) ?: continue
-        val full = item.optString("Cover_Scan").takeIf { it.startsWith("https://") }
-        if (full != null) return full
-        if (fallback == null) {
-          fallback = item.optString("Thumbnail").takeIf { it.startsWith("https://") }
-        }
+    try {
+      val code = connection.responseCode
+      if (code !in 200..299) throw IllegalStateException("MobCat API HTTP $code")
+      val body = connection.inputStream.bufferedReader().use { it.readText() }
+      val rows = JSONArray(body)
+      val result = ArrayList<String>()
+      for (i in 0 until rows.length()) {
+        val row = rows.optJSONObject(i) ?: continue
+        val xmid = row.optString("XMID").uppercase(Locale.ROOT)
+        if (xmid.matches(Regex("[A-Z0-9]{8}")) && xmid !in result) result += xmid
       }
-      if (fallback != null) return fallback
+      return result
+    } finally {
+      connection.disconnect()
     }
-    return null
+  }
+
+  private fun downloadBitmap(url: String, temp: File): Bitmap? {
+    val connection = try {
+      (URL(url).openConnection() as HttpURLConnection).apply {
+        connectTimeout = 10000
+        readTimeout = 20000
+        instanceFollowRedirects = true
+        setRequestProperty("User-Agent", "hakuX-Android/1.0")
+      }
+    } catch (e: Exception) {
+      Log.w(TAG, "Could not open artwork URL", e)
+      return null
+    }
+    return try {
+      if (connection.responseCode !in 200..299) return null
+      connection.inputStream.use { input ->
+        temp.outputStream().use { output -> input.copyTo(output) }
+      }
+      BitmapFactory.decodeFile(temp.absolutePath)
+    } catch (e: Exception) {
+      Log.w(TAG, "Could not download artwork", e)
+      null
+    } finally {
+      connection.disconnect()
+    }
   }
 }
