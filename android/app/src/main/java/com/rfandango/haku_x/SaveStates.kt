@@ -178,6 +178,7 @@ class SaveStates(
         layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         setPadding(dp(16), 0, 0, 0)
         setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+        setTextColor(Color.WHITE)
         text = activity.getString(R.string.state_slot, slot) + "\n" +
           if (file.exists()) format.format(Date(file.lastModified())) else activity.getString(R.string.state_empty)
       }
