@@ -34,6 +34,11 @@ object XboxCoverCache {
       BitmapFactory.decodeFile(cached.absolutePath)?.let { return it }
       cached.delete()
     }
+    val x1Cached = File(dir, "$id.x1.png")
+    if (x1Cached.isFile) {
+      BitmapFactory.decodeFile(x1Cached.absolutePath)?.let { return it }
+      x1Cached.delete()
+    }
 
     // Do not permanently cache misses: the previous implementation used an
     // unsupported API response shape and could poison this cache forever.
@@ -42,14 +47,10 @@ object XboxCoverCache {
     val xmids = try {
       resolveXmids(id)
     } catch (e: Exception) {
-      Log.w(TAG, "Could not resolve Title ID $id", e)
-      return null
+      Log.w(TAG, "Could not resolve Title ID $id; trying X1_Covers", e)
+      emptyList()
     }
-    if (xmids.isEmpty()) {
-      val communityCover = loadX1Cover(context, gameTitle, dir, id)
-      if (communityCover != null) return communityCover
-      return null
-    }
+    if (xmids.isEmpty()) return loadX1Cover(context, gameTitle, dir, id)
 
     val temp = File(dir, "$id.tmp")
     for (xmid in xmids) {
@@ -69,8 +70,8 @@ object XboxCoverCache {
       }
     }
     temp.delete()
-    Log.i(TAG, "No cover scan or thumbnail available for Title ID $id (XMIDs: ${xmids.joinToString()})")
-    return null
+    Log.i(TAG, "No MobCat cover available for Title ID $id; trying X1_Covers")
+    return loadX1Cover(context, gameTitle, dir, id)
   }
 
   /**
