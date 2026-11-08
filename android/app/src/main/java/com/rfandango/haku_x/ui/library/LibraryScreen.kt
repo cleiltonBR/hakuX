@@ -65,6 +65,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -73,6 +74,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -201,7 +203,7 @@ fun LibraryScreen(
             TextButton(onClick = onOpenSettings) { Text(stringResource(R.string.settings_games_folder_title)) }
           }
           games.isEmpty() -> Message(stringResource(R.string.library_empty_games))
-          else -> GameList(games, state.info, state.icons, onLaunch, onGameSettings, onLoadState, onMods, vm::askConvert)
+          else -> GameList(games, state.info, state.icons, state.covers, onLaunch, onGameSettings, onLoadState, onMods, vm::askConvert)
         }
       }
     }
@@ -270,10 +272,64 @@ private fun DashboardInstallDialog(j: DashboardInstall, onStart: () -> Unit, onD
   )
 }
 
-/** A console-style featured title, using the existing game icon and launch callback. */
+/**
+ * A full-front Xbox case with a subtle spine and perspective. Box art always uses Fit,
+ * so the complete scan (including its edges and title) remains visible.
+ */
+@Composable
+private fun SeriesXGameCover(
+  game: Game,
+  cover: ImageBitmap?,
+  icon: ImageBitmap?,
+  modifier: Modifier = Modifier,
+) {
+  val density = androidx.compose.ui.platform.LocalDensity.current
+  Box(
+    modifier = modifier
+      .clip(RoundedCornerShape(7.dp))
+      .background(Color(0xFF172019)),
+    contentAlignment = Alignment.Center,
+  ) {
+    if (cover != null) {
+      Box(
+        Modifier.align(Alignment.CenterEnd).fillMaxSize()
+          .padding(start = 5.dp)
+          .background(Brush.horizontalGradient(listOf(Color(0xFF071008), Color(0xFF345A36))))
+      )
+      Image(
+        bitmap = cover,
+        contentDescription = "${game.title} — capa completa",
+        contentScale = ContentScale.Fit,
+        modifier = Modifier.fillMaxSize()
+          .padding(end = 5.dp)
+          .shadow(9.dp, RoundedCornerShape(3.dp))
+          .clip(RoundedCornerShape(3.dp))
+          .graphicsLayer {
+            rotationY = -9f
+            cameraDistance = 18f * density.density
+          },
+      )
+    } else if (icon != null) {
+      Image(
+        bitmap = icon,
+        contentDescription = "${game.title} — ícone do jogo",
+        contentScale = ContentScale.Fit,
+        modifier = Modifier.fillMaxSize().padding(8.dp),
+      )
+    } else {
+      Text(
+        game.title.firstOrNull { it.isLetterOrDigit() }?.uppercase() ?: "?",
+        style = MaterialTheme.typography.displayMedium,
+        color = Color(0xFF9BE69A),
+      )
+    }
+  }
+}
+
+/** A console-style featured title, using the downloaded box art when available. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun FeaturedGameCard(game: Game, icon: ImageBitmap?, onLaunch: () -> Unit) {
+private fun FeaturedGameCard(game: Game, cover: ImageBitmap?, icon: ImageBitmap?, onLaunch: () -> Unit) {
   val shape = RoundedCornerShape(22.dp)
   Row(
     Modifier
@@ -294,16 +350,7 @@ private fun FeaturedGameCard(game: Game, icon: ImageBitmap?, onLaunch: () -> Uni
       Text("INICIAR JOGO  ›", style = MaterialTheme.typography.labelLarge, color = Color(0xFF9BE69A))
     }
     Spacer(Modifier.width(12.dp))
-    Box(
-      Modifier.size(104.dp).clip(RoundedCornerShape(16.dp)).background(Color(0xFF29362A)),
-      contentAlignment = Alignment.Center,
-    ) {
-      if (icon != null) {
-        Image(icon, contentDescription = null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize().padding(8.dp))
-      } else {
-        Text(game.title.firstOrNull { it.isLetterOrDigit() }?.uppercase() ?: "?", style = MaterialTheme.typography.displayMedium, color = Color(0xFF9BE69A))
-      }
-    }
+    SeriesXGameCover(game, cover, icon, Modifier.width(92.dp).height(136.dp))
   }
 }
 
@@ -323,6 +370,7 @@ private fun GameList(
   games: List<Game>,
   info: Map<Uri, DiscInfo>,
   icons: Map<Uri, ImageBitmap>,
+  covers: Map<Uri, ImageBitmap>,
   onLaunch: (Game) -> Unit,
   onGameSettings: (Game, DiscInfo?) -> Unit,
   onLoadState: (Game, SaveStateStore, Int) -> Unit,
@@ -350,7 +398,7 @@ private fun GameList(
     verticalArrangement = Arrangement.spacedBy(10.dp),
   ) {
     item(span = { GridItemSpan(maxLineSpan) }) {
-      FeaturedGameCard(games.first(), icons[games.first().uri]) { onLaunch(games.first()) }
+      FeaturedGameCard(games.first(), covers[games.first().uri], icons[games.first().uri]) { onLaunch(games.first()) }
     }
     item(span = { GridItemSpan(maxLineSpan) }) {
       Text("TODOS OS JOGOS", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -382,7 +430,7 @@ private fun GameList(
             .padding(start = 12.dp, end = 14.dp, top = 12.dp, bottom = 12.dp),
           verticalAlignment = Alignment.CenterVertically,
         ) {
-          TitleIcon(game, icons[game.uri], iconShape, colors.surfaceVariant, colors.onSurfaceVariant)
+          SeriesXGameCover(game, covers[game.uri], icons[game.uri], Modifier.width(82.dp).height(120.dp))
           Column(Modifier.weight(1f).padding(start = 14.dp, end = 8.dp)) {
             // Landscape's two columns are narrow: one line, cut to fit.
             Text(
