@@ -138,14 +138,14 @@ static struct {
 } g_ps;
 
 /* Read by the Android debug overlay; each field is independently atomic. */
-static int g_nis_status[9];
+static int g_nis_status[12];
 static void nis_status(int index, int value)
 {
     __atomic_store_n(&g_nis_status[index], value, __ATOMIC_RELAXED);
 }
-void hle_present_nis_status(int status[9])
+void hle_present_nis_status(int status[12])
 {
-    for (unsigned i = 0; i < 9; i++) status[i] = __atomic_load_n(&g_nis_status[i], __ATOMIC_RELAXED);
+    for (unsigned i = 0; i < 12; i) status[i] = __atomic_load_n(&g_nis_status[i], __ATOMIC_RELAXED);
 }
 
 /* ---- shaders ---- */
@@ -1587,6 +1587,9 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
     nis_status(6, 0);
     nis_status(7, 0);
     nis_status(8, 0);
+    nis_status(9, cas ? 1 : 0);
+    nis_status(10, (int)(cas_sharpness * 100.0f + 0.5f));
+    nis_status(11, 0);
     if (g_ps.have && nis) {
         const float nw = sx * (float)ww, nh = sy * (float)wh;
         const uint32_t target_w = (uint32_t)(nw + 0.5f), target_h = (uint32_t)(nh + 0.5f);
@@ -1715,6 +1718,7 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
         nis_status(8, nis_done ? (nis_sharpen_only ? 4 : 3) :
                    fsr_easu ? (fsr_rcas ? 6 : 5) : fsr_rcas ? 7 : use_fsr ? 8 :
                    p == P_AREA ? 1 : p == P_SGSR ? 2 : 0);
+        nis_status(11, fsr_rcas ? 1 : 0);
         log_path(p, fxaa_done, nis_done, upscale, use_fsr, fsr_easu, fsr_rcas,
                  (uint32_t)(vw + 0.5f), (uint32_t)(vh + 0.5f));
     }
