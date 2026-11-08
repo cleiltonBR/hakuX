@@ -135,8 +135,10 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
   }
 
   /** Back on screen: the games folders may have changed in the settings, the dashboard come or gone (Hard disk). */
+  private var scannedAutomatic3dCovers = prefs.automatic3dCovers
+
   fun onResume() {
-    if (prefs.gamesFolders != scannedFolders) {
+    if (prefs.gamesFolders != scannedFolders || prefs.automatic3dCovers != scannedAutomatic3dCovers) {
       refresh()
     }
     _state.update { it.copy(dashboard = Dashboard.installed(hddRoot)) }
@@ -183,6 +185,7 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
     val app = getApplication<Application>()
     val folders = prefs.gamesFolders
     scannedFolders = folders
+    scannedAutomatic3dCovers = prefs.automatic3dCovers
     scanJob?.cancel()
     scanJob = viewModelScope.launch {
       _state.update {
