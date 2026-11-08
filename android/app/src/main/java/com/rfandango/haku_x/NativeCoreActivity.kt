@@ -722,7 +722,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
         isFocusable = true
         isClickable = true
         minimumHeight = dp(64)
-        setOnClickListener { dialog.dismiss(); onSelect(index) }
+        setOnClickListener { onSelect(index); dialog.dismiss() }
       }
       val label = TextView(this).apply {
         text = entry.first
