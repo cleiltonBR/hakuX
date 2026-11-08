@@ -28,6 +28,7 @@ enum class GameSetting(val key: String) {
   VIDEO_1080I("1080i"),
   PAL60("pal60"),
   AV_PACK("av_pack"),
+  CUSTOM_3D_COVER("custom_3d_cover"),
 }
 
 /**
