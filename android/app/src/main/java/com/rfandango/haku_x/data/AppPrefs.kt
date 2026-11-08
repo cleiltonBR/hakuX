@@ -87,7 +87,7 @@ class AppPrefs(context: Context) {
 
   /** The app's look: the phone's (light or dark as it is), light or dark (ui/theme AppTheme). */
   var theme: String
-    get() = sp.getString(KEY_THEME, THEME_SYSTEM) ?: THEME_SYSTEM
+    get() = sp.getString(KEY_THEME, THEME_DARK) ?: THEME_DARK
     set(value) = sp.edit { putString(KEY_THEME, value) }
 
   /** Debug builds: the HLE GPU's stutter and hang monitor over the game (NativeCoreActivity). */
