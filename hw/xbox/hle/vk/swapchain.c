@@ -1711,10 +1711,10 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
             pc[7] = (float)g_ps.f.h;
         }
         quad(cb, f, 0, g_ps.pipe[p], src, pc, iw, ih);
+        const bool fsr_rcas = use_fsr && cas && g_ps.pipe[P_RCAS] && p == P_RCAS;
         nis_status(8, nis_done ? (nis_sharpen_only ? 4 : 3) :
                    fsr_easu ? (fsr_rcas ? 6 : 5) : fsr_rcas ? 7 : use_fsr ? 8 :
                    p == P_AREA ? 1 : p == P_SGSR ? 2 : 0);
-        const bool fsr_rcas = use_fsr && cas && g_ps.pipe[P_RCAS] && p == P_RCAS;
         log_path(p, fxaa_done, nis_done, upscale, use_fsr, fsr_easu, fsr_rcas,
                  (uint32_t)(vw + 0.5f), (uint32_t)(vh + 0.5f));
     }
