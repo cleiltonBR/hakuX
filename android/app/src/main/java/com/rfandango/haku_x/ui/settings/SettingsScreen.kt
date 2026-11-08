@@ -17,6 +17,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -31,6 +32,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import com.rfandango.haku_x.BuildConfig
 import com.rfandango.haku_x.GpuDriverHelper
 import com.rfandango.haku_x.NativeCoreActivity
@@ -144,6 +146,20 @@ fun SettingsScreen(
   }
   SubScreen(title = stringResource(R.string.settings_title), onBack = onBack, snackbar = snackbar) { padding ->
     Column(Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState())) {
+      Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 18.dp, bottom = 12.dp)) {
+        Text("hakuX", style = MaterialTheme.typography.headlineMedium)
+        Text(
+          "CONSOLE SETTINGS",
+          style = MaterialTheme.typography.labelMedium,
+          color = MaterialTheme.colorScheme.primary,
+        )
+        Text(
+          "Personalize sua experiência Xbox: controles, vídeo, gráficos e sistema.",
+          style = MaterialTheme.typography.bodyMedium,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+          modifier = Modifier.padding(top = 6.dp),
+        )
+      }
       Section(stringResource(R.string.settings_section_games))
       for (f in folders) {
         ListItem(
