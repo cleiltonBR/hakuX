@@ -388,6 +388,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
       this,
       send = { p, o -> nativeSetPad(p, o.buttons, o.packedAnalog(), o.lx, o.ly, o.rx, o.ry) },
       rumbleOf = { p -> nativeGetRumble(p) },
+      vibrationEnabled = { AppPrefs(this).controllerVibration },
     ).also { it.reassign() }
     (getSystemService(Context.INPUT_SERVICE) as InputManager).registerInputDeviceListener(this, null)
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
