@@ -595,7 +595,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     val fps = TextView(this).apply {
       id = View.generateViewId()
       text = "FPS: --"
-      setTextColor(Color.WHITE)
+      setTextColor(Color.rgb(16, 124, 16))
       setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
       typeface = Typeface.MONOSPACE
       setShadowLayer(2f, 1f, 1f, Color.BLACK)
@@ -643,7 +643,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     val nis = TextView(this).apply {
       text = "NIS: aguardando dados"
       visibility = View.VISIBLE
-      setTextColor(Color.WHITE)
+      setTextColor(Color.rgb(16, 124, 16))
       setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f)
       typeface = Typeface.MONOSPACE
       setShadowLayer(2f, 1f, 1f, Color.BLACK)
