@@ -1483,24 +1483,43 @@ static void rendering(VkCommandBuffer cb, VkImageView v, uint32_t w, uint32_t h,
 }
 
 /* How the frame meets the window, logged when that changes. */
-static void log_path(unsigned p, bool fxaa, bool nis, uint32_t vw, uint32_t vh)
+static void log_path(unsigned p, bool fxaa, bool nis, int upscale, bool use_fsr,
+                      bool fsr_easu, bool fsr_rcas, uint32_t vw, uint32_t vh)
 {
     static unsigned s_p = ~0u;
-    static bool s_fxaa, s_nis;
+    static bool s_fxaa, s_nis, s_use_fsr, s_fsr_easu, s_fsr_rcas;
+    static int s_upscale = -1;
     static uint32_t s_w, s_h, s_vw, s_vh;
-    if (p == s_p && fxaa == s_fxaa && nis == s_nis && g_ps.f.w == s_w && g_ps.f.h == s_h && vw == s_vw && vh == s_vh) {
+    if (p == s_p && fxaa == s_fxaa && nis == s_nis && upscale == s_upscale &&
+        use_fsr == s_use_fsr && fsr_easu == s_fsr_easu && fsr_rcas == s_fsr_rcas &&
+        g_ps.f.w == s_w && g_ps.f.h == s_h && vw == s_vw && vh == s_vh) {
         return;
     }
     s_p = p;
     s_fxaa = fxaa;
     s_nis = nis;
+    s_upscale = upscale;
+    s_use_fsr = use_fsr;
+    s_fsr_easu = fsr_easu;
+    s_fsr_rcas = fsr_rcas;
     s_w = g_ps.f.w;
     s_h = g_ps.f.h;
     s_vw = vw;
     s_vh = vh;
-    hle_log("hakuX-hle-back", "present: %ux%u%s into %ux%u: %s", s_w, s_h, fxaa ? " after FXAA" : "", vw, vh,
-            nis ? "NVIDIA Image Scaling" : p == P_AREA ? "averaged down" : p == P_RCAS ? "FSR 1.0 (RCAS)" :
-            p == P_SGSR ? "scaled up by SGSR" : "bilinear");
+
+    const char *path = nis
+        ? (upscale == HLE_UPSCALE_FSR ? "NVIDIA Image Scaling (FSR request bypassed)" : "NVIDIA Image Scaling")
+        : fsr_easu ? (fsr_rcas ? "FSR 1.0 (EASU + RCAS)" : "FSR 1.0 (EASU)")
+        : fsr_rcas ? "FSR 1.0 (RCAS only)"
+        : use_fsr ? "FSR 1.0 selected (no EASU upscale needed)"
+        : upscale == HLE_UPSCALE_FSR && !g_ps.pipe[P_EASU] ? "FSR unavailable (EASU pipeline missing)"
+        : upscale == HLE_UPSCALE_FSR && p == P_AREA ? "averaged down (FSR bypassed)"
+        : p == P_AREA ? "averaged down"
+        : p == P_RCAS ? "FSR 1.0 (RCAS)"
+        : p == P_SGSR ? "scaled up by SGSR"
+        : "bilinear";
+    hle_log("hakuX-hle-back", "present: %ux%u%s into %ux%u: %s", s_w, s_h,
+            fxaa ? " after FXAA" : "", vw, vh, path);
 }
 
 void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, bool cas, float cas_sharpness, bool nis, float nis_sharpness, uint64_t key)
@@ -1693,7 +1712,9 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
         }
         quad(cb, f, 0, g_ps.pipe[p], src, pc, iw, ih);
         nis_status(8, nis_done ? (nis_sharpen_only ? 4 : 3) : p == P_AREA ? 1 : p == P_SGSR ? 2 : 0);
-        log_path(p, fxaa_done, nis_done, (uint32_t)(vw + 0.5f), (uint32_t)(vh + 0.5f));
+        const bool fsr_rcas = use_fsr && cas && g_ps.pipe[P_RCAS] && p == P_RCAS;
+        log_path(p, fxaa_done, nis_done, upscale, use_fsr, fsr_easu, fsr_rcas,
+                 (uint32_t)(vw + 0.5f), (uint32_t)(vh + 0.5f));
     }
     T.vkCmdEndRendering(cb);
     barrier(cb, dst, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
