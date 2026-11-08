@@ -1077,13 +1077,13 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
       nativeSetCas(prefs.cas, prefs.casSharpness)
       nativeSetNis(prefs.nis, prefs.nisSharpness)
     }
-    val scaleValues = (1..16).toList()
+    val scaleValues = (1..8).map { it * 2 }
     val scaleLabels = scaleValues.map { value ->
-      "${String.format(java.util.Locale.getDefault(), "%.1fx", value / 2.0)}  •  ${(640 * value + 1) / 2}×${(480 * value + 1) / 2} em 480p"
+      "${value / 2}x  •  ${640 * (value / 2)}×${480 * (value / 2)} em 480p"
     }
     val currentMode = modes.indexOf(prefs.upscaleFilter).coerceAtLeast(0)
     val entries = listOf(
-      "Escala de resolução" to "${String.format(java.util.Locale.getDefault(), "%.1fx", prefs.renderScaleHalfSteps / 2.0)} • ${(640 * prefs.renderScaleHalfSteps + 1) / 2}×${(480 * prefs.renderScaleHalfSteps + 1) / 2} em 480p • reinicie o jogo",
+      "Escala de resolução" to "${prefs.renderScale}x • ${640 * prefs.renderScale}×${480 * prefs.renderScale} em 480p • reinicie o jogo",
       "Filtro de imagem" to modeNames[currentMode],
       "Filtro anisotrópico" to if (prefs.anisotropyEnabled) "Ativado • reinicie o jogo" else "Desativado • reinicie o jogo",
       "Nível anisotrópico" to "${prefs.anisotropyLevel}x • reinicie o jogo",
@@ -1094,8 +1094,8 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     )
     showSeriesXMenu("Imagem e gráficos", entries) { which ->
       when (which) {
-        0 -> showSeriesXChoices("Escala de resolução", scaleLabels, (prefs.renderScaleHalfSteps - 1).coerceIn(0, 15)) {
-          prefs.renderScaleHalfSteps = scaleValues[it]
+        0 -> showSeriesXChoices("Escala de resolução", scaleLabels, (prefs.renderScale - 1).coerceIn(0, 7)) {
+          prefs.renderScale = scaleValues[it] / 2
           showRuntimeGraphics()
         }
         1 -> showSeriesXChoices("Filtro de imagem", modeNames, currentMode) {
