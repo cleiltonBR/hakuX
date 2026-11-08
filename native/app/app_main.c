@@ -179,7 +179,7 @@ EXPORT JNIEXPORT void JNICALL Java_com_rfandango_haku_1x_NativeCoreActivity_nati
     nc_present_set_nis(enabled != JNI_FALSE, sharpness);
 }
 
-EXPORT JNIEXPORT void JNICALL Java_com_rfandango_haku_1x_NativeCoreActivity_nativeSetRenderScale(JNIEnv *env, jclass cls, jint scale)
+EXPORT JNIEXPORT void JNICALL Java_com_rfandango_haku_1x_NativeCoreActivity_nativeSetHdr(JNIEnv *env, jclass cls, jboolean enabled)\n{\n    nc_present_set_hdr(enabled != JNI_FALSE);\n}\n\nEXPORT JNIEXPORT void JNICALL Java_com_rfandango_haku_1x_NativeCoreActivity_nativeSetRenderScale(JNIEnv *env, jclass cls, jint scale)
 {
     nc_hle_set_render_scale(scale);
 }
