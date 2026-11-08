@@ -238,12 +238,19 @@ int hle_vk_init(void)
     vkEnumerateInstanceExtensionProperties(NULL, &nie, NULL);
     g_autofree VkExtensionProperties *iext = g_new(VkExtensionProperties, nie ? nie : 1);
     vkEnumerateInstanceExtensionProperties(NULL, &nie, iext);
-    const char *iexts[2];
+    const char *iexts[3];
     uint32_t nix = 0;
     if (has_ext(iext, nie, VK_KHR_SURFACE_EXTENSION_NAME) &&
         has_ext(iext, nie, VK_KHR_ANDROID_SURFACE_EXTENSION_NAME)) {
         iexts[nix++] = VK_KHR_SURFACE_EXTENSION_NAME;
         iexts[nix++] = VK_KHR_ANDROID_SURFACE_EXTENSION_NAME;
+    }
+    /* Optional: exposes HDR color spaces (ST2084/BT.2020) when the Android
+     * Vulkan loader supports them. SDR remains the fallback on older devices. */
+    const bool e_swapchain_colorspace =
+        has_ext(iext, nie, "VK_EXT_swapchain_colorspace");
+    if (e_swapchain_colorspace) {
+        iexts[nix++] = "VK_EXT_swapchain_colorspace";
     }
     VkInstanceCreateInfo ici = {
         .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
