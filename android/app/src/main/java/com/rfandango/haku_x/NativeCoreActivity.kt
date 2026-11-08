@@ -249,8 +249,8 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     if (settings.uncapped) {
       args += "uncap"
     }
-    /* The HLE GPU's render scale, 1-8x the title's resolution. */
-    args += "scale=${settings.renderScale}"
+    /* The HLE GPU's fixed-point render scale: 1..16 means 0.5x..8x. */
+    args += "scale2=${settings.renderScaleHalfSteps}"
     /* The picture's shape: auto (the game's), 4:3, 16:9 or stretch. */
     args += "aspect=${settings.aspectRatio}"
     /* Anti-aliasing: FXAA over each frame, and how a picture smaller than
@@ -815,10 +815,10 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
       nativeSetCas(prefs.cas, prefs.casSharpness)
       nativeSetNis(prefs.nis, prefs.nisSharpness)
     }
-    val scaleValues = (1..8).toList()
+    val scaleValues = (1..16).toList()
     val anisoLevels = listOf(1, 2, 4, 8, 16)
     val entries = arrayOf(
-      "Escala de resolução: ${prefs.renderScale}x (${640 * prefs.renderScale}×${480 * prefs.renderScale} em 480p; reinicie o jogo)",
+      "Escala de resolução: ${String.format(java.util.Locale.getDefault(), "%.1fx", prefs.renderScaleHalfSteps / 2.0)} (${(640 * prefs.renderScaleHalfSteps + 1) / 2}×${(480 * prefs.renderScaleHalfSteps + 1) / 2} em 480p; reinicie o jogo)",
       "Filtro: ${modeNames[modes.indexOf(prefs.upscaleFilter).coerceAtLeast(0)]}",
       "Filtro anisotrópico: ${if (prefs.anisotropyEnabled) "Ativado" else "Desativado"} (reinicie o jogo)",
       "Nível anisotrópico: ${prefs.anisotropyLevel}x (reinicie o jogo)",
@@ -833,9 +833,9 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
         when (which) {
           0 -> showMenuDialog(AlertDialog.Builder(this)
             .setTitle("Escala de resolução")
-            .setSingleChoiceItems(scaleValues.map { "${it}x (${640 * it}×${480 * it} em 480p)" }.toTypedArray(), (prefs.renderScale - 1).coerceIn(0, 7)) { dialog, selected ->
+            .setSingleChoiceItems(scaleValues.map { "${String.format(java.util.Locale.getDefault(), "%.1fx", it / 2.0)} (${(640 * it + 1) / 2}×${(480 * it + 1) / 2} em 480p)" }.toTypedArray(), (prefs.renderScaleHalfSteps - 1).coerceIn(0, 15)) { dialog, selected ->
               val scale = scaleValues[selected]
-              prefs.renderScale = scale
+              prefs.renderScaleHalfSteps = scale
               dialog.dismiss()
               showRuntimeGraphics()
             }.setNegativeButton(android.R.string.cancel, null))
@@ -1380,7 +1380,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     @JvmStatic
     external fun nativeGetNisStatus(): IntArray?
 
-    external fun nativeSetRenderScale(scale: Int)
+    external fun nativeSetRenderScale2(scale2: Int)
 
     /** The emulation paused (onPause) or resumed (onResume). */
     @JvmStatic
