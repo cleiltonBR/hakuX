@@ -91,9 +91,8 @@ class AppPrefs(context: Context) {
     set(value) = sp.edit { putInt(NativeCoreActivity.PREF_SCALE, value) }
 
   /**
-   * Experimental fixed-point render scale: 1 = 0.5x, 2 = 1x, ... 16 = 8x.
-   * Kept separate from renderScale until the native renderer supports half steps.
-   * Existing installations migrate their integer setting without changing it.
+   * Fixed-point render scale: 1 = 0.5x, 2 = 1x, ... 16 = 8x.
+   * Existing installations migrate their whole-number setting without changing it.
    */
   var renderScaleHalfSteps: Int
     get() {
