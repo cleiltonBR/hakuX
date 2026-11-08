@@ -94,10 +94,11 @@ android {
         "proguard-debug.pro"
       )
     }
-    seriesXTest {
+    create("seriesXTest") {
       applicationIdSuffix = ".seriesx"
       resValue("string", "app_name", "HakuX Series X Test")
       isDebuggable = true
+      matchingFallbacks += listOf("debug", "release")
       isMinifyEnabled = true
       proguardFiles(
         getDefaultProguardFile("proguard-android-optimize.txt"),
