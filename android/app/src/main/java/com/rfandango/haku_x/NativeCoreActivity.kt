@@ -636,9 +636,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
       setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
       typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD)
       letterSpacing = 0.025f
-      setShadowLayer(2f, 1f, 1f, Color.BLACK)
-      setPadding(16, 8, 16, 8)
-      setBackgroundColor(Color.argb(100, 0, 0, 0))
+      setPadding(0, 0, 0, 0)
       maxLines = 2
     }
     val params = RelativeLayout.LayoutParams(
@@ -661,9 +659,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
         setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
         typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD)
         letterSpacing = 0.025f
-        setShadowLayer(2f, 1f, 1f, Color.BLACK)
-        setPadding(16, 6, 16, 6)
-        setBackgroundColor(Color.argb(100, 0, 0, 0))
+        setPadding(0, 0, 0, 0)
         maxLines = 3
       }
       val hitchParams = RelativeLayout.LayoutParams(
@@ -688,9 +684,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
       setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
       typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD)
       letterSpacing = 0.025f
-      setShadowLayer(2f, 1f, 1f, Color.BLACK)
-      setPadding(16, 8, 16, 8)
-      setBackgroundColor(Color.argb(100, 0, 0, 0))
+      setPadding(0, 0, 0, 0)
       maxLines = 6
     }
     val nisParams = RelativeLayout.LayoutParams(
