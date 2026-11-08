@@ -334,29 +334,20 @@ private fun SeriesXGameCover(
   val density = androidx.compose.ui.platform.LocalDensity.current
   Box(
     modifier = modifier
-      // Rotate the complete case (green depth layer + front artwork) as one object.
-      // Applying perspective to the artwork alone makes the two layers lean in
-      // opposite directions and exposes a detached-looking green wedge.
+      // The downloaded artwork already contains the complete 3D cover.
+      // Do not draw an extra green plastic case behind it.
       .graphicsLayer {
         rotationY = -9f
         cameraDistance = 18f * density.density
-      }
-      .clip(RoundedCornerShape(7.dp))
-      .background(Color(0xFF172019)),
+      },
     contentAlignment = Alignment.Center,
   ) {
     if (cover != null) {
-      Box(
-        Modifier.align(Alignment.CenterEnd).fillMaxSize()
-          .padding(start = 5.dp)
-          .background(Brush.horizontalGradient(listOf(Color(0xFF071008), Color(0xFF345A36))))
-      )
       Image(
         bitmap = cover,
-        contentDescription = "${game.title} — capa completa",
+        contentDescription = "${game.title} — capa 3D",
         contentScale = ContentScale.Fit,
         modifier = Modifier.fillMaxSize()
-          .padding(end = 5.dp)
           .shadow(9.dp, RoundedCornerShape(3.dp))
           .clip(RoundedCornerShape(3.dp)),
       )
