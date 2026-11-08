@@ -14,6 +14,8 @@ import com.rfandango.haku_x.data.DiscInfo
 import com.rfandango.haku_x.data.DiscInfoCache
 import com.rfandango.haku_x.data.Game
 import com.rfandango.haku_x.data.GameScanner
+import com.rfandango.haku_x.data.GameOverrides
+import com.rfandango.haku_x.data.GameSetting
 import com.rfandango.haku_x.data.Storage
 import com.rfandango.haku_x.data.XisoConverter
 import com.rfandango.haku_x.data.XboxCoverCache
@@ -256,13 +258,27 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
         )
       }
 
+      val selectedCovers = HashMap<Uri, ImageBitmap>()
+      for (game in games) {
+        if (!currentCoroutineContext().isActive) break
+        val disc = info[game.uri]
+        val key = GameOverrides.gameKey(disc?.titleId ?: 0L, disc?.version ?: 0L, game.relativePath)
+        val selected = GameOverrides(app, key)[GameSetting.CUSTOM_3D_COVER] ?: continue
+        val bitmap = withContext(Dispatchers.IO) {
+          runCatching { app.contentResolver.openInputStream(Uri.parse(selected))?.use { BitmapFactory.decodeStream(it) } }.getOrNull()
+        } ?: continue
+        bitmap.prepareToDraw()
+        selectedCovers[game.uri] = bitmap.asImageBitmap()
+      }
+      if (selectedCovers.isNotEmpty()) _state.update { it.copy(covers = selectedCovers.toMap()) }
+
       // Artwork is fetched after the library appears, never blocking game launch or scrolling.
       // The cache is keyed by Xbox Title ID, so a later refresh is almost entirely offline.
       if (prefs.automatic3dCovers) {
-        val covers = HashMap<Uri, ImageBitmap>()
+        val covers = HashMap<Uri, ImageBitmap>(selectedCovers)
         for ((uri, disc) in info) {
           if (!currentCoroutineContext().isActive) break
-          if (disc.titleId == 0L) continue
+          if (disc.titleId == 0L || uri in selectedCovers) continue
           val bitmap = withContext(Dispatchers.IO) { XboxCoverCache.load(app, disc.titleId, (info[uri]?.title ?: games.firstOrNull { it.uri == uri }?.title).orEmpty()) } ?: continue
           bitmap.prepareToDraw()
           covers[uri] = bitmap.asImageBitmap()
