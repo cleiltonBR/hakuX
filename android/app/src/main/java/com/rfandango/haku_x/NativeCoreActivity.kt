@@ -342,9 +342,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
 
   override fun onCreate(savedInstanceState: Bundle?) {
     /* the in-game menus (framework dialogs) light or dark, as the app's theme is */
-    if (AppTheme.isDark(this)) {
-      setTheme(R.style.Theme_HakuX_Game_Dark)
-    }
+    setTheme(R.style.Theme_HakuX_Game_Dark)
     discArg = openDisc()
     Logs.startGame(this, gameName(), when {
       intent.getBooleanExtra(EXTRA_RELAUNCH, false) -> "relaunched into another XBE"
@@ -989,125 +987,6 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     }
   }
 
-  /** FSR/RCAS controls applied immediately to the running Vulkan presenter. */
-  private fun showRuntimeGraphics() {
-    val prefs = AppPrefs(this)
-    val modes = listOf(UPSCALE_BILINEAR, UPSCALE_SGSR, UPSCALE_FSR)
-    val modeNames = arrayOf("Bilinear", "SGSR", "FidelityFX FSR 1.0")
-    fun refresh() {
-      val current = modes.indexOf(prefs.upscaleFilter).coerceAtLeast(0)
-      nativeSetUpscale(current)
-      nativeSetCas(prefs.cas, prefs.casSharpness)
-      nativeSetNis(prefs.nis, prefs.nisSharpness)
-    }
-    val scaleValues = (1..16).toList()
-    val anisoLevels = listOf(1, 2, 4, 8, 16)
-    val entries = arrayOf(
-      "Escala de resolução: ${String.format(java.util.Locale.getDefault(), "%.1fx", prefs.renderScaleHalfSteps / 2.0)} (${(640 * prefs.renderScaleHalfSteps + 1) / 2}×${(480 * prefs.renderScaleHalfSteps + 1) / 2} em 480p; reinicie o jogo)",
-      "Filtro: ${modeNames[modes.indexOf(prefs.upscaleFilter).coerceAtLeast(0)]}",
-      "Filtro anisotrópico: ${if (prefs.anisotropyEnabled) "Ativado" else "Desativado"} (reinicie o jogo)",
-      "Nível anisotrópico: ${prefs.anisotropyLevel}x (reinicie o jogo)",
-      "CAS: ${if (prefs.cas) "Ativado" else "Desativado"}",
-      "Intensidade CAS: ${"%.1f".format(java.util.Locale.US, prefs.casSharpness)}",
-      "NIS: ${if (prefs.nis) "Ativado" else "Desativado"}",
-      "Nitidez NIS: ${(prefs.nisSharpness * 100).toInt()}%",
-    )
-    showMenuDialog(AlertDialog.Builder(this)
-      .setTitle("Gráficos durante a gameplay")
-      .setItems(entries) { _, which ->
-        when (which) {
-          0 -> showMenuDialog(AlertDialog.Builder(this)
-            .setTitle("Escala de resolução")
-            .setSingleChoiceItems(scaleValues.map { "${String.format(java.util.Locale.getDefault(), "%.1fx", it / 2.0)} (${(640 * it + 1) / 2}×${(480 * it + 1) / 2} em 480p)" }.toTypedArray(), (prefs.renderScaleHalfSteps - 1).coerceIn(0, 15)) { dialog, selected ->
-              val scale = scaleValues[selected]
-              prefs.renderScaleHalfSteps = scale
-              dialog.dismiss()
-              showRuntimeGraphics()
-            }.setNegativeButton(android.R.string.cancel, null))
-          1 -> showMenuDialog(AlertDialog.Builder(this)
-            .setTitle("Filtro de imagem")
-            .setSingleChoiceItems(modeNames, modes.indexOf(prefs.upscaleFilter).coerceAtLeast(0)) { dialog, selected ->
-              prefs.upscaleFilter = modes[selected]
-              refresh()
-              dialog.dismiss()
-              showRuntimeGraphics()
-            }.setNegativeButton(android.R.string.cancel, null))
-          2 -> {
-            prefs.anisotropyEnabled = !prefs.anisotropyEnabled
-            showRuntimeGraphics()
-          }
-          3 -> showMenuDialog(AlertDialog.Builder(this)
-            .setTitle("Nível do filtro anisotrópico")
-            .setSingleChoiceItems(anisoLevels.map { "${it}x" }.toTypedArray(),
-              anisoLevels.indexOf(prefs.anisotropyLevel).coerceAtLeast(0)) { dialog, selected ->
-              prefs.anisotropyLevel = anisoLevels[selected]
-              dialog.dismiss()
-              showRuntimeGraphics()
-            }.setNegativeButton(android.R.string.cancel, null))
-          4 -> {
-            prefs.cas = !prefs.cas
-            refresh()
-            showRuntimeGraphics()
-          }
-          5 -> {
-            val values = (0..10).map { it * 0.2f }
-            val labels = values.map { "%.1f".format(java.util.Locale.US, it) }.toTypedArray()
-            val selected = values.indexOfFirst { kotlin.math.abs(it - prefs.casSharpness) < 0.001f }.coerceAtLeast(0)
-            showMenuDialog(AlertDialog.Builder(this)
-              .setTitle("Intensidade CAS")
-              .setSingleChoiceItems(labels, selected) { dialog, index ->
-                prefs.casSharpness = values[index]
-                refresh()
-                dialog.dismiss()
-                showRuntimeGraphics()
-              }.setNegativeButton(android.R.string.cancel, null))
-          }
-          6 -> {
-            prefs.nis = !prefs.nis
-            refresh()
-            showRuntimeGraphics()
-          }
-          7 -> {
-            val values = (0..10).map { it / 10.0f }
-            val labels = values.map { "${(it * 100).toInt()}%" }.toTypedArray()
-            val selected = values.indexOfFirst { kotlin.math.abs(it - prefs.nisSharpness) < 0.001f }.coerceAtLeast(0)
-            showMenuDialog(AlertDialog.Builder(this)
-              .setTitle("Nitidez NIS")
-              .setSingleChoiceItems(labels, selected) { dialog, index ->
-                prefs.nisSharpness = values[index]
-                refresh()
-                dialog.dismiss()
-                showRuntimeGraphics()
-              }.setNegativeButton(android.R.string.cancel, null))
-          }
-        }
-      }
-      .setNegativeButton(android.R.string.cancel, null))
-  }
-
-  /** The players the core has a controller plugged in for (bit n: player n + 1). */
-  private var plugged = 1
-
-  /**
-   * The players' controllers plugged in and pulled out as the connected ones
-   * and the controller settings change: player 1 and each player a
-   * connected controller plays as (the router's assignment).
-   */
-  private fun syncPads() {
-    val r = router ?: return
-    var mask = 1
-    for (p in r.assignment.values) mask = mask or (1 shl p)
-    if (mask != plugged) {
-      plugged = mask
-      nativeSetPads(mask)
-    }
-  }
-
-  /**
-   * The menu's Controllers: which controller plays as which player, changed
-   * at once (and kept, as the settings' Players), its controller plugged in
-   * or pulled out at once as well.
-   */
   /** The players and their currently assigned controllers. */
   private fun showPlayers() {
     val r = router ?: return
