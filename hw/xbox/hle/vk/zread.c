@@ -49,7 +49,7 @@ static const char k_fs[] =
     "               16777215u);\n"
     "  uint w = d << 8 | (texelFetch(st, q, 0).r & 0xFFu);\n"
     "  if (halves) {\n"
-    "    uint h = pc.map.y > 1u || ((uint(p.x) / max(pc.map.y, 1u)) & 1u) != 0u ? w >> 16\n"
+    "    uint h = pc.map.y > 2u || (((uint(p.x) * 2u) / max(pc.map.y, 1u)) & 1u) != 0u ? w >> 16\n"
     "                                                                          : w & 0xFFFFu;\n"
     "    o = vec4(float(h) / 65535.0);\n"
     "    return;\n"
@@ -445,7 +445,7 @@ const char *hle_zread_pass(VkCommandBuffer cb, unsigned slot, HleVkSurf *src, Hl
     T.vkCmdBeginRendering(cb, &ri);
     VkViewport vp = { 0, 0, (float)fw, (float)fh, 0.0f, 1.0f };
     VkRect2D sc = { { 0, 0 }, { fw, fh } };
-    uint32_t pc[4] = { map[0], halves ? dst->scale : map[1], map[2], map[3] };
+    uint32_t pc[4] = { map[0], halves ? dst->scale2 : map[1], map[2], map[3] };
     T.vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, p);
     hle_draw_state_lost();
     T.vkCmdSetViewport(cb, 0, 1, &vp);

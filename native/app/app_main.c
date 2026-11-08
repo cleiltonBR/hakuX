@@ -4,7 +4,7 @@
  *   argv[1]  the disc image: a path, or "fd:<n>" for a descriptor the activity opened
  *   argv[2]  the hard disk folder (Partition0-5 and the raw sector files)
  *   argv[3+] options: the core's (native/core/options.h: "uncap",
- *            "loadstate=", "scale=", "video=", "asyncpipe=", "mods=", ...),
+ *            "loadstate=", "scale2=", "video=", "asyncpipe=", "mods=", ...),
  *            and the window's: "aspect=auto|4:3|16:9|stretch" the picture's
  *            shape, "fxaa=0|1" FXAA over each frame and
  *            "upscale=bilinear|sgsr|fsr" how a frame smaller than its place on
@@ -182,6 +182,11 @@ EXPORT JNIEXPORT void JNICALL Java_com_rfandango_haku_1x_NativeCoreActivity_nati
 EXPORT JNIEXPORT void JNICALL Java_com_rfandango_haku_1x_NativeCoreActivity_nativeSetRenderScale(JNIEnv *env, jclass cls, jint scale)
 {
     nc_hle_set_render_scale(scale);
+}
+
+EXPORT JNIEXPORT void JNICALL Java_com_rfandango_haku_1x_NativeCoreActivity_nativeSetRenderScale2(JNIEnv *env, jclass cls, jint scale2)
+{
+    nc_hle_set_render_scale2(scale2);
 }
 
 /* Savestates (native/state): the running game saved to path, on the

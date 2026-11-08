@@ -144,8 +144,10 @@ void hle_host_gpu_lost(const char *why);
 
 /* Where the HLE keeps its files (shader caches, dumps); ends with '/'. */
 const char *hle_host_base_path(void);
-/* The render scale, 1-8 times the title's resolution. */
+/* The legacy integer render scale, 1-8 times the title's resolution. */
 int hle_host_render_scale(void);
+/* Fixed-point render scale in half-step units (1..16 = 0.5x..8x). */
+int hle_host_render_scale2(void);
 /* vkGetInstanceProcAddr of the Vulkan driver to use (a custom driver's or
  * the system's), as a void pointer; NULL if none. */
 void *hle_host_vk_loader(void);

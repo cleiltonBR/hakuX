@@ -9,7 +9,8 @@ import java.util.Locale
 /** The settings a game can override; the rest are the app's for every game. */
 enum class GameSetting(val key: String) {
   UNCAPPED("uncapped"),
-  RENDER_SCALE("render_scale"),
+  RENDER_SCALE("render_scale"), // legacy whole-number override; read for migration
+  RENDER_SCALE_HALF("render_scale_half"),
   ASYNC_SHADERS("async_shaders"),
   PREBUILD_SHADERS("prebuild_shaders"),
   CONSOLE_TIMING("console_timing"),
@@ -58,8 +59,14 @@ class GameOverrides(context: Context, val game: String) {
     }
   }
 
-  operator fun get(setting: GameSetting): String? =
-    sp.getString(key(setting), null) ?: legacy?.let { sp.getString("$it/${setting.key}", null) }
+  operator fun get(setting: GameSetting): String? {
+    val stored = sp.getString(key(setting), null) ?: legacy?.let { sp.getString("$it/${setting.key}", null) }
+    if (stored != null || setting != GameSetting.RENDER_SCALE_HALF) return stored
+    // Older per-game whole-number choices map exactly to the new half-step scale.
+    val whole = sp.getString(key(GameSetting.RENDER_SCALE), null)
+      ?: legacy?.let { sp.getString("$it/${GameSetting.RENDER_SCALE.key}", null) }
+    return whole?.toIntOrNull()?.coerceIn(1, 8)?.times(2)?.toString()
+  }
 
   operator fun set(setting: GameSetting, value: String?) = sp.edit {
     if (value == null) remove(key(setting)) else putString(key(setting), value)
@@ -91,6 +98,9 @@ class RunSettings(private val app: AppPrefs, private val game: GameOverrides?) {
 
   val uncapped get() = bool(GameSetting.UNCAPPED, app.uncapped)
   val renderScale get() = game?.get(GameSetting.RENDER_SCALE)?.toIntOrNull() ?: app.renderScale
+  val renderScaleHalfSteps get() = game?.get(GameSetting.RENDER_SCALE_HALF)?.toIntOrNull()?.coerceIn(1, 16)
+    ?: (game?.get(GameSetting.RENDER_SCALE)?.toIntOrNull()?.coerceIn(1, 8)?.times(2))
+    ?: app.renderScaleHalfSteps
   val asyncShaders get() = bool(GameSetting.ASYNC_SHADERS, app.asyncShaders)
   val prebuildShaders get() = bool(GameSetting.PREBUILD_SHADERS, app.prebuildShaders)
   /** A debug build's setting (off for A/B); always on in the others. */

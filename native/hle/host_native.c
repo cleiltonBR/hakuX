@@ -150,15 +150,30 @@ const char *hle_host_base_path(void)
 }
 
 static int g_render_scale = 1;
+/* Fixed-point scale in half-step units: 2 means 1x, 3 means 1.5x. */
+static int g_render_scale2 = 2;
 
 void nc_hle_set_render_scale(int scale)
 {
-    __atomic_store_n(&g_render_scale, scale < 1 ? 1 : scale > 8 ? 8 : scale, __ATOMIC_RELEASE);
+    scale = scale < 1 ? 1 : scale > 8 ? 8 : scale;
+    __atomic_store_n(&g_render_scale, scale, __ATOMIC_RELEASE);
+    __atomic_store_n(&g_render_scale2, scale * 2, __ATOMIC_RELEASE);
+}
+
+void nc_hle_set_render_scale2(int scale2)
+{
+    __atomic_store_n(&g_render_scale2, scale2 < 1 ? 1 : scale2 > 16 ? 16 : scale2,
+                     __ATOMIC_RELEASE);
 }
 
 int hle_host_render_scale(void)
 {
     return __atomic_load_n(&g_render_scale, __ATOMIC_ACQUIRE);
+}
+
+int hle_host_render_scale2(void)
+{
+    return __atomic_load_n(&g_render_scale2, __ATOMIC_ACQUIRE);
 }
 
 /* A custom Vulkan driver's entry point (the app loads Turnip through

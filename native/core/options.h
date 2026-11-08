@@ -8,7 +8,8 @@
  *   loadstate=FILE   boot into a savestate (native/state)
  *   mods=FILE        the run's mods and cheats (native/core/mods.h)
  *   version=NAME     the core's version, recorded in savestates
- *   scale=N          the render scale
+ *   scale2=N         fixed-point render scale (1..16 = 0.5x..8x)
+ *   scale=N          legacy whole-number render scale
  *   asyncpipe=0|1    asynchronous shader compilation (on when absent)
  *   prebuild=0|1     the cached shaders built before the game (on)
  *   pads=MASK        the players with a controller plugged in (hex, bit n

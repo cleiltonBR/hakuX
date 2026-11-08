@@ -57,6 +57,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.Calendar
 import java.util.GregorianCalendar
+import java.util.Locale
 
 /** What the core reads at game start, plus the games folders the library scans. */
 @Composable
@@ -86,7 +87,7 @@ fun SettingsScreen(
   var consoleTiming by remember { mutableStateOf(prefs.consoleTiming) }
   var showFps by remember { mutableStateOf(prefs.showFps) }
   var showHitches by remember { mutableStateOf(prefs.showHitches) }
-  var scale by remember { mutableIntStateOf(prefs.renderScale) }
+  var scale by remember { mutableIntStateOf(prefs.renderScaleHalfSteps) }
   var aspect by remember { mutableStateOf(prefs.aspectRatio) }
   var fxaa by remember { mutableStateOf(prefs.fxaa) }
   var cas by remember { mutableStateOf(prefs.cas) }
@@ -300,7 +301,7 @@ fun SettingsScreen(
         headlineContent = { Text(stringResource(R.string.settings_scale)) },
         supportingContent = {
           Text(
-            scaleLabel(scale) + " (480p example). " +
+            scaleHalfLabel(scale) + " (480p example). " +
               stringResource(R.string.settings_scale_desc) + " " +
               stringResource(R.string.settings_applies_next_start)
           )
@@ -496,9 +497,9 @@ fun SettingsScreen(
   if (scaleDialog) {
     ChoiceDialog(
       title = stringResource(R.string.settings_scale),
-      options = SCALES.map { it to scaleLabel(it) },
+      options = FRACTIONAL_SCALES.map { it to scaleHalfLabel(it) },
       current = scale,
-      onPick = { scale = it; prefs.renderScale = it; scaleDialog = false },
+      onPick = { scale = it; prefs.renderScaleHalfSteps = it; scaleDialog = false },
       onDismiss = { scaleDialog = false },
     )
   }
@@ -536,8 +537,20 @@ private fun themeLabel(value: String) = when (value) {
   else -> R.string.settings_theme_system
 }
 
-/** The render scales: native, then 2x to 4x. */
+/** Whole-step legacy choices retained for older callers. */
 internal val SCALES = (1..8).toList()
+
+/** Half-step fixed-point choices: 1 = 0.5x, 2 = 1x, ... 16 = 8x. */
+internal val FRACTIONAL_SCALES = (1..16).toList()
+
+@Composable
+internal fun scaleHalfLabel(value: Int): String {
+  val safe = value.coerceIn(1, 16)
+  val width = (640 * safe + 1) / 2
+  val height = (480 * safe + 1) / 2
+  val multiplier = String.format(Locale.getDefault(), "%.1fx", safe / 2.0)
+  return "$multiplier · ${width}×${height}"
+}
 
 @Composable
 internal fun scaleLabel(value: Int): String {

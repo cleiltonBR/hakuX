@@ -36,8 +36,10 @@ bool nc_hle_pb_active(void);
 /* Before boot: the vkGetInstanceProcAddr of a custom Vulkan driver (Turnip
  * through adrenotools) for the HLE GPU, instead of the system driver's. */
 void nc_hle_set_vk_loader(void *gipa);
-/* Before boot: the HLE GPU's render scale (1-8x the title's resolution). */
+/* Before boot: the HLE GPU's legacy integer render scale (1-8x). */
 void nc_hle_set_render_scale(int scale);
+/* Before boot: fixed-point render scale in half-step units (1..16 = 0.5x..8x). */
+void nc_hle_set_render_scale2(int scale2);
 /* Before boot: the app's "Asynchronous shader compilation" and "Build cached
  * shaders before starting" settings (hw/xbox/hle/vk/pipeasync.h). */
 void nc_hle_set_pipeline_options(bool async, bool prebuild);

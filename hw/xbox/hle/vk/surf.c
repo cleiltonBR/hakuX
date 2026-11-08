@@ -82,6 +82,14 @@ static uint32_t surf_scale(const HleSurfDesc *d, VkImageAspectFlags aspect)
     return small ? 1 : g_hle_rscale;
 }
 
+static uint32_t surf_scale2(const HleSurfDesc *d, VkImageAspectFlags aspect)
+{
+    bool small = !d->role && !d->pitch && !d->parent && d->levels <= 1 && d->faces <= 1 &&
+                 (aspect & VK_IMAGE_ASPECT_COLOR_BIT) &&
+                 MAX(d->w, d->h) <= SURF_UNSCALED_MAX;
+    return small ? 2 : g_hle_rscale2;
+}
+
 static uint32_t sub_bit(const HleVkSurf *o, uint32_t level, uint32_t face)
 {
     uint32_t i = face * o->nlevels + level;
@@ -272,8 +280,11 @@ HleVkSurf *hle_surf_define(const HleSurfDesc *d)
             s->d = *d;
             s->fmt = surf_format(d->xfmt, &s->aspect, &s->texel_bytes);
             s->scale = surf_scale(d, s->aspect);
-            s->w = d->w * s->scale;
-            s->h = d->h * s->scale;
+            s->scale2 = surf_scale2(d, s->aspect);
+            /* Keep legacy extents until every coordinate/readback consumer
+             * has migrated to scale2. This metadata is not yet a live mode. */
+            s->w = hle_scale2_extent(d->w, s->scale2);
+            s->h = hle_scale2_extent(d->h, s->scale2);
             s->layout = VK_IMAGE_LAYOUT_UNDEFINED;
             s->general = d->parent || owner_kind(d);
             s->nlevels = s->nfaces = 1;
@@ -366,6 +377,10 @@ static bool ensure_view(HleVkSurf *s)
     s->img = o->img;
     s->owner_img = o->img;
     s->scale = o->scale;
+    s->scale2 = o->scale2;
+    /* Vulkan mip extents are derived from the allocated base image extent
+     * with integer right shifts (floor), not by independently rounding the
+     * guest mip dimensions. Keep view metadata identical to the real subresource. */
     s->w = MAX(o->w >> s->d.level, 1u);
     s->h = MAX(o->h >> s->d.level, 1u);
     s->fmt = o->fmt;
