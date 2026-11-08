@@ -757,10 +757,10 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     root.addView(resume)
     dialog = showMenuDialog(AlertDialog.Builder(this).setView(root).setCancelable(true))
     dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
-    dialog.window?.setLayout(
-      minOf(resources.displayMetrics.widthPixels - dp(32), dp(620)),
-      minOf(resources.displayMetrics.heightPixels - dp(48), dp(760))
-    )
+    val dialogWidth = minOf(resources.displayMetrics.widthPixels - dp(32), dp(620))
+    val contentHeight = dp(124 + entries.size * 78)
+    val dialogHeight = minOf(resources.displayMetrics.heightPixels - dp(48), dp(760), contentHeight)
+    dialog.window?.setLayout(dialogWidth, dialogHeight)
   }
 
   private fun dp(value: Int): Int =
