@@ -1,10 +1,14 @@
 package com.rfandango.haku_x.ui.settings
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
@@ -17,8 +21,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.rfandango.haku_x.BuildConfig
 import com.rfandango.haku_x.R
 import com.rfandango.haku_x.data.AppPrefs
@@ -101,6 +110,35 @@ fun GameSettingsScreen(gameKey: String, title: String, onBack: () -> Unit) {
     },
   ) { padding ->
     Column(Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState())) {
+      Column(
+        Modifier
+          .fillMaxWidth()
+          .padding(horizontal = 16.dp, vertical = 14.dp)
+          .clip(RoundedCornerShape(20.dp))
+          .background(Brush.linearGradient(listOf(Color(0xFF202A21), Color(0xFF101411), Color(0xFF080A08))))
+          .border(1.dp, Color(0xFF344A35), RoundedCornerShape(20.dp))
+          .padding(20.dp),
+      ) {
+        Text(
+          "PER-GAME PROFILE  /  HAKUX",
+          style = MaterialTheme.typography.labelSmall,
+          color = Color(0xFF8BD889),
+          letterSpacing = 1.1.sp,
+        )
+        Text(
+          title,
+          style = MaterialTheme.typography.headlineSmall,
+          color = Color.White,
+          modifier = Modifier.padding(top = 10.dp),
+          maxLines = 2,
+        )
+        Text(
+          "Configurações individuais deste jogo",
+          style = MaterialTheme.typography.bodySmall,
+          color = Color(0xFFBEC8BE),
+          modifier = Modifier.padding(top = 6.dp),
+        )
+      }
       Hint(stringResource(R.string.game_settings_desc))
       for ((section, items) in SECTIONS) {
         Section(stringResource(section))

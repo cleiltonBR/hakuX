@@ -7,6 +7,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.hardware.input.InputManager
 import android.net.Uri
 import android.net.wifi.WifiManager
@@ -26,6 +27,7 @@ import android.view.ViewGroup
 import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.RelativeLayout
 import android.widget.TextView
 import android.widget.Toast
@@ -743,30 +745,103 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
   private fun showMenu() {
     if (editorBar != null) return
     val shown = controlsShown ?: !hasGamepad()
-    /* savestates: push-buffer mode only (native/state) */
     val states = nativeStatesAvailable()
-    val items = mutableListOf<Pair<String, () -> Unit>>(
-      getString(R.string.overlay_menu_edit) to ::editControls,
-      getString(if (shown) R.string.overlay_menu_hide else R.string.overlay_menu_show) to {
+    val items = mutableListOf<Triple<String, String, () -> Unit>>(
+      Triple("CONTROLES", "Editar botões e layout touch", ::editControls),
+      Triple(if (shown) "OCULTAR CONTROLES" else "MOSTRAR CONTROLES", "Visibilidade dos comandos na tela", {
         controlsShown = !shown
         updateControllerVisibility()
-      },
-      getString(R.string.overlay_menu_controllers) to ::showPlayers,
-      "Gráficos (FSR / CAS)" to ::showRuntimeGraphics,
+      }),
+      Triple("JOGADORES", "Configurar controles conectados", ::showPlayers),
+      Triple("IMAGEM E GRÁFICOS", "FSR · CAS · filtros · resolução", ::showRuntimeGraphics),
     )
     if (states) {
-      items += getString(R.string.overlay_menu_save_state) to { saveStates.showSlots(save = true) }
-      items += getString(R.string.overlay_menu_load_state) to { saveStates.showSlots(save = false) }
+      items += Triple("SALVAR ESTADO", "Criar um ponto de retomada", { saveStates.showSlots(save = true) })
+      items += Triple("CARREGAR ESTADO", "Retomar um ponto salvo", { saveStates.showSlots(save = false) })
     }
     if (runCheats.isNotEmpty()) {
-      items += getString(R.string.overlay_menu_cheats) to ::showCheats
+      items += Triple("EXTRAS DO JOGO", "Códigos e modificações", ::showCheats)
     }
     val exit = if (launchedExternally) R.string.overlay_menu_exit_frontend else R.string.overlay_menu_exit
-    items += getString(exit) to ::exitGame
-    showMenuDialog(
+    items += Triple(getString(exit).uppercase(), "Fechar a sessão atual", ::exitGame)
+
+    val density = resources.displayMetrics.density
+    fun dp(value: Int) = (value * density).toInt()
+    val panel = LinearLayout(this).apply {
+      orientation = LinearLayout.VERTICAL
+      setPadding(dp(22), dp(22), dp(22), dp(18))
+      background = GradientDrawable().apply {
+        setColor(Color.rgb(13, 16, 14))
+        cornerRadius = dp(22).toFloat()
+        setStroke(dp(1), Color.rgb(55, 75, 57))
+      }
+    }
+    panel.addView(TextView(this).apply {
+      text = "hakuX"
+      textSize = 27f
+      setTypeface(typeface, Typeface.BOLD)
+      setTextColor(Color.WHITE)
+    })
+    panel.addView(TextView(this).apply {
+      text = "CENTRAL DE CONTROLE  /  XBOX SERIES X"
+      textSize = 10f
+      letterSpacing = 0.13f
+      setTextColor(Color.rgb(112, 205, 112))
+      setPadding(0, dp(3), 0, dp(18))
+    })
+    panel.addView(TextView(this).apply {
+      text = "JOGO EM PAUSA  •  " + if (hasGamepad()) "CONTROLE CONECTADO" else "CONTROLES TOUCH"
+      textSize = 11f
+      setTextColor(Color.rgb(190, 198, 190))
+      setPadding(dp(12), dp(10), dp(12), dp(10))
+      background = GradientDrawable().apply {
+        setColor(Color.rgb(26, 33, 27))
+        cornerRadius = dp(9).toFloat()
+      }
+    })
+    val grid = LinearLayout(this).apply {
+      orientation = LinearLayout.VERTICAL
+      setPadding(0, dp(14), 0, dp(8))
+    }
+    lateinit var menuDialog: AlertDialog
+    items.chunked(2).forEach { pair ->
+      val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+      pair.forEachIndexed { index, item ->
+        val tile = TextView(this).apply {
+          text = item.first + "\n" + item.second
+          textSize = 12f
+          setLineSpacing(dp(4).toFloat(), 1f)
+          setTextColor(Color.WHITE)
+          setPadding(dp(14), dp(15), dp(12), dp(15))
+          gravity = android.view.Gravity.CENTER_VERTICAL
+          isClickable = true
+          isFocusable = true
+          background = GradientDrawable().apply {
+            setColor(if (item.first == "IMAGEM E GRÁFICOS") Color.rgb(31, 57, 34) else Color.rgb(29, 34, 30))
+            cornerRadius = dp(13).toFloat()
+            setStroke(dp(1), if (item.first == "IMAGEM E GRÁFICOS") Color.rgb(83, 170, 83) else Color.rgb(54, 64, 56))
+          }
+          setOnClickListener {
+            menuDialog.dismiss()
+            item.third()
+          }
+        }
+        val params = LinearLayout.LayoutParams(0, dp(76), 1f).apply {
+          if (index == 0) marginEnd = dp(7) else marginStart = dp(7)
+          bottomMargin = dp(10)
+        }
+        row.addView(tile, params)
+      }
+      if (pair.size == 1) {
+        row.addView(View(this), LinearLayout.LayoutParams(0, dp(76), 1f).apply { marginStart = dp(7) })
+      }
+      grid.addView(row)
+    }
+    panel.addView(grid)
+    menuDialog = showMenuDialog(
       AlertDialog.Builder(this)
-        .setItems(items.map { it.first }.toTypedArray()) { _, which -> items[which].second() }
-        .setNegativeButton(R.string.overlay_menu_resume, null)
+        .setView(panel)
+        .setNegativeButton("RETOMAR JOGO", null)
     )
   }
 
@@ -791,7 +866,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
       "Intensidade CAS: ${"%.1f".format(java.util.Locale.US, prefs.casSharpness)}",
     )
     showMenuDialog(AlertDialog.Builder(this)
-      .setTitle("Gráficos durante a gameplay")
+      .setTitle("hakuX  •  Imagem e gráficos")
       .setItems(entries) { _, which ->
         when (which) {
           0 -> showMenuDialog(AlertDialog.Builder(this)
