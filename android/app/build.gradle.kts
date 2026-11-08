@@ -94,6 +94,12 @@ android {
         "proguard-debug.pro"
       )
     }
+    create("seriesXTest") {
+      initWith(getByName("debug"))
+      applicationIdSuffix = ".seriesx"
+      resValue("string", "app_name", "HakuX Series X Test")
+      matchingFallbacks += listOf("debug")
+    }
     release {
       resValue("string", "app_name", "hakuX")
       isMinifyEnabled = true
