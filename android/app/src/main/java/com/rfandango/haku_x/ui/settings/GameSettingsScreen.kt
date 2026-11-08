@@ -19,6 +19,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import com.rfandango.haku_x.BuildConfig
 import com.rfandango.haku_x.R
 import com.rfandango.haku_x.data.AppPrefs
@@ -101,6 +102,10 @@ fun GameSettingsScreen(gameKey: String, title: String, onBack: () -> Unit) {
     },
   ) { padding ->
     Column(Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState())) {
+      Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 8.dp)) {
+        Text("PER-GAME PROFILE", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+        Text(title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 4.dp))
+      }
       Hint(stringResource(R.string.game_settings_desc))
       for ((section, items) in SECTIONS) {
         Section(stringResource(section))
