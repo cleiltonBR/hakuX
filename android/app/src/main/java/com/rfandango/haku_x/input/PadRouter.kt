@@ -29,6 +29,7 @@ class PadRouter(
   private val context: Context,
   private val send: (player: Int, out: PadOut) -> Unit,
   private val rumbleOf: (player: Int) -> Int,
+  private val vibrationEnabled: () -> Boolean,
 ) {
   private var config = Controllers.load(context)
   private val states = HashMap<Int, PadState>()
@@ -112,6 +113,10 @@ class PadRouter(
    * so that several don't share it.
    */
   fun pollRumble() {
+    if (!vibrationEnabled()) {
+      if (rumble.isNotEmpty()) stopRumble()
+      return
+    }
     val now = SystemClock.uptimeMillis()
     var body = -1
     var bodyPlayer = Controllers.PLAYERS
@@ -141,7 +146,11 @@ class PadRouter(
   private fun hasMotors(d: InputDevice): Boolean = motors.getOrPut(d.id) {
     try {
       if (Build.VERSION.SDK_INT >= 31) {
-        d.vibratorManager.vibratorIds.isNotEmpty()
+        val managerHasMotors = runCatching { d.vibratorManager.vibratorIds.isNotEmpty() }.getOrDefault(false)
+        if (managerHasMotors) true else {
+          @Suppress("DEPRECATION")
+          d.vibrator.hasVibrator()
+        }
       } else {
         @Suppress("DEPRECATION")
         d.vibrator.hasVibrator()
@@ -204,6 +213,11 @@ class PadRouter(
       }
       val vm = d.vibratorManager
       val ids = vm.vibratorIds
+      if (ids.isEmpty()) {
+        @Suppress("DEPRECATION")
+        vibrateOne(d.vibrator, left, right)
+        return
+      }
       val c = CombinedVibration.startParallel()
       var any = false
       /* two motors: the left (heavy) and the right (light) as the Duke's */
