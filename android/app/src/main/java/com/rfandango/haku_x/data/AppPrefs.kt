@@ -80,6 +80,11 @@ class AppPrefs(context: Context) {
     get() = sp.getBoolean(KEY_AUTOMATIC_3D_COVERS, true)
     set(value) = sp.edit { putBoolean(KEY_AUTOMATIC_3D_COVERS, value) }
 
+  /** User-selected library layout: grid, list or carousel. */
+  var libraryViewMode: String
+    get() = sp.getString(KEY_LIBRARY_VIEW_MODE, "grid")?.takeIf { it in setOf("grid", "list", "carousel") } ?: "grid"
+    set(value) = sp.edit { putString(KEY_LIBRARY_VIEW_MODE, value.takeIf { it in setOf("grid", "list", "carousel") } ?: "grid") }
+
   /** Public user-selected source for custom Xbox cover artwork. */
   var custom3dCoverSource: String
     get() = sp.getString(KEY_CUSTOM_3D_COVER_SOURCE, "") ?: ""
@@ -299,6 +304,7 @@ class AppPrefs(context: Context) {
     private const val KEY_CONTROLLER_VIBRATION = "controller_vibration_enabled"
     private const val KEY_AUTOMATIC_3D_COVERS = "automatic_3d_covers"
     private const val KEY_CUSTOM_3D_COVER_SOURCE = "custom_3d_cover_source"
+    private const val KEY_LIBRARY_VIEW_MODE = "library_view_mode"
     private const val KEY_RENDER_SCALE_HALF = "render_scale_half"
     private const val KEY_CONSOLE_TIMING = "console_timing"
     private const val KEY_THEME = "app_theme"

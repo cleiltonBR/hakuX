@@ -56,6 +56,7 @@ data class LibraryState(
   val icons: Map<Uri, ImageBitmap> = emptyMap(),
   /** Downloaded original Xbox box-front artwork, cached locally, by game URI. */
   val covers: Map<Uri, ImageBitmap> = emptyMap(),
+  val viewMode: String = "grid",
   val coverDownloadMessage: String? = null,
   val coverDownloadRunning: Boolean = false,
   /** A conversion to XISO: asked, under way, or its outcome. */
@@ -130,7 +131,7 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
   val coverSource: String get() = prefs.custom3dCoverSource
   private var scanJob: Job? = null
 
-  private val _state = MutableStateFlow(LibraryState())
+  private val _state = MutableStateFlow(LibraryState(viewMode = prefs.libraryViewMode))
   val state: StateFlow<LibraryState> = _state.asStateFlow()
 
   init {
@@ -337,6 +338,12 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
   }
 
   fun setQuery(query: String) = _state.update { it.copy(query = query) }
+
+  fun setViewMode(mode: String) {
+    val safe = mode.takeIf { it in setOf("grid", "list", "carousel") } ?: "grid"
+    prefs.libraryViewMode = safe
+    _state.update { it.copy(viewMode = safe) }
+  }
 
   private fun sorted(games: List<Game>) = games.sortedBy { it.title.lowercase(Locale.ROOT) }
 

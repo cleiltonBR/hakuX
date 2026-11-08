@@ -24,6 +24,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -195,6 +197,25 @@ fun LibraryScreen(
           Icon(Icons.Filled.Settings, contentDescription = stringResource(R.string.settings_title))
         }
       }
+      Row(
+        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+      ) {
+        listOf("grid" to "GRADE", "list" to "LISTA", "carousel" to "CARROSSEL").forEach { (mode, label) ->
+          val selected = state.viewMode == mode
+          TextButton(
+            onClick = { vm.setViewMode(mode) },
+            modifier = Modifier.weight(1f).clip(RoundedCornerShape(10.dp))
+              .background(if (selected) Color(0xFF18351C) else Color.Transparent)
+              .border(1.dp, if (selected) Color(0xFF5EAA63) else MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp)),
+            contentPadding = PaddingValues(horizontal = 2.dp, vertical = 2.dp),
+          ) {
+            Text(label, style = MaterialTheme.typography.labelSmall, maxLines = 1,
+              color = if (selected) Color(0xFF9BE69A) else MaterialTheme.colorScheme.onSurfaceVariant)
+          }
+        }
+      }
       // The pull's indicator follows the refresh (under the loading dialog):
       // it only goes once isRefreshing has been true.
       PullToRefreshBox(
@@ -209,7 +230,7 @@ fun LibraryScreen(
             TextButton(onClick = onOpenSettings) { Text(stringResource(R.string.settings_games_folder_title)) }
           }
           games.isEmpty() -> Message(stringResource(R.string.library_empty_games))
-          else -> GameList(games, state.info, state.icons, state.covers, onLaunch, onGameSettings, onLoadState, onMods, vm::askConvert)
+          else -> GameList(games, state.info, state.icons, state.covers, state.viewMode, onLaunch, onGameSettings, onLoadState, onMods, vm::askConvert)
         }
       }
     }
@@ -351,28 +372,28 @@ private fun SeriesXGameCover(
 /** A console-style featured title, using the downloaded box art when available. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun FeaturedGameCard(game: Game, cover: ImageBitmap?, icon: ImageBitmap?, onLaunch: () -> Unit) {
+private fun FeaturedGameCard(game: Game, cover: ImageBitmap?, icon: ImageBitmap?, landscape: Boolean, onLaunch: () -> Unit) {
   val shape = RoundedCornerShape(22.dp)
   Row(
     Modifier
       .fillMaxWidth()
-      .height(172.dp)
+      .height(if (landscape) 126.dp else 172.dp)
       .clip(shape)
       .background(Brush.linearGradient(listOf(Color(0xFF202A21), Color(0xFF101411), Color(0xFF080A08))))
       .border(1.dp, Color(0xFF344A35), shape)
       .combinedClickable(onClick = onLaunch, onLongClick = onLaunch)
-      .padding(horizontal = 18.dp, vertical = 16.dp),
+      .padding(horizontal = 18.dp, vertical = if (landscape) 8.dp else 16.dp),
     verticalAlignment = Alignment.CenterVertically,
   ) {
     Column(Modifier.weight(1f)) {
       Text("HAKUX  /  XBOX SERIES X", style = MaterialTheme.typography.labelSmall, color = Color(0xFF8BD889))
-      Spacer(Modifier.height(10.dp))
+      Spacer(Modifier.height(if (landscape) 4.dp else 10.dp))
       Text(game.title, style = MaterialTheme.typography.headlineSmall, color = Color.White, maxLines = 2, overflow = TextOverflow.Ellipsis)
-      Spacer(Modifier.height(10.dp))
+      Spacer(Modifier.height(if (landscape) 4.dp else 10.dp))
       Text("INICIAR JOGO  ›", style = MaterialTheme.typography.labelLarge, color = Color(0xFF9BE69A))
     }
     Spacer(Modifier.width(12.dp))
-    SeriesXGameCover(game, cover, icon, Modifier.width(92.dp).height(136.dp))
+    SeriesXGameCover(game, cover, icon, Modifier.width(if (landscape) 72.dp else 92.dp).height(if (landscape) 104.dp else 136.dp))
   }
 }
 
@@ -393,140 +414,136 @@ private fun GameList(
   info: Map<Uri, DiscInfo>,
   icons: Map<Uri, ImageBitmap>,
   covers: Map<Uri, ImageBitmap>,
+  viewMode: String,
   onLaunch: (Game) -> Unit,
   onGameSettings: (Game, DiscInfo?) -> Unit,
   onLoadState: (Game, SaveStateStore, Int) -> Unit,
   onMods: (Game, DiscInfo) -> Unit,
   onConvert: (Game) -> Unit,
 ) {
-  // The game whose long-press menu is open.
   var menuFor by remember { mutableStateOf<Uri?>(null) }
-  // The game whose savestates are listed (the menu's Load state), with its store.
   var statesFor by remember { mutableStateOf<Pair<Game, SaveStateStore>?>(null) }
   val context = LocalContext.current
   val haptics = LocalHapticFeedback.current
-  // One column in portrait, two side by side in landscape.
   val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
   val colors = MaterialTheme.colorScheme
   val shape = remember { RoundedCornerShape(16.dp) }
-  val iconShape = ThumbnailShape
   val titleStyle = MaterialTheme.typography.titleMedium.copy(color = colors.onSurface)
   val idStyle = SMALL_PRINT.copy(fontFamily = FontFamily.Monospace, color = colors.onSurfaceVariant)
-  LazyVerticalGrid(
-    columns = GridCells.Fixed(if (landscape) 2 else 1),
-    modifier = Modifier.fillMaxSize(),
-    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp),
-    horizontalArrangement = Arrangement.spacedBy(10.dp),
-    verticalArrangement = Arrangement.spacedBy(10.dp),
-  ) {
-    item(span = { GridItemSpan(maxLineSpan) }) {
-      FeaturedGameCard(games.first(), covers[games.first().uri], icons[games.first().uri]) { onLaunch(games.first()) }
-    }
-    item(span = { GridItemSpan(maxLineSpan) }) {
-      Text("TODOS OS JOGOS", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-    items(games, key = { it.uri.toString() }) { game ->
-      val disc = info[game.uri]
-      var focused by remember { mutableStateOf(false) }
-      Box {
-        Row(
-          Modifier
-            .fillMaxWidth()
-            .clip(shape)
-            .background(colors.surfaceContainerLow)
-            .border(if (focused) 2.dp else 1.dp, if (focused) colors.primary else colors.outlineVariant, shape)
-            .onFocusChanged { focused = it.isFocused }
-            // a controller's Y, or its select (sent as Menu), opens the menu
-            .onKeyEvent { e ->
-              if (e.key != Key.ButtonY && e.key != Key.Menu) return@onKeyEvent false
-              if (e.type == KeyEventType.KeyUp) menuFor = game.uri
-              true
-            }
-            .combinedClickable(
-              onClick = { onLaunch(game) },
-              onLongClick = {
-                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                menuFor = game.uri
-              },
-            )
-            .padding(start = 12.dp, end = 14.dp, top = 12.dp, bottom = 12.dp),
-          verticalAlignment = Alignment.CenterVertically,
-        ) {
-          SeriesXGameCover(game, covers[game.uri], icons[game.uri], Modifier.width(82.dp).height(120.dp))
-          Column(Modifier.weight(1f).padding(start = 14.dp, end = 8.dp)) {
-            // Landscape's two columns are narrow: one line, cut to fit.
-            Text(
-              game.title,
-              style = titleStyle,
-              maxLines = if (landscape) 1 else Int.MAX_VALUE,
-              overflow = TextOverflow.Ellipsis,
-            )
-            if (disc != null && disc.titleId != 0L) {
-              IdLine(disc, idStyle)
-            }
-          }
+
+  @Composable
+  fun GameEntry(game: Game) {
+    val disc = info[game.uri]
+    var focused by remember { mutableStateOf(false) }
+    val cardWidth = if (landscape) 194.dp else 156.dp
+    val coverWidth = if (landscape) 146.dp else 116.dp
+    val coverHeight = if (landscape) 126.dp else 166.dp
+    val cardModifier = Modifier
+      .then(if (viewMode == "carousel") Modifier.width(cardWidth) else Modifier.fillMaxWidth())
+      .clip(shape)
+      .background(colors.surfaceContainerLow)
+      .border(if (focused) 2.dp else 1.dp, if (focused) colors.primary else colors.outlineVariant, shape)
+      .onFocusChanged { focused = it.isFocused }
+      .onKeyEvent { e ->
+        if (e.key != Key.ButtonY && e.key != Key.Menu) return@onKeyEvent false
+        if (e.type == KeyEventType.KeyUp) menuFor = game.uri
+        true
+      }
+      .combinedClickable(
+        onClick = { onLaunch(game) },
+        onLongClick = {
+          haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+          menuFor = game.uri
+        },
+      )
+    Box(cardModifier) {
+      if (viewMode == "grid" || viewMode == "carousel") {
+        Column(Modifier.padding(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+          SeriesXGameCover(game, covers[game.uri], icons[game.uri], Modifier.width(coverWidth).height(coverHeight))
+          Text(game.title, Modifier.fillMaxWidth().padding(top = 9.dp), style = titleStyle, maxLines = 2, overflow = TextOverflow.Ellipsis)
+          if (disc != null && disc.titleId != 0L) IdLine(disc, idStyle)
         }
-        if (menuFor == game.uri) {
-          // the key its settings use: its savestates' (SaveStateStore) and its mods' (mods/)
-          val key = remember(game.uri, disc) {
-            GameOverrides.gameKey(disc?.titleId ?: 0L, disc?.version ?: 0L, game.relativePath)
-          }
-          val store = remember(key) { SaveStateStore(context, key, game.uri.toString()) }
-          val hasStates = remember(store) { store.saved().isNotEmpty() }
-          DropdownMenu(expanded = true, onDismissRequest = { menuFor = null }) {
-            DropdownMenuItem(
-              text = { Text(stringResource(R.string.library_menu_settings)) },
-              leadingIcon = { Icon(Icons.Filled.Settings, contentDescription = null) },
-              modifier = Modifier.focusRequester(rememberFocusOnShow()),
-              onClick = {
-                menuFor = null
-                onGameSettings(game, disc)
-              },
-            )
-            if (hasStates) {
-              DropdownMenuItem(
-                text = { Text(stringResource(R.string.library_menu_load_state)) },
-                leadingIcon = { Icon(Icons.Filled.PlayArrow, contentDescription = null) },
-                onClick = {
-                  menuFor = null
-                  statesFor = game to store
-                },
-              )
-            }
-            if (disc != null && disc.titleId != 0L) {
-              DropdownMenuItem(
-                text = { Text(if (ModCatalog.has(context, key)) "Mods e patches / atualizar catálogo" else "Baixar mods e patches") },
-                leadingIcon = { Icon(Icons.Filled.Star, contentDescription = null) },
-                onClick = {
-                  menuFor = null
-                  onMods(game, disc)
-                },
-              )
-            }
-            // A full dump (the video partition first) can become an XISO.
-            if (disc?.isFullDump == true) {
-              DropdownMenuItem(
-                text = { Text(stringResource(R.string.library_menu_convert)) },
-                leadingIcon = { Icon(Icons.Filled.Build, contentDescription = null) },
-                onClick = {
-                  menuFor = null
-                  onConvert(game)
-                },
-              )
-            }
+      } else {
+        Row(Modifier.padding(horizontal = 12.dp, vertical = if (landscape) 8.dp else 12.dp), verticalAlignment = Alignment.CenterVertically) {
+          SeriesXGameCover(game, covers[game.uri], icons[game.uri], Modifier.width(if (landscape) 70.dp else 82.dp).height(if (landscape) 100.dp else 120.dp))
+          Column(Modifier.weight(1f).padding(start = 14.dp, end = 8.dp)) {
+            Text(game.title, style = titleStyle, maxLines = if (landscape) 1 else 3, overflow = TextOverflow.Ellipsis)
+            if (disc != null && disc.titleId != 0L) IdLine(disc, idStyle)
           }
         }
       }
+      if (menuFor == game.uri) {
+        val key = remember(game.uri, disc) { GameOverrides.gameKey(disc?.titleId ?: 0L, disc?.version ?: 0L, game.relativePath) }
+        val store = remember(key) { SaveStateStore(context, key, game.uri.toString()) }
+        val hasStates = remember(store) { store.saved().isNotEmpty() }
+        DropdownMenu(expanded = true, onDismissRequest = { menuFor = null }) {
+          DropdownMenuItem(
+            text = { Text(stringResource(R.string.library_menu_settings)) },
+            leadingIcon = { Icon(Icons.Filled.Settings, contentDescription = null) },
+            modifier = Modifier.focusRequester(rememberFocusOnShow()),
+            onClick = { menuFor = null; onGameSettings(game, disc) },
+          )
+          if (hasStates) DropdownMenuItem(
+            text = { Text(stringResource(R.string.library_menu_load_state)) },
+            leadingIcon = { Icon(Icons.Filled.PlayArrow, contentDescription = null) },
+            onClick = { menuFor = null; statesFor = game to store },
+          )
+          if (disc != null && disc.titleId != 0L) DropdownMenuItem(
+            text = { Text(if (ModCatalog.has(context, key)) "Mods e patches / atualizar catálogo" else "Baixar mods e patches") },
+            leadingIcon = { Icon(Icons.Filled.Star, contentDescription = null) },
+            onClick = { menuFor = null; onMods(game, disc) },
+          )
+          if (disc?.isFullDump == true) DropdownMenuItem(
+            text = { Text(stringResource(R.string.library_menu_convert)) },
+            leadingIcon = { Icon(Icons.Filled.Build, contentDescription = null) },
+            onClick = { menuFor = null; onConvert(game) },
+          )
+        }
+      }
+    }
+  }
+
+  when (viewMode) {
+    "carousel" -> Column(Modifier.fillMaxSize()) {
+      FeaturedGameCard(games.first(), covers[games.first().uri], icons[games.first().uri], landscape) { onLaunch(games.first()) }
+      Text("DESLIZE PARA EXPLORAR", Modifier.padding(start = 16.dp, top = 12.dp, bottom = 8.dp), style = MaterialTheme.typography.labelLarge, color = colors.onSurfaceVariant)
+      LazyRow(
+        modifier = Modifier.fillMaxWidth().weight(1f),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+      ) { items(games, key = { it.uri.toString() }) { GameEntry(it) } }
+    }
+    "list" -> LazyColumn(
+      modifier = Modifier.fillMaxSize(),
+      contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp),
+      verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+      item { FeaturedGameCard(games.first(), covers[games.first().uri], icons[games.first().uri], landscape) { onLaunch(games.first()) } }
+      item { Text("TODOS OS JOGOS", style = MaterialTheme.typography.labelLarge, color = colors.onSurfaceVariant) }
+      items(games, key = { it.uri.toString() }) { GameEntry(it) }
+    }
+    else -> LazyVerticalGrid(
+      columns = GridCells.Adaptive(minSize = if (landscape) 190.dp else 148.dp),
+      modifier = Modifier.fillMaxSize(),
+      contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp),
+      horizontalArrangement = Arrangement.spacedBy(10.dp),
+      verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+      item(span = { GridItemSpan(maxLineSpan) }) {
+        FeaturedGameCard(games.first(), covers[games.first().uri], icons[games.first().uri], landscape) { onLaunch(games.first()) }
+      }
+      item(span = { GridItemSpan(maxLineSpan) }) {
+        Text("TODOS OS JOGOS", style = MaterialTheme.typography.labelLarge, color = colors.onSurfaceVariant)
+      }
+      items(games, key = { it.uri.toString() }) { GameEntry(it) }
     }
   }
   statesFor?.let { (game, store) ->
     LoadStatesDialog(
       title = game.title,
       store = store,
-      onLoad = { slot ->
-        statesFor = null
-        onLoadState(game, store, slot)
-      },
+      onLoad = { slot -> statesFor = null; onLoadState(game, store, slot) },
       onDismiss = { statesFor = null },
     )
   }
