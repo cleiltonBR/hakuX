@@ -451,7 +451,7 @@ private fun GameList(
           ) {
             Icon(
               Icons.Filled.PlayArrow,
-              contentDescription = stringResource(R.string.library_launch),
+              contentDescription = null,
               tint = Color.White,
             )
           }
