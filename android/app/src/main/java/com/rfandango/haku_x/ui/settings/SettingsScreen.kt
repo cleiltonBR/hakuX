@@ -9,10 +9,14 @@ import android.text.format.DateUtils
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -29,8 +33,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.rfandango.haku_x.BuildConfig
 import com.rfandango.haku_x.GpuDriverHelper
 import com.rfandango.haku_x.NativeCoreActivity
@@ -148,6 +157,18 @@ fun SettingsScreen(
   }
   SubScreen(title = stringResource(R.string.settings_title), onBack = onBack, snackbar = snackbar) { padding ->
     Column(Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState())) {
+      Column(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp)
+          .clip(RoundedCornerShape(20.dp))
+          .background(Brush.linearGradient(listOf(Color(0xFF202A21), Color(0xFF101411), Color(0xFF080A08))))
+          .border(1.dp, Color(0xFF344A35), RoundedCornerShape(20.dp))
+          .padding(20.dp),
+      ) {
+        Text("HAKUX  /  XBOX SERIES X", style = MaterialTheme.typography.labelSmall, color = Color(0xFF8BD889), letterSpacing = 1.1.sp)
+        Text("Configurações do console", style = MaterialTheme.typography.headlineSmall, color = Color.White, modifier = Modifier.padding(top = 10.dp))
+        Text("Controles, vídeo, gráficos e sistema em um só lugar.", style = MaterialTheme.typography.bodySmall, color = Color(0xFFBEC8BE), modifier = Modifier.padding(top = 6.dp))
+      }
+
       Section(stringResource(R.string.settings_section_games))
       for (f in folders) {
         ListItem(
