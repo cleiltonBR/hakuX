@@ -347,6 +347,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
       else -> "started"
     })
     super.onCreate(savedInstanceState)
+    nativeSetHdr(AppPrefs(this).hdrEnabled)
     if (AppPrefs(this).networkMode == AppPrefs.NET_LAN) {
       multicastLock = Network.multicastLock(this)
     }
