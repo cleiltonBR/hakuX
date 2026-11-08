@@ -430,7 +430,7 @@ private fun GameList(
           verticalAlignment = Alignment.CenterVertically,
         ) {
           TitleIcon(game, icons[game.uri], iconShape, colors.surfaceVariant, colors.onSurfaceVariant)
-          Column(Modifier.weight(1f).padding(start = 12.dp, end = 8.dp)) {
+          Column(Modifier.weight(1f).padding(start = 14.dp, end = 8.dp)) {
             // Landscape's two columns are narrow: one line, cut to fit.
             Text(
               game.title,
@@ -441,6 +441,19 @@ private fun GameList(
             if (disc != null && disc.titleId != 0L) {
               IdLine(disc, idStyle)
             }
+          }
+          Box(
+            Modifier
+              .size(36.dp)
+              .clip(RoundedCornerShape(18.dp))
+              .background(colors.primary),
+            contentAlignment = Alignment.Center,
+          ) {
+            Icon(
+              Icons.Filled.PlayArrow,
+              contentDescription = stringResource(R.string.library_launch),
+              tint = Color.White,
+            )
           }
         }
         if (menuFor == game.uri) {
@@ -625,7 +638,7 @@ private val REGIONS = listOf(
 private fun TitleIcon(game: Game, icon: ImageBitmap?, shape: Shape, background: Color, initialColor: Color) {
   Box(
     Modifier
-      .size(48.dp)
+      .size(68.dp)
       .clip(shape)
       .background(background),
     contentAlignment = Alignment.Center,
