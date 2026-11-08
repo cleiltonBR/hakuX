@@ -68,7 +68,6 @@ typedef struct PsFrame {
 static struct {
     struct VolkDeviceTable t;
     bool inited, failed;
-    bool hdr_active;             /* the current swapchain is HDR10, not merely requested */
     VkSemaphore tl;             /* timeline: each submit's value */
     uint64_t submitted;
     VkSampler smp;
@@ -140,11 +139,6 @@ static struct {
 
 /* Read by the Android debug overlay; each field is independently atomic. */
 static int g_nis_status[14];
-static bool g_hdr_requested;
-void hle_present_set_hdr(bool enabled)
-{
-    __atomic_store_n(&g_hdr_requested, enabled, __ATOMIC_RELAXED);
-}
 static void nis_status(int index, int value)
 {
     __atomic_store_n(&g_nis_status[index], value, __ATOMIC_RELAXED);
@@ -184,16 +178,7 @@ static const char k_fs_head[] =
     "}\n"
     "vec4 ramp(vec3 c) {\n"
     "  uvec3 v = uvec3(clamp(c, 0.0, 1.0) * 255.0 + 0.5);\n"
-    "  vec3 rgb = vec3(float(lut(v.r)), float(lut(256u + v.g)), float(lut(512u + v.b))) / 255.0;\n"
-    "  if (pc.extra.w > 0.5) {\n"
-    "    rgb = mix(rgb / 12.92, pow((rgb + 0.055) / 1.055, vec3(2.4)), step(vec3(0.04045), rgb));\n"
-    "    rgb *= 203.0; /* SDR reference white, nits */\n"
-    "    const float m1 = 0.1593017578125, m2 = 78.84375;\n"
-    "    const float c1 = 0.8359375, c2 = 18.8515625, c3 = 18.6875;\n"
-    "    vec3 p = pow(clamp(rgb / 10000.0, 0.0, 1.0), vec3(m1));\n"
-    "    rgb = pow((c1 + c2 * p) / (1.0 + c3 * p), vec3(m2));\n"
-    "  }\n"
-    "  return vec4(rgb, 1.0);\n"
+    "  return vec4(float(lut(v.r)), float(lut(256u + v.g)), float(lut(512u + v.b)), 255.0) / 255.0;\n"
     "}\n";
 static const char k_fs_bilinear[] =
     "void main() {\n"
@@ -961,36 +946,19 @@ static bool make_swapchain(uint32_t w, uint32_t h)
     VkSurfaceFormatKHR fmts[32];
     uint32_t nf = 32;
     vkGetPhysicalDeviceSurfaceFormatsKHR(g_hvk.phys, g_ps.surf, &nf, fmts);
-    /* Prefer HDR10 only when explicitly requested and the Android Vulkan
-     * surface advertises the exact 10-bit/PQ pair. Otherwise keep SDR. */
-    const bool want_hdr = __atomic_load_n(&g_hdr_requested, __ATOMIC_RELAXED);
-    VkSurfaceFormatKHR fmt = nf ? fmts[0] : (VkSurfaceFormatKHR){ VK_FORMAT_R8G8B8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR };
-    bool hdr_found = false;
-#ifdef VK_EXT_swapchain_colorspace
-    if (want_hdr) {
+    /* plain 8-bit UNORM: the frame's values go out as they are (an sRGB
+     * format would encode them again) */
+    VkSurfaceFormatKHR fmt = nf ? fmts[0] : (VkSurfaceFormatKHR){ VK_FORMAT_R8G8B8A8_UNORM, 0 };
+    for (int pass = 0; pass < 2; pass++) {
+        const VkFormat want = pass ? VK_FORMAT_B8G8R8A8_UNORM : VK_FORMAT_R8G8B8A8_UNORM;
         for (uint32_t i = 0; i < nf; i++) {
-            if (fmts[i].format == VK_FORMAT_A2B10G10R10_UNORM_PACK32 &&
-                fmts[i].colorSpace == VK_COLOR_SPACE_HDR10_ST2084_EXT) {
+            if (fmts[i].format == want && fmts[i].colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
                 fmt = fmts[i];
-                hdr_found = true;
+                pass = 2;
                 break;
             }
         }
     }
-#endif
-    if (!hdr_found) {
-        for (int pass = 0; pass < 2; pass++) {
-            const VkFormat want = pass ? VK_FORMAT_B8G8R8A8_UNORM : VK_FORMAT_R8G8B8A8_UNORM;
-            for (uint32_t i = 0; i < nf; i++) {
-                if (fmts[i].format == want && fmts[i].colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
-                    fmt = fmts[i];
-                    pass = 2;
-                    break;
-                }
-            }
-        }
-    }
-    g_ps.hdr_active = hdr_found;
     /* Android may make more images than asked for (10 for 6 on a Dimensity
      * 8300), so the arrays are sized from what the swapchain reports. */
     uint32_t n = MAX(caps.minImageCount, 3u);
@@ -1750,7 +1718,6 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
             pc[6] = (float)g_ps.f.w;
             pc[7] = (float)g_ps.f.h;
         }
-        pc[7] = g_ps.hdr_active ? 1.0f : 0.0f; /* HDR conversion after the display gamma ramp */
         quad(cb, f, 0, g_ps.pipe[p], src, pc, iw, ih);
         const bool fsr_rcas = use_fsr && cas && g_ps.pipe[P_RCAS] && p == P_RCAS;
         nis_status(8, nis_done ? (nis_sharpen_only ? 4 : 3) :
