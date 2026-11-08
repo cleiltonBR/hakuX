@@ -45,7 +45,11 @@ object XboxCoverCache {
       Log.w(TAG, "Could not resolve Title ID $id", e)
       return null
     }
-    if (xmids.isEmpty()) return null
+    if (xmids.isEmpty()) {
+      val communityCover = loadX1Cover(context, gameTitle, dir, id)
+      if (communityCover != null) return communityCover
+      return null
+    }
 
     val temp = File(dir, "$id.tmp")
     for (xmid in xmids) {
@@ -66,6 +70,56 @@ object XboxCoverCache {
     }
     temp.delete()
     Log.i(TAG, "No cover scan or thumbnail available for Title ID $id (XMIDs: ${xmids.joinToString()})")
+    return null
+  }
+
+  /**
+   * Fallback to the X1_Covers community collection. Its files are named
+   * "Game Title (Region).png"; the directory listing is cached locally so
+   * the GitHub API is not queried once per game on every library refresh.
+   */
+  private fun loadX1Cover(context: Context, gameTitle: String, cacheDir: File, titleId: String): Bitmap? {
+    if (gameTitle.isBlank()) return null
+    val index = File(cacheDir, "x1_covers_index.json")
+    val api = "https://api.github.com/repos/izzy2lost/X1_Covers/contents"
+    val entries = try {
+      val json = if (index.isFile && System.currentTimeMillis() - index.lastModified() < 24L * 60 * 60 * 1000) {
+        index.readText()
+      } else {
+        val connection = (URL(api).openConnection() as HttpURLConnection).apply {
+          connectTimeout = 10000
+          readTimeout = 20000
+          setRequestProperty("Accept", "application/vnd.github+json")
+          setRequestProperty("User-Agent", "hakuX-Android/1.0")
+        }
+        try {
+          if (connection.responseCode !in 200..299) return null
+          connection.inputStream.bufferedReader().use { it.readText() }.also { index.writeText(it) }
+        } finally { connection.disconnect() }
+      }
+      JSONArray(json)
+    } catch (e: Exception) {
+      Log.w(TAG, "Could not load X1_Covers index", e)
+      return null
+    }
+    fun key(value: String) = value.lowercase(Locale.ROOT)
+      .replace(Regex("\\s*\\([^)]*\\)\\s*$"), "")
+      .replace(Regex("[^a-z0-9]+"), "")
+    val wanted = key(gameTitle)
+    if (wanted.isBlank()) return null
+    val candidates = (0 until entries.length()).mapNotNull { i ->
+      val row = entries.optJSONObject(i) ?: return@mapNotNull null
+      val name = row.optString("name")
+      if (!name.lowercase(Locale.ROOT).endsWith(".png")) return@mapNotNull null
+      val actual = key(name.substringBeforeLast('.'))
+      if (actual == wanted || actual.startsWith(wanted) || wanted.startsWith(actual)) row.optString("download_url").takeIf { it.startsWith("https://") } else null
+    }.distinct()
+    for (imageUrl in candidates) {
+      val file = File(cacheDir, "$titleId.x1.png")
+      val bitmap = downloadBitmap(imageUrl, file) ?: continue
+      Log.i(TAG, "Loaded X1_Covers artwork for Title ID $titleId")
+      return bitmap
+    }
     return null
   }
 
