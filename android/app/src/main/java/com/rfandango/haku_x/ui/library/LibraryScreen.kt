@@ -532,15 +532,24 @@ private fun GameList(
   }
 
   when (viewMode) {
-    "carousel" -> Column(Modifier.fillMaxSize()) {
-      FeaturedGameCard(games.first(), covers[games.first().uri], icons[games.first().uri], landscape) { onLaunch(games.first()) }
-      Text("DESLIZE PARA EXPLORAR", Modifier.padding(start = 16.dp, top = 12.dp, bottom = 8.dp), style = MaterialTheme.typography.labelLarge, color = colors.onSurfaceVariant)
-      LazyRow(
-        modifier = Modifier.fillMaxWidth().weight(1f),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-      ) { items(games, key = { it.uri.toString() }) { GameEntry(it) } }
+    "carousel" -> Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
+      Text("XBOX GAME LIBRARY  /  3D COVER FLOW", Modifier.padding(top = 12.dp, bottom = 10.dp), style = MaterialTheme.typography.labelLarge, color = Color(0xFF9BE69A))
+      BoxWithConstraints(Modifier.fillMaxWidth().weight(1f)) {
+        val side = ((maxWidth - 204.dp) / 2).coerceAtLeast(12.dp)
+        LazyRow(
+          state = carouselState,
+          flingBehavior = rememberSnapFlingBehavior(carouselState),
+          modifier = Modifier.fillMaxSize(),
+          contentPadding = PaddingValues(horizontal = side, vertical = 12.dp),
+          horizontalArrangement = Arrangement.spacedBy(18.dp),
+          verticalAlignment = Alignment.CenterVertically,
+        ) { itemsIndexed(games, key = { _, game -> game.uri.toString() }) { index, game -> GameEntry(game, index) } }
+      }
+      val selectedGame = games.getOrNull(carouselIndex.coerceIn(games.indices))
+      selectedGame?.let { selected ->
+        Text(selected.title, style = MaterialTheme.typography.titleLarge, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
+        Text("DESLIZE PARA EXPLORAR  •  TOQUE PARA INICIAR  •  SEGURE PARA OPÇÕES", style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant, modifier = Modifier.padding(bottom = 14.dp))
+      }
     }
     "list" -> LazyColumn(
       modifier = Modifier.fillMaxSize(),
