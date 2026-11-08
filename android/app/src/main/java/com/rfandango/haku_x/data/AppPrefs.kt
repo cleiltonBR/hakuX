@@ -80,6 +80,11 @@ class AppPrefs(context: Context) {
     get() = sp.getBoolean(KEY_AUTOMATIC_3D_COVERS, true)
     set(value) = sp.edit { putBoolean(KEY_AUTOMATIC_3D_COVERS, value) }
 
+  /** Public user-selected source for custom Xbox cover artwork. */
+  var custom3dCoverSource: String
+    get() = sp.getString(KEY_CUSTOM_3D_COVER_SOURCE, "") ?: ""
+    set(value) = sp.edit { putString(KEY_CUSTOM_3D_COVER_SOURCE, value.trim()) }
+
   /** The library's note recommending a Turnip driver was shown (once: GpuDriverHelper.turnipRecommended). */
   var turnipNoteShown: Boolean
     get() = sp.getBoolean(KEY_TURNIP_NOTE, false)
@@ -293,6 +298,7 @@ class AppPrefs(context: Context) {
     private const val KEY_SHOW_FPS = "show_fps"
     private const val KEY_CONTROLLER_VIBRATION = "controller_vibration_enabled"
     private const val KEY_AUTOMATIC_3D_COVERS = "automatic_3d_covers"
+    private const val KEY_CUSTOM_3D_COVER_SOURCE = "custom_3d_cover_source"
     private const val KEY_RENDER_SCALE_HALF = "render_scale_half"
     private const val KEY_CONSOLE_TIMING = "console_timing"
     private const val KEY_THEME = "app_theme"

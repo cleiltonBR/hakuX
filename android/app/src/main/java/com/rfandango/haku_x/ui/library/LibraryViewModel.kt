@@ -56,6 +56,8 @@ data class LibraryState(
   val icons: Map<Uri, ImageBitmap> = emptyMap(),
   /** Downloaded original Xbox box-front artwork, cached locally, by game URI. */
   val covers: Map<Uri, ImageBitmap> = emptyMap(),
+  val coverDownloadMessage: String? = null,
+  val coverDownloadRunning: Boolean = false,
   /** A conversion to XISO: asked, under way, or its outcome. */
   val conversion: Conversion? = null,
   /** The dashboard is on the hard disk's C: (Dashboard): its button starts it, else installs it. */
@@ -125,6 +127,7 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
   private val prefs = AppPrefs(app)
   private val discInfo = DiscInfoCache(app)
   private val hddRoot = HddStore(app).root
+  val coverSource: String get() = prefs.custom3dCoverSource
   private var scanJob: Job? = null
 
   private val _state = MutableStateFlow(LibraryState())
@@ -166,6 +169,35 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
           ),
         )
       }
+    }
+  }
+
+  fun saveCoverSource(source: String) { prefs.custom3dCoverSource = source }
+
+  fun downloadCustomCovers(source: String) {
+    val url = source.trim()
+    if (url.isBlank()) {
+      _state.update { it.copy(coverDownloadMessage = "Informe um link para continuar.") }
+      return
+    }
+    if (_state.value.coverDownloadRunning) return
+    prefs.custom3dCoverSource = url
+    _state.update { it.copy(coverDownloadRunning = true, coverDownloadMessage = "Preparando download…") }
+    val app = getApplication<Application>()
+    viewModelScope.launch {
+      val result = withContext(Dispatchers.IO) {
+        runCatching { com.rfandango.haku_x.data.CustomCoverSource.download(app, url) }
+      }
+      _state.update {
+        it.copy(
+          coverDownloadRunning = false,
+          coverDownloadMessage = result.fold(
+            { count -> if (count > 0) "$count capa(s) importada(s). Atualizando a biblioteca…" else "Nenhuma imagem compatível foi encontrada." },
+            { error -> error.message ?: "Falha ao baixar capas." },
+          ),
+        )
+      }
+      if (result.isSuccess && (result.getOrNull() ?: 0) > 0) refresh()
     }
   }
 
@@ -230,7 +262,7 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
         for ((uri, disc) in info) {
           if (!currentCoroutineContext().isActive) break
           if (disc.titleId == 0L) continue
-          val bitmap = withContext(Dispatchers.IO) { XboxCoverCache.load(app, disc.titleId) } ?: continue
+          val bitmap = withContext(Dispatchers.IO) { XboxCoverCache.load(app, disc.titleId, (info[uri]?.title ?: games.firstOrNull { it.uri == uri }?.title).orEmpty()) } ?: continue
           bitmap.prepareToDraw()
           covers[uri] = bitmap.asImageBitmap()
           _state.update { current -> current.copy(covers = covers.toMap()) }

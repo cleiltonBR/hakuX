@@ -23,7 +23,8 @@ object XboxCoverCache {
   private const val RAW = "https://raw.githubusercontent.com/MobCat/MobCats-original-xbox-game-list/main"
 
   /** Blocking; callers must use Dispatchers.IO. */
-  fun load(context: Context, titleId: Long): Bitmap? {
+  fun load(context: Context, titleId: Long, gameTitle: String = ""): Bitmap? {
+    if (gameTitle.isNotBlank()) CustomCoverSource.load(context, gameTitle)?.let { return it }
     if (titleId == 0L) return null
     val id = String.format(Locale.ROOT, "%08X", titleId)
     val dir = File(context.applicationContext.filesDir, "xbox_cover_cache")

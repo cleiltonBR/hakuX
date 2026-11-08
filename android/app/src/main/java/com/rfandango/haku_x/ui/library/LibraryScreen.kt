@@ -48,6 +48,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -140,6 +141,8 @@ fun LibraryScreen(
   val update by Updates.available.collectAsStateWithLifecycle()
   var updateDialog by remember { mutableStateOf(false) }
   var dashboardAsk by remember { mutableStateOf(false) }
+  var coverSourceDialog by remember { mutableStateOf(false) }
+  var coverSourceText by remember { mutableStateOf(vm.coverSource) }
   val pickDashboard = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
     if (uri != null) vm.installDashboard(uri)
   }
@@ -171,6 +174,9 @@ fun LibraryScreen(
           Icon(Icons.Filled.Home, contentDescription = stringResource(R.string.library_dashboard))
         }
         SearchField(state.query, vm::setQuery, Modifier.weight(1f))
+        IconButton(onClick = { coverSourceText = vm.coverSource; coverSourceDialog = true }, modifier = Modifier.padding(start = 2.dp)) {
+          Icon(Icons.Filled.Star, contentDescription = "Capas 3D")
+        }
         // a newer release found by a check: its notes and download
         if (update != null) {
           IconButton(onClick = { updateDialog = true }, modifier = Modifier.padding(start = 4.dp)) {
@@ -217,6 +223,22 @@ fun LibraryScreen(
   }
   if (updateDialog) {
     update?.let { UpdateDialog(it, onDismiss = { updateDialog = false }) }
+  }
+  if (coverSourceDialog) {
+    AlertDialog(
+      onDismissRequest = { if (!state.coverDownloadRunning) coverSourceDialog = false },
+      title = { Text("CAPAS 3D PERSONALIZADAS") },
+      text = {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+          Text("Cole um link direto (ZIP, PNG, JPG ou manifesto JSON) ou uma página pública que disponibilize os arquivos.")
+          OutlinedTextField(value = coverSourceText, onValueChange = { coverSourceText = it }, modifier = Modifier.fillMaxWidth(), minLines = 2, maxLines = 4, label = { Text("Link da fonte") }, placeholder = { Text("https://...") })
+          state.coverDownloadMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+          Text("Páginas que exigem login, assinatura ou CAPTCHA precisam de um link autorizado. O HakuX não contorna essas proteções.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+      },
+      confirmButton = { TextButton(enabled = !state.coverDownloadRunning && coverSourceText.isNotBlank(), onClick = { vm.downloadCustomCovers(coverSourceText) }) { Text(if (state.coverDownloadRunning) "BAIXANDO..." else "SALVAR E BAIXAR") } },
+      dismissButton = { TextButton(enabled = !state.coverDownloadRunning, onClick = { vm.saveCoverSource(coverSourceText); coverSourceDialog = false }) { Text("SALVAR LINK") } },
+    )
   }
   if (dashboardAsk) {
     ConfirmDialog(
