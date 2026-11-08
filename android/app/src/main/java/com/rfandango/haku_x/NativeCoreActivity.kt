@@ -425,7 +425,18 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
       menuDialogs--
       syncPause()
     }
-    return b.show()
+    val dialog = b.show()
+    dialog.window?.setBackgroundDrawable(GradientDrawable().apply {
+      setColor(Color.rgb(15, 18, 16))
+      cornerRadius = dp(18).toFloat()
+      setStroke(dp(1), Color.rgb(54, 75, 59))
+    })
+    dialog.findViewById<TextView>(android.R.id.alertTitle)?.setTextColor(Color.WHITE)
+    dialog.findViewById<TextView>(android.R.id.message)?.setTextColor(Color.rgb(190, 200, 192))
+    dialog.listView?.setBackgroundColor(Color.rgb(15, 18, 16))
+    listOf(AlertDialog.BUTTON_POSITIVE, AlertDialog.BUTTON_NEGATIVE, AlertDialog.BUTTON_NEUTRAL)
+      .forEach { which -> dialog.getButton(which)?.setTextColor(Color.rgb(120, 220, 130)) }
+    return dialog
   }
 
   /** Savestates (push-buffer mode): the menu's Save state and Load state. */
@@ -944,30 +955,29 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
       Toast.makeText(this, "Este jogo não possui Title ID para localizar patches compatíveis.", Toast.LENGTH_LONG).show()
       return
     }
-    val dialog = AlertDialog.Builder(this)
-      .setTitle("Mods e patches")
-      .setMessage("Baixar ou atualizar o catálogo deste jogo? Os patches serão aplicados na próxima inicialização.")
-      .setNegativeButton("Cancelar", null)
-      .setPositiveButton("Baixar", null)
-      .create()
-    dialog.setOnShowListener {
-      val downloadButton = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
-      downloadButton.setOnClickListener {
-        downloadButton.isEnabled = false
-        downloadButton.text = "Baixando..."
-        Thread {
-          val ok = ModCatalog.download(this, key)
-          runOnUiThread {
-            dialog.dismiss()
-            Toast.makeText(
-              this,
-              if (ok) "Download concluído. Reinicie o jogo para aplicar os patches."
-              else "Não há conteúdo para esta versão ou o download falhou.",
-              Toast.LENGTH_LONG,
-            ).show()
-          }
-        }.start()
-      }
+    val dialog = showMenuDialog(
+      AlertDialog.Builder(this)
+        .setTitle("Mods e patches")
+        .setMessage("Baixar ou atualizar o catálogo deste jogo? Os patches serão aplicados na próxima inicialização.")
+        .setNegativeButton("Cancelar", null)
+        .setPositiveButton("Baixar", null)
+    )
+    val downloadButton = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+    downloadButton.setOnClickListener {
+      downloadButton.isEnabled = false
+      downloadButton.text = "Baixando..."
+      Thread {
+        val ok = ModCatalog.download(this, key)
+        runOnUiThread {
+          dialog.dismiss()
+          Toast.makeText(
+            this,
+            if (ok) "Download concluído. Reinicie o jogo para aplicar os patches."
+            else "Não há conteúdo para esta versão ou o download falhou.",
+            Toast.LENGTH_LONG,
+          ).show()
+        }
+      }.start()
     }
     dialog.show()
   }
