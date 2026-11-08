@@ -38,29 +38,33 @@ object XboxCoverCache {
     // unsupported API response shape and could poison this cache forever.
     File(dir, "$id.missing").delete()
 
-    val xmid = try {
-      resolveXmids(id).firstOrNull()
+    val xmids = try {
+      resolveXmids(id)
     } catch (e: Exception) {
       Log.w(TAG, "Could not resolve Title ID $id", e)
       return null
-    } ?: return null
-
-    val publisher = xmid.take(2)
-    val candidates = listOf(
-      "$RAW/cover/$publisher/$xmid.jpg",
-      "$RAW/thumbnail/$publisher/$xmid.jpg",
-    )
-    for (imageUrl in candidates) {
-      val bitmap = downloadBitmap(imageUrl, File(dir, "$id.tmp")) ?: continue
-      val temp = File(dir, "$id.tmp")
-      if (!temp.renameTo(cached)) {
-        temp.copyTo(cached, overwrite = true)
-        temp.delete()
-      }
-      Log.i(TAG, "Loaded cover for Title ID $id (XMID $xmid)")
-      return bitmap
     }
-    Log.i(TAG, "No cover scan or thumbnail available for Title ID $id (XMID $xmid)")
+    if (xmids.isEmpty()) return null
+
+    val temp = File(dir, "$id.tmp")
+    for (xmid in xmids) {
+      val publisher = xmid.take(2)
+      val candidates = listOf(
+        "$RAW/cover/$publisher/$xmid.jpg",
+        "$RAW/thumbnail/$publisher/$xmid.jpg",
+      )
+      for (imageUrl in candidates) {
+        val bitmap = downloadBitmap(imageUrl, temp) ?: continue
+        if (!temp.renameTo(cached)) {
+          temp.copyTo(cached, overwrite = true)
+          temp.delete()
+        }
+        Log.i(TAG, "Loaded cover for Title ID $id (XMID $xmid)")
+        return bitmap
+      }
+    }
+    temp.delete()
+    Log.i(TAG, "No cover scan or thumbnail available for Title ID $id (XMIDs: ${xmids.joinToString()})")
     return null
   }
 
