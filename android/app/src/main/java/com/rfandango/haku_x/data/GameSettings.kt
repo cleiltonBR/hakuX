@@ -59,8 +59,14 @@ class GameOverrides(context: Context, val game: String) {
     }
   }
 
-  operator fun get(setting: GameSetting): String? =
-    sp.getString(key(setting), null) ?: legacy?.let { sp.getString("$it/${setting.key}", null) }
+  operator fun get(setting: GameSetting): String? {
+    val stored = sp.getString(key(setting), null) ?: legacy?.let { sp.getString("$it/${setting.key}", null) }
+    if (stored != null || setting != GameSetting.RENDER_SCALE_HALF) return stored
+    // Older per-game whole-number choices map exactly to the new half-step scale.
+    val whole = sp.getString(key(GameSetting.RENDER_SCALE), null)
+      ?: legacy?.let { sp.getString("$it/${GameSetting.RENDER_SCALE.key}", null) }
+    return whole?.toIntOrNull()?.coerceIn(1, 8)?.times(2)?.toString()
+  }
 
   operator fun set(setting: GameSetting, value: String?) = sp.edit {
     if (value == null) remove(key(setting)) else putString(key(setting), value)
