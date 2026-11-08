@@ -347,7 +347,6 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
       else -> "started"
     })
     super.onCreate(savedInstanceState)
-    nativeSetHdr(AppPrefs(this).hdrEnabled)
     if (AppPrefs(this).networkMode == AppPrefs.NET_LAN) {
       multicastLock = Network.multicastLock(this)
     }
@@ -806,7 +805,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
         updateControllerVisibility()
       },
       getString(R.string.overlay_menu_controllers) to ::showPlayers,
-      "Gráficos (FSR / CAS / NIS / HDR)" to ::showRuntimeGraphics,
+      "Gráficos (FSR / CAS / NIS)" to ::showRuntimeGraphics,
     )
     if (states) {
       items += getString(R.string.overlay_menu_save_state) to { saveStates.showSlots(save = true) }
@@ -834,7 +833,6 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
       nativeSetUpscale(current)
       nativeSetCas(prefs.cas, prefs.casSharpness)
       nativeSetNis(prefs.nis, prefs.nisSharpness)
-      nativeSetHdr(prefs.hdrEnabled)
     }
     val scaleValues = (1..16).toList()
     val anisoLevels = listOf(1, 2, 4, 8, 16)
@@ -847,7 +845,6 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
       "Intensidade CAS: ${"%.1f".format(java.util.Locale.US, prefs.casSharpness)}",
       "NIS: ${if (prefs.nis) "Ativado" else "Desativado"}",
       "Nitidez NIS: ${(prefs.nisSharpness * 100).toInt()}%",
-      "HDR10: " + if (prefs.hdrEnabled) "Ativado (se compatível)" else "Desativado",
     )
     showMenuDialog(AlertDialog.Builder(this)
       .setTitle("Gráficos durante a gameplay")
@@ -916,11 +913,6 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
                 dialog.dismiss()
                 showRuntimeGraphics()
               }.setNegativeButton(android.R.string.cancel, null))
-          }
-          8 -> {
-            prefs.hdrEnabled = !prefs.hdrEnabled
-            refresh()
-            showRuntimeGraphics()
           }
         }
       }
@@ -1316,7 +1308,6 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     const val PREF_CAS_SHARPNESS = "cas_sharpness"
     const val PREF_NIS = "nis_enabled"
     const val PREF_NIS_SHARPNESS = "nis_sharpness"
-    const val PREF_HDR = "hdr10_enabled"
     const val PREF_UPSCALE = "upscale_filter"
     const val PREF_ANISO = "anisotropy_enabled"
     const val PREF_ANISO_LEVEL = "anisotropy_level"
@@ -1403,10 +1394,6 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     /** Change NVIDIA Image Scaling while the game runs (sharpness 0-1). */
     @JvmStatic
     external fun nativeSetNis(enabled: Boolean, sharpness: Float)
-
-    /** Request HDR10 output; unsupported Android/Vulkan surfaces remain SDR. */
-    @JvmStatic
-    external fun nativeSetHdr(enabled: Boolean)
 
     /** NIS GPU state: ready, enabled, executed, reason, input/output dimensions, final path. */
     @JvmStatic
