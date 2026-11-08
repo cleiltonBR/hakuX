@@ -4,6 +4,7 @@ import android.app.AlertDialog
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.KeyEvent
@@ -157,12 +158,17 @@ class SaveStates(
       val row = LinearLayout(activity).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
-        setPadding(dp(16), pad, dp(8), pad)
+        setPadding(dp(12), pad, dp(8), pad)
+        background = GradientDrawable().apply {
+          setColor(Color.rgb(31, 37, 33))
+          cornerRadius = dp(10).toFloat()
+          setStroke(dp(1), Color.rgb(54, 75, 59))
+        }
       }
       val image = ImageView(activity).apply {
         layoutParams = LinearLayout.LayoutParams(dp(96), dp(72))
         scaleType = ImageView.ScaleType.CENTER_CROP
-        setBackgroundColor(Color.DKGRAY)
+        setBackgroundColor(Color.rgb(18, 22, 19))
         store.thumb(slot).takeIf { it.exists() }?.let { f ->
           BitmapFactory.decodeFile(f.path, BitmapFactory.Options().apply { inSampleSize = 4 })?.let(::setImageBitmap)
         }
@@ -182,6 +188,7 @@ class SaveStates(
           setImageResource(android.R.drawable.ic_menu_delete)
           contentDescription = activity.getString(R.string.state_delete)
           setPadding(pad, pad, pad, pad)
+          setColorFilter(Color.rgb(120, 220, 130))
           isFocusable = false
           setOnClickListener { delete(slot) }
         })
