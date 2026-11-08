@@ -179,7 +179,12 @@ EXPORT JNIEXPORT void JNICALL Java_com_rfandango_haku_1x_NativeCoreActivity_nati
     nc_present_set_nis(enabled != JNI_FALSE, sharpness);
 }
 
-EXPORT JNIEXPORT void JNICALL Java_com_rfandango_haku_1x_NativeCoreActivity_nativeSetHdr(JNIEnv *env, jclass cls, jboolean enabled)\n{\n    nc_present_set_hdr(enabled != JNI_FALSE);\n}\n\nEXPORT JNIEXPORT void JNICALL Java_com_rfandango_haku_1x_NativeCoreActivity_nativeSetRenderScale(JNIEnv *env, jclass cls, jint scale)
+EXPORT JNIEXPORT void JNICALL Java_com_rfandango_haku_1x_NativeCoreActivity_nativeSetHdr(JNIEnv *env, jclass cls, jboolean enabled)
+{
+    nc_present_set_hdr(enabled != JNI_FALSE);
+}
+
+EXPORT JNIEXPORT void JNICALL Java_com_rfandango_haku_1x_NativeCoreActivity_nativeSetRenderScale(JNIEnv *env, jclass cls, jint scale)
 {
     nc_hle_set_render_scale(scale);
 }
@@ -227,14 +232,11 @@ EXPORT JNIEXPORT jstring JNICALL Java_com_rfandango_haku_1x_NativeCoreActivity_n
     return (*env)->NewStringUTF(env, v);
 }
 
-/* hw/xbox/hle/pb/pbmode.h: the title runs in push-buffer mode */
-bool hle_pb_active(void);
-
 /* Savestates work for the running game: push-buffer mode only. */
 EXPORT JNIEXPORT jboolean JNICALL Java_com_rfandango_haku_1x_NativeCoreActivity_nativeStatesAvailable(JNIEnv *env,
                                                                                                 jclass cls)
 {
-    return SDL_GetAtomicInt(&g_core_state) == 1 && hle_pb_active();
+    return SDL_GetAtomicInt(&g_core_state) == 1 && nc_hle_pb_active();
 }
 
 /* Whether this core can load the state at path into the running game:
