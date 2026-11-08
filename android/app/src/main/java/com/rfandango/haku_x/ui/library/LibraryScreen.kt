@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -68,6 +69,7 @@ import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
@@ -146,7 +148,15 @@ fun LibraryScreen(
 
   Scaffold { padding ->
     Column(Modifier.padding(padding).fillMaxSize()) {
-      // No title bar: the dashboard button, the search field and the settings button share the top row.
+      Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 6.dp)) {
+        Text("hakuX", style = MaterialTheme.typography.headlineSmall)
+        Text(
+          "XBOX GAME LIBRARY",
+          style = MaterialTheme.typography.labelSmall,
+          color = MaterialTheme.colorScheme.primary,
+        )
+      }
+      // Dashboard, search, refresh and settings remain immediately accessible.
       Row(
         Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, top = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -260,6 +270,42 @@ private fun DashboardInstallDialog(j: DashboardInstall, onStart: () -> Unit, onD
   )
 }
 
+/** A console-style featured title, using the existing game icon and launch callback. */
+@Composable
+private fun FeaturedGameCard(game: Game, icon: ImageBitmap?, onLaunch: () -> Unit) {
+  val shape = RoundedCornerShape(22.dp)
+  Row(
+    Modifier
+      .fillMaxWidth()
+      .height(172.dp)
+      .clip(shape)
+      .background(Brush.linearGradient(listOf(Color(0xFF202A21), Color(0xFF101411), Color(0xFF080A08))))
+      .border(1.dp, Color(0xFF344A35), shape)
+      .combinedClickable(onClick = onLaunch, onLongClick = onLaunch)
+      .padding(horizontal = 18.dp, vertical = 16.dp),
+    verticalAlignment = Alignment.CenterVertically,
+  ) {
+    Column(Modifier.weight(1f)) {
+      Text("HAKUX  /  XBOX SERIES X", style = MaterialTheme.typography.labelSmall, color = Color(0xFF8BD889))
+      Spacer(Modifier.height(10.dp))
+      Text(game.title, style = MaterialTheme.typography.headlineSmall, color = Color.White, maxLines = 2, overflow = TextOverflow.Ellipsis)
+      Spacer(Modifier.height(10.dp))
+      Text("INICIAR JOGO  ›", style = MaterialTheme.typography.labelLarge, color = Color(0xFF9BE69A))
+    }
+    Spacer(Modifier.width(12.dp))
+    Box(
+      Modifier.size(104.dp).clip(RoundedCornerShape(16.dp)).background(Color(0xFF29362A)),
+      contentAlignment = Alignment.Center,
+    ) {
+      if (icon != null) {
+        Image(icon, contentDescription = null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize().padding(8.dp))
+      } else {
+        Text(game.title.firstOrNull { it.isLetterOrDigit() }?.uppercase() ?: "?", style = MaterialTheme.typography.displayMedium, color = Color(0xFF9BE69A))
+      }
+    }
+  }
+}
+
 /**
  * The games, as cards. A fast scroll brings several cards in a frame, and the
  * debug build's Compose code runs interpreted (a debuggable app is never
@@ -291,7 +337,7 @@ private fun GameList(
   // One column in portrait, two side by side in landscape.
   val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
   val colors = MaterialTheme.colorScheme
-  val shape = remember { RoundedCornerShape(12.dp) }
+  val shape = remember { RoundedCornerShape(16.dp) }
   val iconShape = ThumbnailShape
   val titleStyle = MaterialTheme.typography.titleMedium.copy(color = colors.onSurface)
   val idStyle = SMALL_PRINT.copy(fontFamily = FontFamily.Monospace, color = colors.onSurfaceVariant)
@@ -299,9 +345,15 @@ private fun GameList(
     columns = GridCells.Fixed(if (landscape) 2 else 1),
     modifier = Modifier.fillMaxSize(),
     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp),
-    horizontalArrangement = Arrangement.spacedBy(8.dp),
-    verticalArrangement = Arrangement.spacedBy(6.dp),
+    horizontalArrangement = Arrangement.spacedBy(10.dp),
+    verticalArrangement = Arrangement.spacedBy(10.dp),
   ) {
+    item(span = { GridItemSpan(maxLineSpan) }) {
+      FeaturedGameCard(games.first(), icons[games.first().uri]) { onLaunch(games.first()) }
+    }
+    item(span = { GridItemSpan(maxLineSpan) }) {
+      Text("TODOS OS JOGOS", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
     items(games, key = { it.uri.toString() }) { game ->
       val disc = info[game.uri]
       var focused by remember { mutableStateOf(false) }
@@ -310,7 +362,7 @@ private fun GameList(
           Modifier
             .fillMaxWidth()
             .clip(shape)
-            .background(colors.surface)
+            .background(colors.surfaceContainerLow)
             .border(if (focused) 2.dp else 1.dp, if (focused) colors.primary else colors.outlineVariant, shape)
             .onFocusChanged { focused = it.isFocused }
             // a controller's Y, or its select (sent as Menu), opens the menu
@@ -326,11 +378,11 @@ private fun GameList(
                 menuFor = game.uri
               },
             )
-            .padding(start = 8.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
+            .padding(start = 12.dp, end = 14.dp, top = 12.dp, bottom = 12.dp),
           verticalAlignment = Alignment.CenterVertically,
         ) {
           TitleIcon(game, icons[game.uri], iconShape, colors.surfaceVariant, colors.onSurfaceVariant)
-          Column(Modifier.weight(1f).padding(start = 12.dp, end = 8.dp)) {
+          Column(Modifier.weight(1f).padding(start = 14.dp, end = 8.dp)) {
             // Landscape's two columns are narrow: one line, cut to fit.
             Text(
               game.title,
@@ -525,7 +577,7 @@ private val REGIONS = listOf(
 private fun TitleIcon(game: Game, icon: ImageBitmap?, shape: Shape, background: Color, initialColor: Color) {
   Box(
     Modifier
-      .size(48.dp)
+      .size(60.dp)
       .clip(shape)
       .background(background),
     contentAlignment = Alignment.Center,
