@@ -7,6 +7,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.hardware.input.InputManager
 import android.net.Uri
 import android.net.wifi.WifiManager
@@ -23,10 +24,14 @@ import android.view.MotionEvent
 import android.view.PixelCopy
 import android.view.View
 import android.view.ViewGroup
+import android.view.Gravity
 import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.widget.ImageView
+import android.widget.Button
+import android.widget.LinearLayout
 import android.widget.RelativeLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import android.window.OnBackInvokedDispatcher
@@ -679,20 +684,116 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
       }
   }
 
-  /** The menu's Cheats: each on or off at once (from the next vblank), and so kept for the game. */
+
+  /** Xbox Series X-styled, scrollable dialog used by every in-game menu. */
+  private fun showSeriesXMenu(
+    title: String,
+    entries: List<Pair<String, String>>,
+    onSelect: (Int) -> Unit,
+  ) {
+    val root = LinearLayout(this).apply {
+      orientation = LinearLayout.VERTICAL
+      setPadding(dp(18), dp(16), dp(18), dp(12))
+      setBackgroundColor(Color.rgb(15, 18, 16))
+    }
+    val heading = TextView(this).apply {
+      text = title.uppercase(java.util.Locale.getDefault())
+      setTextColor(Color.WHITE)
+      setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
+      typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+      setPadding(dp(2), dp(4), dp(2), dp(14))
+    }
+    root.addView(heading)
+    val scroll = ScrollView(this).apply { isFillViewport = false; clipToPadding = false }
+    val list = LinearLayout(this).apply {
+      orientation = LinearLayout.VERTICAL
+      setPadding(0, 0, 0, dp(4))
+    }
+    scroll.addView(list)
+    lateinit var dialog: AlertDialog
+    entries.forEachIndexed { index, entry ->
+      val tile = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        gravity = Gravity.CENTER_VERTICAL
+        setPadding(dp(16), dp(12), dp(16), dp(12))
+        background = GradientDrawable().apply {
+          setColor(Color.rgb(31, 37, 33))
+          cornerRadius = dp(10).toFloat()
+          setStroke(dp(1), Color.rgb(54, 75, 59))
+        }
+        isFocusable = true
+        isClickable = true
+        minimumHeight = dp(64)
+        setOnClickListener { dialog.dismiss(); onSelect(index) }
+      }
+      val label = TextView(this).apply {
+        text = entry.first
+        setTextColor(Color.WHITE)
+        setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
+        typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+      }
+      val detail = TextView(this).apply {
+        text = entry.second
+        setTextColor(Color.rgb(177, 190, 180))
+        setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+        setPadding(0, dp(3), 0, 0)
+      }
+      tile.addView(label)
+      if (entry.second.isNotBlank()) tile.addView(detail)
+      list.addView(tile, LinearLayout.LayoutParams(
+        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+      ).apply { bottomMargin = dp(8) })
+    }
+    root.addView(scroll, LinearLayout.LayoutParams(
+      ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f
+    ).apply { weight = 1f })
+    val resume = TextView(this).apply {
+      text = "RETOMAR JOGO"
+      gravity = Gravity.CENTER
+      setTextColor(Color.rgb(120, 220, 130))
+      textSize = 13f
+      typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+      setPadding(dp(12), dp(14), dp(12), dp(8))
+      setOnClickListener { dialog.dismiss() }
+    }
+    root.addView(resume)
+    dialog = showMenuDialog(AlertDialog.Builder(this).setView(root).setCancelable(true))
+    dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+    dialog.window?.setLayout(
+      minOf(resources.displayMetrics.widthPixels - dp(32), dp(620)),
+      minOf(resources.displayMetrics.heightPixels - dp(48), dp(760))
+    )
+  }
+
+  private fun dp(value: Int): Int =
+    (value * resources.displayMetrics.density + 0.5f).toInt()
+
+  private fun showSeriesXChoices(
+    title: String,
+    labels: List<String>,
+    selected: Int,
+    onSelect: (Int) -> Unit,
+  ) = showSeriesXMenu(title, labels.mapIndexed { i, label ->
+    (if (i == selected) "✓  " else "") + label to if (i == selected) "SELECIONADO" else ""
+  }) { onSelect(it) }
+
+  /** The menu's cheats: toggled immediately and persisted per game. */
   private fun showCheats() {
     val cheats = runCheats
     val choices = ModChoices(this, runKey)
-    val checked = BooleanArray(cheats.size) { choices.cheat(cheats[it].name) }
-    showMenuDialog(
-      AlertDialog.Builder(this)
-        .setTitle(R.string.overlay_menu_cheats)
-        .setMultiChoiceItems(cheats.map { it.name }.toTypedArray(), checked) { _, i, on ->
-          nativeSetCheat(i, on)
-          choices.setCheat(cheats[i].name, on)
-        }
-        .setPositiveButton(android.R.string.ok, null)
-    )
+    fun render() {
+      val entries = cheats.map { cheat ->
+        val on = choices.cheat(cheat.name)
+        (if (on) "✓  " else "○  ") + cheat.name to if (on) "ATIVADO" else "DESATIVADO"
+      }
+      showSeriesXMenu(getString(R.string.overlay_menu_cheats), entries) { i ->
+        val on = !choices.cheat(cheats[i].name)
+        nativeSetCheat(i, on)
+        choices.setCheat(cheats[i].name, on)
+        render()
+      }
+    }
+    render()
   }
 
   /** The game's content URI, opened in this process; the core reads it by descriptor. */
@@ -793,34 +894,99 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
    * or leave the game. The game stops while it is open; Resume, a tap outside
    * it or back closes it and the game goes on (showMenuDialog).
    */
+  /** Xbox Series X quick menu; the full list scrolls on compact screens. */
   private fun showMenu() {
     if (editorBar != null) return
     val shown = controlsShown ?: !hasGamepad()
-    /* savestates: push-buffer mode only (native/state) */
     val states = nativeStatesAvailable()
-    val items = mutableListOf<Pair<String, () -> Unit>>(
-      getString(R.string.overlay_menu_edit) to ::editControls,
-      getString(if (shown) R.string.overlay_menu_hide else R.string.overlay_menu_show) to {
-        controlsShown = !shown
-        updateControllerVisibility()
-      },
-      getString(R.string.overlay_menu_controllers) to ::showPlayers,
-      "Gráficos (FSR / CAS / NIS)" to ::showRuntimeGraphics,
+    val items = mutableListOf<Pair<String, String>>(
+      getString(R.string.overlay_menu_edit) to "Editar a posição e o tamanho dos controles",
+      getString(if (shown) R.string.overlay_menu_hide else R.string.overlay_menu_show) to "Mostrar ou ocultar os controles na tela",
+      getString(R.string.overlay_menu_controllers) to "Configurar jogadores e controles conectados",
+      "Imagem e gráficos" to "FSR 1.0, CAS, NIS, resolução e filtros"
+    )
+    val actions = mutableListOf<() -> Unit>(
+      ::editControls,
+      { controlsShown = !shown; updateControllerVisibility() },
+      ::showPlayers,
+      ::showRuntimeGraphics
     )
     if (states) {
-      items += getString(R.string.overlay_menu_save_state) to { saveStates.showSlots(save = true) }
-      items += getString(R.string.overlay_menu_load_state) to { saveStates.showSlots(save = false) }
+      items += getString(R.string.overlay_menu_save_state) to "Salvar o progresso em um dos slots"
+      actions += { saveStates.showSlots(save = true) }
+      items += getString(R.string.overlay_menu_load_state) to "Carregar ou excluir um estado salvo"
+      actions += { saveStates.showSlots(save = false) }
     }
     if (runCheats.isNotEmpty()) {
-      items += getString(R.string.overlay_menu_cheats) to ::showCheats
+      items += getString(R.string.overlay_menu_cheats) to "Ativar ou desativar trapaças do jogo"
+      actions += ::showCheats
     }
     val exit = if (launchedExternally) R.string.overlay_menu_exit_frontend else R.string.overlay_menu_exit
-    items += getString(exit) to ::exitGame
-    showMenuDialog(
-      AlertDialog.Builder(this)
-        .setItems(items.map { it.first }.toTypedArray()) { _, which -> items[which].second() }
-        .setNegativeButton(R.string.overlay_menu_resume, null)
+    items += getString(exit) to "Fechar o jogo"
+    actions += ::exitGame
+    showSeriesXMenu("Menu rápido", items) { actions[it]() }
+  }
+
+  /** FSR/RCAS controls applied immediately to the running Vulkan presenter. */
+  private fun showRuntimeGraphics() {
+    val prefs = AppPrefs(this)
+    val modes = listOf(UPSCALE_BILINEAR, UPSCALE_SGSR, UPSCALE_FSR)
+    val modeNames = listOf("Bilinear", "SGSR", "FidelityFX FSR 1.0")
+    fun refresh() {
+      nativeSetUpscale(modes.indexOf(prefs.upscaleFilter).coerceAtLeast(0))
+      nativeSetCas(prefs.cas, prefs.casSharpness)
+      nativeSetNis(prefs.nis, prefs.nisSharpness)
+    }
+    val scaleValues = (1..16).toList()
+    val scaleLabels = scaleValues.map { value ->
+      "${String.format(java.util.Locale.getDefault(), "%.1fx", value / 2.0)}  •  ${(640 * value + 1) / 2}×${(480 * value + 1) / 2} em 480p"
+    }
+    val currentMode = modes.indexOf(prefs.upscaleFilter).coerceAtLeast(0)
+    val entries = listOf(
+      "Escala de resolução" to "${String.format(java.util.Locale.getDefault(), "%.1fx", prefs.renderScaleHalfSteps / 2.0)} • ${(640 * prefs.renderScaleHalfSteps + 1) / 2}×${(480 * prefs.renderScaleHalfSteps + 1) / 2} em 480p • reinicie o jogo",
+      "Filtro de imagem" to modeNames[currentMode],
+      "Filtro anisotrópico" to if (prefs.anisotropyEnabled) "Ativado • reinicie o jogo" else "Desativado • reinicie o jogo",
+      "Nível anisotrópico" to "${prefs.anisotropyLevel}x • reinicie o jogo",
+      "CAS" to if (prefs.cas) "Ativado" else "Desativado",
+      "Intensidade CAS" to "%.1f".format(java.util.Locale.US, prefs.casSharpness),
+      "NIS" to if (prefs.nis) "Ativado" else "Desativado",
+      "Nitidez NIS" to "${(prefs.nisSharpness * 100).toInt()}%"
     )
+    showSeriesXMenu("Imagem e gráficos", entries) { which ->
+      when (which) {
+        0 -> showSeriesXChoices("Escala de resolução", scaleLabels, (prefs.renderScaleHalfSteps - 1).coerceIn(0, 15)) {
+          prefs.renderScaleHalfSteps = scaleValues[it]
+          showRuntimeGraphics()
+        }
+        1 -> showSeriesXChoices("Filtro de imagem", modeNames, currentMode) {
+          prefs.upscaleFilter = modes[it]; refresh(); showRuntimeGraphics()
+        }
+        2 -> { prefs.anisotropyEnabled = !prefs.anisotropyEnabled; showRuntimeGraphics() }
+        3 -> {
+          val levels = listOf(1, 2, 4, 8, 16)
+          showSeriesXChoices("Nível anisotrópico", levels.map { "${it}x" },
+            levels.indexOf(prefs.anisotropyLevel).coerceAtLeast(0)) {
+            prefs.anisotropyLevel = levels[it]; showRuntimeGraphics()
+          }
+        }
+        4 -> { prefs.cas = !prefs.cas; refresh(); showRuntimeGraphics() }
+        5 -> {
+          val values = (0..10).map { it * 0.2f }
+          showSeriesXChoices("Intensidade CAS", values.map { "%.1f".format(java.util.Locale.US, it) },
+            values.indexOfFirst { kotlin.math.abs(it - prefs.casSharpness) < 0.001f }.coerceAtLeast(0)) {
+            prefs.casSharpness = values[it]; refresh(); showRuntimeGraphics()
+          }
+        }
+        6 -> { prefs.nis = !prefs.nis; refresh(); showRuntimeGraphics() }
+        7 -> {
+          val values = (0..10).map { it / 10f }
+          showSeriesXChoices("Nitidez NIS", values.map { "${(it * 100).toInt()}%" },
+            values.indexOfFirst { kotlin.math.abs(it - prefs.nisSharpness) < 0.001f }.coerceAtLeast(0)) {
+            prefs.nisSharpness = values[it]; refresh(); showRuntimeGraphics()
+          }
+        }
+      }
+    }
   }
 
   /** FSR/RCAS controls applied immediately to the running Vulkan presenter. */
@@ -942,51 +1108,43 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
    * at once (and kept, as the settings' Players), its controller plugged in
    * or pulled out at once as well.
    */
+  /** The players and their currently assigned controllers. */
   private fun showPlayers() {
     val r = router ?: return
     val config = Controllers.load(this)
     val devices = Controllers.connected()
     val byId = devices.associateBy { it.id }
-    val names = (0 until Controllers.PLAYERS).map { p ->
-      val s = config.slots[p]
-      val dev = r.assignment.entries.firstOrNull { it.value == p }?.let { byId[it.key]?.name }
-      val what = when (s.mode) {
+    val entries = (0 until Controllers.PLAYERS).map { p ->
+      val slot = config.slots[p]
+      val device = r.assignment.entries.firstOrNull { it.value == p }?.let { byId[it.key]?.name }
+      val status = when (slot.mode) {
         PlayerSlot.OFF -> getString(R.string.controllers_off)
-        PlayerSlot.DEVICE -> dev ?: getString(R.string.controllers_not_connected, s.name)
-        else -> dev?.let { getString(R.string.controllers_auto_is, it) } ?: getString(R.string.controllers_auto)
+        PlayerSlot.DEVICE -> device ?: getString(R.string.controllers_not_connected, slot.name)
+        else -> device?.let { getString(R.string.controllers_auto_is, it) } ?: getString(R.string.controllers_auto)
       }
-      getString(R.string.controllers_player, p + 1) + ": " + what
+      getString(R.string.controllers_player, p + 1) to status
     }
-    showMenuDialog(
-      AlertDialog.Builder(this)
-        .setTitle(R.string.overlay_menu_controllers)
-        .setItems(names.toTypedArray()) { _, p -> pickController(p, config, devices) }
-        .setNegativeButton(android.R.string.cancel, null)
-    )
+    showSeriesXMenu("Jogadores e controles", entries) { pickController(it, config, devices) }
   }
 
   private fun pickController(player: Int, config: Controllers.Config, devices: List<InputDevice>) {
     val options = mutableListOf(PlayerSlot() to getString(R.string.controllers_auto))
-    for (d in devices) options += PlayerSlot(PlayerSlot.DEVICE, Controllers.unitKey(d), d.name ?: "") to (d.name ?: "?")
+    for (device in devices) options += PlayerSlot(PlayerSlot.DEVICE, Controllers.unitKey(device), device.name ?: "") to (device.name ?: "?")
     if (player > 0) options += PlayerSlot(PlayerSlot.OFF) to getString(R.string.controllers_off)
-    showMenuDialog(AlertDialog.Builder(this)
-      .setTitle(getString(R.string.controllers_player, player + 1))
-      .setItems(options.map { it.second }.toTypedArray()) { _, i ->
-        val slot = options[i].first
-        /* a controller chosen for this player leaves any other it played as */
-        val slots = config.slots.mapIndexed { p, s ->
-          when {
-            p == player -> slot
-            slot.mode == PlayerSlot.DEVICE && s.mode == PlayerSlot.DEVICE && s.key == slot.key -> PlayerSlot()
-            else -> s
-          }
+    showSeriesXChoices(getString(R.string.controllers_player, player + 1),
+      options.map { it.second }, options.indexOfFirst { it.first == config.slots[player] }.coerceAtLeast(0)) { index ->
+      val slot = options[index].first
+      val slots = config.slots.mapIndexed { p, current ->
+        when {
+          p == player -> slot
+          slot.mode == PlayerSlot.DEVICE && current.mode == PlayerSlot.DEVICE && current.key == slot.key -> PlayerSlot()
+          else -> current
         }
-        val next = config.copy(slots = slots)
-        Controllers.save(this, next)
-        router?.reload()
-        syncPads()
       }
-      .setNegativeButton(android.R.string.cancel, null))
+      Controllers.save(this, config.copy(slots = slots))
+      router?.reload()
+      syncPads()
+    }
   }
 
   /** The layout editor over the running game (input to the game pauses meanwhile). */
