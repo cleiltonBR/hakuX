@@ -38,6 +38,6 @@ bool hle_present_frame(uint32_t *w, uint32_t *h);
 void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, bool cas, float cas_sharpness, bool nis, float nis_sharpness, uint64_t key);
 /* GPU overlay: ready, NIS enabled/executed, failure, input/output dimensions,
  * selected path, CAS enabled/strength, and whether RCAS actually ran. */
-void hle_present_nis_status(int status[12]);
+void hle_present_nis_status(int status[14]);
 
 #endif
