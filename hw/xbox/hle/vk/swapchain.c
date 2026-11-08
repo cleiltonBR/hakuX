@@ -1750,7 +1750,8 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
             pc[6] = (float)g_ps.f.w;
             pc[7] = (float)g_ps.f.h;
         }
-        pc[7] = g_ps.hdr_active ? 1.0f : 0.0f; /* HDR conversion after the display gamma ramp */\n        quad(cb, f, 0, g_ps.pipe[p], src, pc, iw, ih);
+        pc[7] = g_ps.hdr_active ? 1.0f : 0.0f; /* HDR conversion after the display gamma ramp */
+        quad(cb, f, 0, g_ps.pipe[p], src, pc, iw, ih);
         const bool fsr_rcas = use_fsr && cas && g_ps.pipe[P_RCAS] && p == P_RCAS;
         nis_status(8, nis_done ? (nis_sharpen_only ? 4 : 3) :
                    fsr_easu ? (fsr_rcas ? 6 : 5) : fsr_rcas ? 7 : use_fsr ? 8 :
