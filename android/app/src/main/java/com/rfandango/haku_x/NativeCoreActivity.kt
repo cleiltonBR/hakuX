@@ -988,6 +988,29 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
   }
 
   /** The players and their currently assigned controllers. */
+  /** The players the core has a controller plugged in for (bit n: player n + 1). */
+  private var plugged = 1
+
+  /**
+   * The players' controllers plugged in and pulled out as the connected ones
+   * and the controller settings change: player 1 and each player a
+   * connected controller plays as (the router's assignment).
+   */
+  private fun syncPads() {
+    val r = router ?: return
+    var mask = 1
+    for (p in r.assignment.values) mask = mask or (1 shl p)
+    if (mask != plugged) {
+      plugged = mask
+      nativeSetPads(mask)
+    }
+  }
+
+  /**
+   * The menu's Controllers: which controller plays as which player, changed
+   * at once (and kept, as the settings' Players), its controller plugged in
+   * or pulled out at once as well.
+   */
   private fun showPlayers() {
     val r = router ?: return
     val config = Controllers.load(this)
