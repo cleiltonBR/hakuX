@@ -136,6 +136,11 @@ class AppPrefs(context: Context) {
     get() = sp.getFloat(NativeCoreActivity.PREF_NIS_SHARPNESS, 0.5f).coerceIn(0.0f, 1.0f)
     set(value) = sp.edit { putFloat(NativeCoreActivity.PREF_NIS_SHARPNESS, value.coerceIn(0.0f, 1.0f)) }
 
+  /** Request HDR10 presentation; Vulkan falls back to SDR when the display surface lacks HDR10. */
+  var hdrEnabled: Boolean
+    get() = sp.getBoolean(NativeCoreActivity.PREF_HDR, false)
+    set(value) = sp.edit { putBoolean(NativeCoreActivity.PREF_HDR, value) }
+
   /** How a picture smaller than the screen is scaled up: bilinear, SGSR or FSR. */
   var upscaleFilter: String
     get() = sp.getString(NativeCoreActivity.PREF_UPSCALE, NativeCoreActivity.UPSCALE_BILINEAR)
