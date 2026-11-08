@@ -271,6 +271,7 @@ private fun DashboardInstallDialog(j: DashboardInstall, onStart: () -> Unit, onD
 }
 
 /** A console-style featured title, using the existing game icon and launch callback. */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun FeaturedGameCard(game: Game, icon: ImageBitmap?, onLaunch: () -> Unit) {
   val shape = RoundedCornerShape(22.dp)
