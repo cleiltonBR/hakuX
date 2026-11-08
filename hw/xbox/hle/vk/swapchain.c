@@ -719,9 +719,11 @@ static bool nis_compute_pipeline_init(void)
     return nis_upload_coefficients();
 }
 
-static VkPipeline pipeline(VkShaderModule fs, VkFormat fmt)
+static VkPipeline pipeline(VkShaderModule fs, VkFormat fmt, const char *name)
 {
     if (!g_ps.vs || !fs) {
+        hle_log("hakuX-hle-back", "present: %s pipeline skipped (vertex shader %s, fragment shader %s)",
+                name, g_ps.vs ? "ready" : "missing", fs ? "ready" : "missing");
         return VK_NULL_HANDLE;
     }
     VkPipelineShaderStageCreateInfo st[2] = {
@@ -760,7 +762,10 @@ static VkPipeline pipeline(VkShaderModule fs, VkFormat fmt)
         .pViewportState = &vp, .pRasterizationState = &rs, .pMultisampleState = &ms,
         .pColorBlendState = &cb, .pDynamicState = &ds, .layout = g_ps.pl };
     VkPipeline p = VK_NULL_HANDLE;
-    if (T.vkCreateGraphicsPipelines(g_hvk.dev, VK_NULL_HANDLE, 1, &gci, NULL, &p) != VK_SUCCESS) {
+    const VkResult result = T.vkCreateGraphicsPipelines(g_hvk.dev, VK_NULL_HANDLE, 1, &gci, NULL, &p);
+    if (result != VK_SUCCESS) {
+        hle_log("hakuX-hle-back", "present: %s graphics pipeline creation failed (format=%d, VkResult=%d)",
+                name, fmt, result);
         p = VK_NULL_HANDLE;
     }
     return p;
@@ -859,12 +864,15 @@ static bool init(void)
     for (unsigned i = 0; i < P_COUNT; i++) {
         g_ps.fs[i] = module(HLE_SHADER_FRAGMENT, k_fs_head, body[i]);
     }
-    g_ps.pipe[P_FXAA] = pipeline(g_ps.fs[P_FXAA], VK_FORMAT_R8G8B8A8_UNORM);
-    g_ps.pipe[P_EASU] = pipeline(g_ps.fs[P_EASU], VK_FORMAT_R8G8B8A8_UNORM);
+    g_ps.pipe[P_FXAA] = pipeline(g_ps.fs[P_FXAA], VK_FORMAT_R8G8B8A8_UNORM, "FXAA");
+    g_ps.pipe[P_EASU] = pipeline(g_ps.fs[P_EASU], VK_FORMAT_R8G8B8A8_UNORM, "FSR EASU");
+    hle_log("hakuX-hle-back", "present: shader modules (RCAS=%d EASU=%d)",
+            g_ps.fs[P_RCAS] != VK_NULL_HANDLE, g_ps.fs[P_EASU] != VK_NULL_HANDLE);
     hle_log("hakuX-hle-back", "present: NIS compute pipeline %s", nis_ready ? "ready (coefficients and compute resources uploaded)" : "unavailable (existing filters retained)");
-    hle_log("hakuX-hle-back", "present: ready (shaders: bilinear %d, averaging %d, SGSR %d, FXAA %d)",
+    hle_log("hakuX-hle-back", "present: ready (shaders: bilinear %d, averaging %d, SGSR %d, FXAA %d, EASU %d)",
             g_ps.fs[P_BILINEAR] != VK_NULL_HANDLE, g_ps.fs[P_AREA] != VK_NULL_HANDLE,
-            g_ps.fs[P_SGSR] != VK_NULL_HANDLE, g_ps.pipe[P_FXAA] != VK_NULL_HANDLE);
+            g_ps.fs[P_SGSR] != VK_NULL_HANDLE, g_ps.pipe[P_FXAA] != VK_NULL_HANDLE,
+            g_ps.pipe[P_EASU] != VK_NULL_HANDLE);
     return g_ps.fs[P_BILINEAR] != VK_NULL_HANDLE;
 }
 
@@ -1042,12 +1050,13 @@ static bool make_swapchain(uint32_t w, uint32_t h)
     g_ps.ext = (VkExtent2D){ w, h };
     g_ps.stale = false;
     if (fmt.format != g_ps.pipe_fmt) {
+        static const char *const names[P_FXAA] = { "bilinear", "area", "SGSR", "FSR RCAS" };
         for (unsigned i = 0; i < P_FXAA; i++) {
             if (g_ps.pipe[i]) {
                 T.vkDestroyPipeline(g_hvk.dev, g_ps.pipe[i], NULL);
                 g_ps.pipe[i] = VK_NULL_HANDLE;
             }
-            g_ps.pipe[i] = pipeline(g_ps.fs[i], fmt.format);
+            g_ps.pipe[i] = pipeline(g_ps.fs[i], fmt.format, names[i]);
         }
         g_ps.pipe_fmt = fmt.format;
         hle_log("hakuX-hle-back",
@@ -1267,10 +1276,12 @@ static bool fsr_target(uint32_t w, uint32_t h)
     }
     if (g_ps.fs_img) {
         wait_value(g_ps.submitted);
-        T.vkDestroyImageView(g_hvk.dev, g_ps.fs_view, NULL);
+        if (g_ps.fs_view) T.vkDestroyImageView(g_hvk.dev, g_ps.fs_view, NULL);
         T.vkDestroyImage(g_hvk.dev, g_ps.fs_img, NULL);
-        T.vkFreeMemory(g_hvk.dev, g_ps.fs_mem, NULL);
+        if (g_ps.fs_mem) T.vkFreeMemory(g_hvk.dev, g_ps.fs_mem, NULL);
         g_ps.fs_img = VK_NULL_HANDLE;
+        g_ps.fs_view = VK_NULL_HANDLE;
+        g_ps.fs_mem = VK_NULL_HANDLE;
     }
     VkImageCreateInfo ici = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO, .imageType = VK_IMAGE_TYPE_2D,
@@ -1295,8 +1306,12 @@ static bool fsr_target(uint32_t w, uint32_t h)
         T.vkBindImageMemory(g_hvk.dev, g_ps.fs_img, g_ps.fs_mem, 0) != VK_SUCCESS ||
         T.vkCreateImageView(g_hvk.dev, &vci, NULL, &g_ps.fs_view) != VK_SUCCESS) {
         hle_log("hakuX-hle-back", "present: no %ux%u FSR image: FSR off", w, h);
+        if (g_ps.fs_view) T.vkDestroyImageView(g_hvk.dev, g_ps.fs_view, NULL);
+        if (g_ps.fs_mem) T.vkFreeMemory(g_hvk.dev, g_ps.fs_mem, NULL);
         T.vkDestroyImage(g_hvk.dev, g_ps.fs_img, NULL);
         g_ps.fs_img = VK_NULL_HANDLE;
+        g_ps.fs_view = VK_NULL_HANDLE;
+        g_ps.fs_mem = VK_NULL_HANDLE;
         /* Keep the EASU pipeline: allocation may succeed on a later frame
          * (for example after the window extent changes or memory pressure
          * clears). A transient target failure must not permanently disable FSR. */
@@ -1657,16 +1672,15 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
              * output-format RCAS pipeline is unavailable. RCAS/CAS is a
              * separate optional sharpening pass; never let its failure
              * disable the actual FSR enlargement. */
-            if (g_ps.pipe[P_RCAS]) {
+            if (cas && g_ps.pipe[P_RCAS]) {
                 p = P_RCAS;
-                const float fsr_sharpness = (cas && cas_sharpness > 0.0f) ? cas_sharpness : 0.2f;
-                pc[4] = exp2f(-fsr_sharpness); /* RCAS strength in stops */
+                pc[4] = exp2f(-cas_sharpness); /* RCAS strength in stops */
             } else {
-                p = P_BILINEAR; /* EASU result is already at output resolution */
+                p = P_BILINEAR; /* EASU is complete; CAS is optional */
                 static bool reported_rcas_unavailable;
-                if (!reported_rcas_unavailable) {
+                if (cas && !g_ps.pipe[P_RCAS] && !reported_rcas_unavailable) {
                     hle_log("hakuX-hle-back",
-                            "FSR: EASU active; RCAS/CAS output pipeline unavailable, using neutral final copy");
+                            "FSR: EASU active; RCAS pipeline unavailable, using neutral final copy");
                     reported_rcas_unavailable = true;
                 }
             }
