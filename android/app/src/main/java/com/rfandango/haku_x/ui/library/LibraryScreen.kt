@@ -445,11 +445,18 @@ private fun GameList(
   fun GameEntry(game: Game, gameIndex: Int = 0) {
     val disc = info[game.uri]
     var focused by remember { mutableStateOf(false) }
-    val cardWidth = if (landscape) 194.dp else 156.dp
+    val cardWidth = if (landscape) 224.dp else 204.dp
     val coverWidth = if (landscape) 146.dp else 116.dp
     val coverHeight = if (landscape) 126.dp else 166.dp
+    val carouselOffset = gameIndex - carouselIndex
     val cardModifier = Modifier
-      .then(if (viewMode == "carousel") Modifier.width(cardWidth) else Modifier.fillMaxWidth())
+      .then(if (viewMode == "carousel") Modifier.width(cardWidth).height(if (landscape) 330.dp else 350.dp).graphicsLayer {
+        rotationY = (-carouselOffset * 24f).coerceIn(-48f, 48f)
+        val depthScale = 1f - (carouselOffset.absoluteValue * 0.10f).coerceAtMost(0.30f)
+        scaleX = depthScale
+        scaleY = depthScale
+        cameraDistance = 18f * density
+      } else Modifier.fillMaxWidth())
       .clip(shape)
       .background(colors.surfaceContainerLow)
       .border(if (focused) 2.dp else 1.dp, if (focused) colors.primary else colors.outlineVariant, shape)
@@ -467,7 +474,18 @@ private fun GameList(
         },
       )
     Box(cardModifier) {
-      if (viewMode == "grid" || viewMode == "carousel") {
+      if (viewMode == "carousel") {
+        Box(Modifier.fillMaxSize().background(Color(0xFF080D09))) {
+          SeriesXGameCover(game, covers[game.uri], icons[game.uri], Modifier.fillMaxSize())
+          Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xF0000000)))).padding(horizontal = 14.dp, vertical = 18.dp)) {
+            Column {
+              Text(game.title, style = MaterialTheme.typography.titleLarge, color = Color.White, maxLines = 2, overflow = TextOverflow.Ellipsis)
+              if (disc != null && disc.titleId != 0L) IdLine(disc, idStyle.copy(color = Color(0xFFB8C8B8)))
+              Text(if (gameIndex == carouselIndex) "A  •  INICIAR JOGO" else "SELECIONAR", style = MaterialTheme.typography.labelSmall, color = Color(0xFF9BE69A), modifier = Modifier.padding(top = 8.dp))
+            }
+          }
+        }
+      } else if (viewMode == "grid") {
         Column(Modifier.padding(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
           SeriesXGameCover(game, covers[game.uri], icons[game.uri], Modifier.width(coverWidth).height(coverHeight))
           Text(game.title, Modifier.fillMaxWidth().padding(top = 9.dp), style = titleStyle, maxLines = 2, overflow = TextOverflow.Ellipsis)
