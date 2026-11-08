@@ -179,7 +179,7 @@ jobs:
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish }}
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: fsr-build-${{ github.run_number }}
-          name: hakuX FSR build ${{ github.run_number }}
+          tag_name: seriesx-test-${{ github.run_number }}
+          name: HakuX Series X test ${{ github.run_number }}
           prerelease: true
           files: hakuX-seriesx-test.apk
