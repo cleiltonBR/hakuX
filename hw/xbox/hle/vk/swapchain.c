@@ -184,7 +184,16 @@ static const char k_fs_head[] =
     "}\n"
     "vec4 ramp(vec3 c) {\n"
     "  uvec3 v = uvec3(clamp(c, 0.0, 1.0) * 255.0 + 0.5);\n"
-    "  return vec4(float(lut(v.r)), float(lut(256u + v.g)), float(lut(512u + v.b)), 255.0) / 255.0;\n"
+    "  vec3 rgb = vec3(float(lut(v.r)), float(lut(256u + v.g)), float(lut(512u + v.b))) / 255.0;\n"
+    "  if (pc.extra.w > 0.5) {\n"
+    "    rgb = mix(rgb / 12.92, pow((rgb + 0.055) / 1.055, vec3(2.4)), step(vec3(0.04045), rgb));\n"
+    "    rgb *= 203.0; /* SDR reference white, nits */\n"
+    "    const float m1 = 0.1593017578125, m2 = 78.84375;\n"
+    "    const float c1 = 0.8359375, c2 = 18.8515625, c3 = 18.6875;\n"
+    "    vec3 p = pow(clamp(rgb / 10000.0, 0.0, 1.0), vec3(m1));\n"
+    "    rgb = pow((c1 + c2 * p) / (1.0 + c3 * p), vec3(m2));\n"
+    "  }\n"
+    "  return vec4(rgb, 1.0);\n"
     "}\n";
 static const char k_fs_bilinear[] =
     "void main() {\n"
