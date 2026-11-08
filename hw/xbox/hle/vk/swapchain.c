@@ -138,14 +138,14 @@ static struct {
 } g_ps;
 
 /* Read by the Android debug overlay; each field is independently atomic. */
-static int g_nis_status[12];
+static int g_nis_status[14];
 static void nis_status(int index, int value)
 {
     __atomic_store_n(&g_nis_status[index], value, __ATOMIC_RELAXED);
 }
-void hle_present_nis_status(int status[12])
+void hle_present_nis_status(int status[14])
 {
-    for (unsigned i = 0; i < 12; i++) status[i] = __atomic_load_n(&g_nis_status[i], __ATOMIC_RELAXED);
+    for (unsigned i = 0; i < 14; i++) status[i] = __atomic_load_n(&g_nis_status[i], __ATOMIC_RELAXED);
 }
 
 /* ---- shaders ---- */
@@ -1524,6 +1524,9 @@ static void log_path(unsigned p, bool fxaa, bool nis, int upscale, bool use_fsr,
 
 void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, bool cas, float cas_sharpness, bool nis, float nis_sharpness, uint64_t key)
 {
+    /* FSR destination dimensions are independent of NIS output dimensions. */
+    nis_status(12, 0);
+    nis_status(13, 0);
     g_ps.shown = false;
     PsFrame *f = &g_ps.fr[g_ps.cur];
     const uint32_t ww = g_ps.wsize.width, wh = g_ps.wsize.height, iw = g_ps.ext.width, ih = g_ps.ext.height;
@@ -1644,6 +1647,8 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
         const bool fdown = (g_ps.f.w > fvw * 1.01f || g_ps.f.h > fvh * 1.01f) && average && g_ps.pipe[P_AREA];
         const bool fup = (float)g_ps.f.w < fvw * 0.99f || (float)g_ps.f.h < fvh * 0.99f;
         const uint32_t ow = (uint32_t)(fvw + 0.5f), oh = (uint32_t)(fvh + 0.5f);
+        nis_status(12, (int)ow);
+        nis_status(13, (int)oh);
         if (!fdown) {
             use_fsr = true;
             if (fup && ow >= 2 && oh >= 2 && ow <= 8192 && oh <= 8192 && fsr_target(ow, oh)) {
