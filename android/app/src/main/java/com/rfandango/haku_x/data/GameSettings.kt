@@ -97,10 +97,8 @@ class RunSettings(private val app: AppPrefs, private val game: GameOverrides?) {
   private fun text(s: GameSetting, global: String) = game?.get(s) ?: global
 
   val uncapped get() = bool(GameSetting.UNCAPPED, app.uncapped)
-  val renderScale get() = game?.get(GameSetting.RENDER_SCALE)?.toIntOrNull() ?: app.renderScale
-  val renderScaleHalfSteps get() = game?.get(GameSetting.RENDER_SCALE_HALF)?.toIntOrNull()?.coerceIn(1, 16)
-    ?: (game?.get(GameSetting.RENDER_SCALE)?.toIntOrNull()?.coerceIn(1, 8)?.times(2))
-    ?: app.renderScaleHalfSteps
+  val renderScale get() = game?.get(GameSetting.RENDER_SCALE_HALF)?.toIntOrNull()?.let { (((it.coerceIn(2, 16) + 1) / 2).coerceIn(1, 8)) } ?: game?.get(GameSetting.RENDER_SCALE)?.toIntOrNull()?.coerceIn(1, 8) ?: app.renderScale
+  val renderScaleHalfSteps get() = renderScale * 2
   val asyncShaders get() = bool(GameSetting.ASYNC_SHADERS, app.asyncShaders)
   val prebuildShaders get() = bool(GameSetting.PREBUILD_SHADERS, app.prebuildShaders)
   /** A debug build's setting (off for A/B); always on in the others. */
