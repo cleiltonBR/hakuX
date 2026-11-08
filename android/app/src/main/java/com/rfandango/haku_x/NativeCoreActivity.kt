@@ -121,14 +121,14 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
             7 -> "FSR 1.0 (RCAS)"
             6 -> "FSR 1.0 (EASU + RCAS)"
             5 -> "FSR 1.0 (EASU)"
-            4 -> "NIS nitidez"
+            4 -> "não aplicado (NIS em modo nitidez)"
             3 -> "NIS"
             2 -> "SGSR"
             1 -> "redução"
             else -> "Bilinear"
           }
           val nisState = if (n[1] == 1) {
-            if (n[2] == 1) "ON (executado)" else "ON (não executado)"
+            if (n[2] == 1) { if (n[8] == 4) "ON (nitidez aplicada)" else "ON (executado)" } else "ON (não executado)"
           } else "OFF"
           val casState = when {
             n[9] == 0 -> "OFF"
