@@ -77,7 +77,7 @@ private val HakuXDarkColors = darkColorScheme(
  * follow as it changes (the settings set it).
  */
 object AppTheme {
-  private val _mode = MutableStateFlow(AppPrefs.THEME_SYSTEM)
+  private val _mode = MutableStateFlow(AppPrefs.THEME_DARK)
   val mode: StateFlow<String> = _mode
 
   fun load(context: Context) {
