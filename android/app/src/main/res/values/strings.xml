@@ -566,4 +566,6 @@
   <string name="xinput_ls_y">Left stick, vertical</string>
   <string name="xinput_rs_x">Right stick, horizontal</string>
   <string name="xinput_rs_y">Right stick, vertical</string>
+  <string name="settings_hdr">HDR10</string>
+  <string name="settings_hdr_desc">Converte a imagem SDR do jogo para HDR10 (PQ/10 bits) quando a tela e o driver Vulkan oferecem suporte; caso contrário, mantém SDR.</string>
 </resources>
