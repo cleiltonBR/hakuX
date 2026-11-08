@@ -24,6 +24,7 @@ static int g_upscale = NC_UPSCALE_BILINEAR;
 static bool g_cas;
 static float g_cas_sharpness = 0.2f;
 static bool g_nis;
+static bool g_hdr;
 static float g_nis_sharpness = 0.5f;
 static bool g_shown;
 
@@ -67,6 +68,11 @@ void nc_present_set_cas_sharpness(float sharpness)
     if (sharpness < 0.0f) sharpness = 0.0f;
     if (sharpness > 2.0f) sharpness = 2.0f;
     g_cas_sharpness = sharpness;
+}
+
+void nc_present_set_hdr(bool on)
+{
+    g_hdr = on;
 }
 
 void nc_present_set_nis(bool on, float sharpness)
@@ -203,7 +209,8 @@ bool nc_present_frame(struct ANativeWindow *win)
     const uint64_t key = (uint64_t)fxaa | (uint64_t)upscale << 1 | (uint64_t)g_dbg.average << 4 |
                          (uint64_t)g_widescreen << 5 | (uint64_t)(uint32_t)g_aspect << 8 |
                          (uint64_t)g_cas << 16 | (uint64_t)(uint32_t)(g_cas_sharpness * 1000.0f) << 17 |
-                         (uint64_t)g_nis << 30 | (uint64_t)(uint32_t)(g_nis_sharpness * 1000.0f) << 31 |\n                         (uint64_t)g_hdr << 42;
+                         (uint64_t)g_nis << 30 | (uint64_t)(uint32_t)(g_nis_sharpness * 1000.0f) << 31 |
+                         (uint64_t)g_hdr << 42;
     if (hle_present_unchanged(win, key)) {
         nc_dev_nv2a_display_pickup(now_ns()); /* it looked: the vblank keeps clear of it */
         wait_next_vsync();
