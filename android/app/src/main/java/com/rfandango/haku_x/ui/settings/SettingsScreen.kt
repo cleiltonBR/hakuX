@@ -94,6 +94,7 @@ fun SettingsScreen(
   var casSharpness by remember { mutableStateOf(prefs.casSharpness) }
   var casSharpnessDialog by remember { mutableStateOf(false) }
   var nis by remember { mutableStateOf(prefs.nis) }
+  var hdr by remember { mutableStateOf(prefs.hdrEnabled) }
   var nisSharpness by remember { mutableStateOf(prefs.nisSharpness) }
   var nisSharpnessDialog by remember { mutableStateOf(false) }
   var upscale by remember { mutableStateOf(prefs.upscaleFilter) }
@@ -297,6 +298,12 @@ fun SettingsScreen(
       )
 
       Section(stringResource(R.string.settings_section_graphics))
+      SwitchItem(
+        title = stringResource(R.string.settings_hdr),
+        summary = stringResource(R.string.settings_hdr_desc),
+        checked = hdr,
+        onChange = { hdr = it; prefs.hdrEnabled = it },
+      )
       ListItem(
         headlineContent = { Text(stringResource(R.string.settings_scale)) },
         supportingContent = {
