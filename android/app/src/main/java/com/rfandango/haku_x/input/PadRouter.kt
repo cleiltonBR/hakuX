@@ -1,11 +1,13 @@
 package com.rfandango.haku_x.input
 
+import android.content.Context
 import android.media.AudioAttributes
 import android.os.Build
 import android.os.CombinedVibration
 import android.os.SystemClock
 import android.os.VibrationAttributes
 import android.os.VibrationEffect
+import android.os.Vibrator
 import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
@@ -23,6 +25,7 @@ import com.rfandango.haku_x.data.PadState
  * (send) and gives back its rumble (rumbleOf: left << 16 | right).
  */
 class PadRouter(
+  private val context: Context,
   private val send: (player: Int, out: PadOut) -> Unit,
   private val rumbleOf: (player: Int) -> Int,
   private val vibrationEnabled: () -> Boolean,
@@ -156,6 +159,22 @@ class PadRouter(
     control -> v
     v >= ONOFF_MIN -> VibrationEffect.DEFAULT_AMPLITUDE
     else -> 0
+  }
+
+  /** Vibrate a single controller motor (never the phone's default vibrator). */
+  private fun vibrateOne(vib: Vibrator, left: Int, right: Int) {
+    val a = amplitude(maxOf(left, right), vib.hasAmplitudeControl())
+    if (a == 0) {
+      vib.cancel()
+      return
+    }
+    val effect = VibrationEffect.createOneShot(1000, a)
+    if (Build.VERSION.SDK_INT >= 33) {
+      vib.vibrate(effect, VibrationAttributes.createForUsage(VibrationAttributes.USAGE_MEDIA))
+    } else {
+      @Suppress("DEPRECATION")
+      vib.vibrate(effect, AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_GAME).build())
+    }
   }
 
   /**
