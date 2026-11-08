@@ -1,14 +1,11 @@
 package com.rfandango.haku_x.input
 
-import android.content.Context
 import android.media.AudioAttributes
 import android.os.Build
 import android.os.CombinedVibration
 import android.os.SystemClock
 import android.os.VibrationAttributes
 import android.os.VibrationEffect
-import android.os.Vibrator
-import android.os.VibratorManager
 import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
@@ -26,7 +23,6 @@ import com.rfandango.haku_x.data.PadState
  * (send) and gives back its rumble (rumbleOf: left << 16 | right).
  */
 class PadRouter(
-  private val context: Context,
   private val send: (player: Int, out: PadOut) -> Unit,
   private val rumbleOf: (player: Int) -> Int,
   private val vibrationEnabled: () -> Boolean,
@@ -105,12 +101,9 @@ class PadRouter(
   private val motors = HashMap<Int, Boolean>()
 
   /**
-   * The titles' rumble to the controllers playing (polled): each change of
-   * level, and every 900 ms while it lasts (a vibration is asked for a second
-   * at a time, as SDL's rumble was). A controller without motors (a
-   * handheld's own controls, which Android reports as external USB, or a
-   * clip-on) rumbles the device instead: the first player's such controller,
-   * so that several don't share it.
+   * The titles' rumble is sent only to the assigned physical controller.
+   * Devices without controller motors are intentionally left silent: the
+   * phone's vibrator must never be used as a substitute for controller rumble.
    */
   fun pollRumble() {
     if (!vibrationEnabled()) {
@@ -118,14 +111,6 @@ class PadRouter(
       return
     }
     val now = SystemClock.uptimeMillis()
-    var body = -1
-    var bodyPlayer = Controllers.PLAYERS
-    for ((id, p) in assignment) {
-      if (p < bodyPlayer && InputDevice.getDevice(id)?.let { hasMotors(it) } == false) {
-        body = id
-        bodyPlayer = p
-      }
-    }
     for ((id, p) in assignment) {
       val raw = rumbleOf(p)
       val r = level(raw ushr 16) shl 8 or level(raw and 0xFFFF)
@@ -133,13 +118,13 @@ class PadRouter(
       if (r == last && (r == 0 || now - (rumbleAt[id] ?: 0) < 900)) continue
       rumble[id] = r
       rumbleAt[id] = now
-      InputDevice.getDevice(id)?.let { vibrate(it, r ushr 8, r and 0xFF, id == body) }
+      InputDevice.getDevice(id)?.let { vibrate(it, r ushr 8, r and 0xFF) }
     }
   }
 
   /** Every controller still, when the game goes away. */
   fun stopRumble() {
-    for (id in rumble.keys) InputDevice.getDevice(id)?.let { vibrate(it, 0, 0, true) }
+    for (id in rumble.keys) InputDevice.getDevice(id)?.let { vibrate(it, 0, 0) }
     rumble.clear()
   }
 
@@ -173,39 +158,13 @@ class PadRouter(
     else -> 0
   }
 
-  /** One motor: the stronger of the two. */
-  private fun vibrateOne(vib: Vibrator, left: Int, right: Int) {
-    val a = amplitude(maxOf(left, right), vib.hasAmplitudeControl())
-    if (a == 0) {
-      vib.cancel()
-      return
-    }
-    val e = VibrationEffect.createOneShot(1000, a)
-    if (Build.VERSION.SDK_INT >= 33) {
-      vib.vibrate(e, VibrationAttributes.createForUsage(VibrationAttributes.USAGE_MEDIA))
-    } else {
-      @Suppress("DEPRECATION")
-      vib.vibrate(e, AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_GAME).build())
-    }
-  }
-
-  /** The device's own motor. */
-  private fun bodyVibrator(): Vibrator? {
-    val v = if (Build.VERSION.SDK_INT >= 31) {
-      context.getSystemService(VibratorManager::class.java)?.defaultVibrator
-    } else {
-      context.getSystemService(Vibrator::class.java)
-    }
-    return v?.takeIf { it.hasVibrator() }
-  }
-
-  /** A controller's rumble (levels): on its motors, or (body) on the device's when it has none. */
-  private fun vibrate(d: InputDevice, left: Int, right: Int, body: Boolean) {
+  /**
+   * Send rumble only through the InputDevice's own controller vibrator(s).
+   * Android's application/default vibrator is deliberately never consulted.
+   */
+  private fun vibrate(d: InputDevice, left: Int, right: Int) {
     try {
-      if (!hasMotors(d)) {
-        if (body) bodyVibrator()?.let { vibrateOne(it, left, right) }
-        return
-      }
+      if (!hasMotors(d)) return
       if (Build.VERSION.SDK_INT < 31) {
         @Suppress("DEPRECATION")
         vibrateOne(d.vibrator, left, right)
@@ -218,24 +177,25 @@ class PadRouter(
         vibrateOne(d.vibrator, left, right)
         return
       }
-      val c = CombinedVibration.startParallel()
+      val combined = CombinedVibration.startParallel()
       var any = false
-      /* two motors: the left (heavy) and the right (light) as the Duke's */
+      /* Two motors: left (heavy) and right (light), when exposed by the controller. */
       for ((i, vid) in ids.withIndex()) {
-        val v = if (ids.size >= 2) (if (i == 0) left else right) else maxOf(left, right)
-        val a = amplitude(v, vm.getVibrator(vid).hasAmplitudeControl())
+        val value = if (ids.size >= 2) (if (i == 0) left else right) else maxOf(left, right)
+        val motor = vm.getVibrator(vid)
+        val a = amplitude(value, motor.hasAmplitudeControl())
         if (a == 0) continue
-        c.addVibrator(vid, VibrationEffect.createOneShot(1000, a))
+        combined.addVibrator(vid, VibrationEffect.createOneShot(1000, a))
         any = true
       }
       when {
         !any -> vm.cancel()
         Build.VERSION.SDK_INT >= 33 ->
-          vm.vibrate(c.combine(), VibrationAttributes.createForUsage(VibrationAttributes.USAGE_MEDIA))
-        else -> vm.vibrate(c.combine())
+          vm.vibrate(combined.combine(), VibrationAttributes.createForUsage(VibrationAttributes.USAGE_MEDIA))
+        else -> vm.vibrate(combined.combine())
       }
     } catch (_: Exception) {
-      /* a controller gone meanwhile, or one that refuses: no rumble */
+      /* Controller disconnected or its motor rejected the request: no phone fallback. */
     }
   }
 
