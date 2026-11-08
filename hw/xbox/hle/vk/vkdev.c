@@ -247,9 +247,7 @@ int hle_vk_init(void)
     }
     /* Optional: exposes HDR color spaces (ST2084/BT.2020) when the Android
      * Vulkan loader supports them. SDR remains the fallback on older devices. */
-    const bool e_swapchain_colorspace =
-        has_ext(iext, nie, "VK_EXT_swapchain_colorspace");
-    if (e_swapchain_colorspace) {
+    if (has_ext(iext, nie, "VK_EXT_swapchain_colorspace")) {
         iexts[nix++] = "VK_EXT_swapchain_colorspace";
     }
     VkInstanceCreateInfo ici = {
