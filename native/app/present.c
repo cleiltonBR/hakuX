@@ -73,6 +73,7 @@ void nc_present_set_cas_sharpness(float sharpness)
 void nc_present_set_hdr(bool on)
 {
     g_hdr = on;
+    hle_present_set_hdr(on);
 }
 
 void nc_present_set_nis(bool on, float sharpness)
