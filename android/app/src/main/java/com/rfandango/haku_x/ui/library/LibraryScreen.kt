@@ -13,6 +13,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -26,6 +27,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -106,6 +110,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlin.math.absoluteValue
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -428,11 +433,16 @@ private fun GameList(
   val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
   val colors = MaterialTheme.colorScheme
   val shape = remember { RoundedCornerShape(16.dp) }
+  val carouselState = rememberLazyListState()
+  var carouselIndex by remember { mutableStateOf(0) }
+  LaunchedEffect(carouselState, games.size) {
+    snapshotFlow { carouselState.firstVisibleItemIndex }.collect { carouselIndex = it }
+  }
   val titleStyle = MaterialTheme.typography.titleMedium.copy(color = colors.onSurface)
   val idStyle = SMALL_PRINT.copy(fontFamily = FontFamily.Monospace, color = colors.onSurfaceVariant)
 
   @Composable
-  fun GameEntry(game: Game) {
+  fun GameEntry(game: Game, gameIndex: Int = 0) {
     val disc = info[game.uri]
     var focused by remember { mutableStateOf(false) }
     val cardWidth = if (landscape) 194.dp else 156.dp
