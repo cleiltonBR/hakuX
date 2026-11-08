@@ -951,9 +951,10 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
       .setPositiveButton("Baixar", null)
       .create()
     dialog.setOnShowListener {
-      dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener { button ->
-        button.isEnabled = false
-        button.text = "Baixando..."
+      val downloadButton = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+      downloadButton.setOnClickListener {
+        downloadButton.isEnabled = false
+        downloadButton.text = "Baixando..."
         Thread {
           val ok = ModCatalog.download(this, key)
           runOnUiThread {
