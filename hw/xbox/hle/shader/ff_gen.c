@@ -536,7 +536,7 @@ size_t hle_ff_ps_glsl(const HleFfPsKey *k, char *buf, size_t cap)
                 put(&b, "  vec2 uv%u = nvproj(vTex%u).xy;\n"
                         "  if ((pc.flags & %uu) != 0u) uv%u /= vec2(textureSize(sampler2D("
                         "uTex2D[nonuniformEXT(pc.tex[%u] & 0xFFFFu)], uSmp[0]), 0)) /\n"
-                        "      ((pc.flags & %uu) != 0u ? float(pc.flags >> 24) : 1.0);\n",
+                        "      ((pc.flags & %uu) != 0u ? (float(pc.flags >> 24) * 0.5) : 1.0);\n",
                     s, s, 1u << s, s, s, 256u << s);
             }
             put(&b, "  vec4 t%u = texture(sampler2D(uTex2D[nonuniformEXT(pc.tex[%u] & 0xFFFFu)], "
