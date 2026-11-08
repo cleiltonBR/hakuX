@@ -93,7 +93,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
       }
       nisView?.let { v ->
         val n = nativeGetNisStatus()
-        if (n != null && n.size >= 12) {
+        if (n != null && n.size >= 14) {
           val reason = when (n[3]) { 1 -> "recursos/pipeline"; 2 -> "dimensões"; 3 -> "imagem de saída"; 4 -> "configuração"; 5 -> "escala fora de 0,5–1,0"; else -> "nenhum" }
           val path = when (n[8]) {
             8 -> "FSR 1.0 (sem EASU necessário)"
@@ -115,7 +115,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
             else -> "ON / RCAS não aplicado"
           }
           val sharpness = "%.2f".format(java.util.Locale.US, n[10] / 100.0)
-          v.text = "Filtro: $path | NIS: $nisState | CAS: $casState ($sharpness)\nGPU: ${if (n[0] == 1) "OK" else "INDISPONÍVEL"} | ${n[4]}x${n[5]} → ${n[6]}x${n[7]} | motivo: $reason"
+          v.text = "Filtro: $path | NIS: $nisState | CAS: $casState ($sharpness)\nGPU: ${if (n[0] == 1) "OK" else "INDISPONÍVEL"} | NIS ${n[4]}x${n[5]} → ${n[6]}x${n[7]} | FSR ${n[12]}x${n[13]} | motivo: $reason"
         }
       }
       hitchView?.takeIf { hitchesOn }?.let { v ->
