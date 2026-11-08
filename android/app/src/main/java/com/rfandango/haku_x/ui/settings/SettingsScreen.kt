@@ -98,7 +98,7 @@ fun SettingsScreen(
   var showFps by remember { mutableStateOf(prefs.showFps) }
   var automatic3dCovers by remember { mutableStateOf(prefs.automatic3dCovers) }
   var showHitches by remember { mutableStateOf(prefs.showHitches) }
-  var scale by remember { mutableIntStateOf(prefs.renderScaleHalfSteps) }
+  var scale by remember { mutableIntStateOf(prefs.renderScale) }
   var aspect by remember { mutableStateOf(prefs.aspectRatio) }
   var fxaa by remember { mutableStateOf(prefs.fxaa) }
   var cas by remember { mutableStateOf(prefs.cas) }
@@ -526,9 +526,9 @@ fun SettingsScreen(
   if (scaleDialog) {
     ChoiceDialog(
       title = stringResource(R.string.settings_scale),
-      options = FRACTIONAL_SCALES.map { it to scaleHalfLabel(it) },
+      options = SCALES.map { it to scaleLabel(it) },
       current = scale,
-      onPick = { scale = it; prefs.renderScaleHalfSteps = it; scaleDialog = false },
+      onPick = { scale = it; prefs.renderScale = it; scaleDialog = false },
       onDismiss = { scaleDialog = false },
     )
   }
@@ -569,8 +569,7 @@ private fun themeLabel(value: String) = when (value) {
 /** Whole-step legacy choices retained for older callers. */
 internal val SCALES = (1..8).toList()
 
-/** Half-step fixed-point choices: 1 = 0.5x, 2 = 1x, ... 16 = 8x. */
-internal val FRACTIONAL_SCALES = (1..16).toList()
+/** Whole-number render scale choices only. */
 
 @Composable
 internal fun scaleHalfLabel(value: Int): String {
