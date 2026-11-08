@@ -673,11 +673,12 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
       text = ""
       visibility = View.VISIBLE
       setTextColor(Color.rgb(16, 124, 16))
-      setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f)
-      typeface = Typeface.MONOSPACE
+      setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+      typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD)
+      letterSpacing = 0.025f
       setShadowLayer(2f, 1f, 1f, Color.BLACK)
-      setPadding(16, 6, 16, 6)
-      setBackgroundColor(Color.argb(150, 0, 0, 0))
+      setPadding(16, 8, 16, 8)
+      setBackgroundColor(Color.argb(100, 0, 0, 0))
       maxLines = 6
     }
     val nisParams = RelativeLayout.LayoutParams(
