@@ -752,7 +752,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
         updateControllerVisibility()
       },
       getString(R.string.overlay_menu_controllers) to ::showPlayers,
-      "Gráficos (FSR / CAS)" to ::showRuntimeGraphics,
+      "Imagem e gráficos  ·  FSR / CAS" to ::showRuntimeGraphics,
     )
     if (states) {
       items += getString(R.string.overlay_menu_save_state) to { saveStates.showSlots(save = true) }
@@ -765,7 +765,8 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     items += getString(exit) to ::exitGame
     showMenuDialog(
       AlertDialog.Builder(this)
-        .setTitle("hakuX  •  Acesso rápido")
+        .setTitle("hakuX  •  XBOX SERIES X")
+        .setMessage("CENTRAL DE JOGO  ·  CONTROLES  ·  GRÁFICOS  ·  ESTADOS")
         .setItems(items.map { it.first }.toTypedArray()) { _, which -> items[which].second() }
         .setNegativeButton(R.string.overlay_menu_resume, null)
     )
@@ -792,7 +793,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
       "Intensidade CAS: ${"%.1f".format(java.util.Locale.US, prefs.casSharpness)}",
     )
     showMenuDialog(AlertDialog.Builder(this)
-      .setTitle("Gráficos durante a gameplay")
+      .setTitle("hakuX  •  Imagem e gráficos")
       .setItems(entries) { _, which ->
         when (which) {
           0 -> showMenuDialog(AlertDialog.Builder(this)
