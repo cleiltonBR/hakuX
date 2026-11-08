@@ -16,6 +16,7 @@ import com.rfandango.haku_x.data.Game
 import com.rfandango.haku_x.data.GameScanner
 import com.rfandango.haku_x.data.Storage
 import com.rfandango.haku_x.data.XisoConverter
+import com.rfandango.haku_x.data.XboxCoverCache
 import com.rfandango.haku_x.data.hdd.Dashboard
 import com.rfandango.haku_x.data.hdd.HddStore
 import kotlinx.coroutines.Dispatchers
@@ -53,6 +54,8 @@ data class LibraryState(
   val info: Map<Uri, DiscInfo> = emptyMap(),
   /** The discs' icons, decoded (LibraryViewModel.loadIcons), by the game's URI. */
   val icons: Map<Uri, ImageBitmap> = emptyMap(),
+  /** Downloaded original Xbox box-front artwork, cached locally, by game URI. */
+  val covers: Map<Uri, ImageBitmap> = emptyMap(),
   /** A conversion to XISO: asked, under way, or its outcome. */
   val conversion: Conversion? = null,
   /** The dashboard is on the hard disk's C: (Dashboard): its button starts it, else installs it. */
@@ -183,7 +186,7 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
     scanJob?.cancel()
     scanJob = viewModelScope.launch {
       _state.update {
-        it.copy(loading = true, toRead = 0, read = 0, games = emptyList(), info = emptyMap(), icons = emptyMap())
+        it.copy(loading = true, toRead = 0, read = 0, games = emptyList(), info = emptyMap(), icons = emptyMap(), covers = emptyMap())
       }
       val ready = withContext(Dispatchers.IO) { folders.filter { Storage.isFolderReady(app, it) } }
       if (ready.isEmpty()) {
@@ -213,7 +216,22 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
           games = sorted(games.map { g -> info[g.uri]?.title?.let { g.copy(title = it) } ?: g }),
           info = info.toMap(),
           icons = icons,
+          covers = emptyMap(),
         )
+      }
+
+      // Artwork is fetched after the library appears, never blocking game launch or scrolling.
+      // The cache is keyed by Xbox Title ID, so a later refresh is almost entirely offline.
+      if (prefs.automatic3dCovers) {
+        val covers = HashMap<Uri, ImageBitmap>()
+        for ((uri, disc) in info) {
+          if (!currentCoroutineContext().isActive) break
+          if (disc.titleId == 0L) continue
+          val bitmap = withContext(Dispatchers.IO) { XboxCoverCache.load(app, disc.titleId) } ?: continue
+          bitmap.prepareToDraw()
+          covers[uri] = bitmap.asImageBitmap()
+          _state.update { current -> current.copy(covers = covers.toMap()) }
+        }
       }
     }
   }
