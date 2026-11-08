@@ -68,6 +68,7 @@ typedef struct PsFrame {
 static struct {
     struct VolkDeviceTable t;
     bool inited, failed;
+    bool hdr_active;             /* the current swapchain is HDR10, not merely requested */
     VkSemaphore tl;             /* timeline: each submit's value */
     uint64_t submitted;
     VkSampler smp;
@@ -139,6 +140,11 @@ static struct {
 
 /* Read by the Android debug overlay; each field is independently atomic. */
 static int g_nis_status[14];
+static bool g_hdr_requested;
+void hle_present_set_hdr(bool enabled)
+{
+    __atomic_store_n(&g_hdr_requested, enabled, __ATOMIC_RELAXED);
+}
 static void nis_status(int index, int value)
 {
     __atomic_store_n(&g_nis_status[index], value, __ATOMIC_RELAXED);
@@ -946,19 +952,36 @@ static bool make_swapchain(uint32_t w, uint32_t h)
     VkSurfaceFormatKHR fmts[32];
     uint32_t nf = 32;
     vkGetPhysicalDeviceSurfaceFormatsKHR(g_hvk.phys, g_ps.surf, &nf, fmts);
-    /* plain 8-bit UNORM: the frame's values go out as they are (an sRGB
-     * format would encode them again) */
-    VkSurfaceFormatKHR fmt = nf ? fmts[0] : (VkSurfaceFormatKHR){ VK_FORMAT_R8G8B8A8_UNORM, 0 };
-    for (int pass = 0; pass < 2; pass++) {
-        const VkFormat want = pass ? VK_FORMAT_B8G8R8A8_UNORM : VK_FORMAT_R8G8B8A8_UNORM;
+    /* Prefer HDR10 only when explicitly requested and the Android Vulkan
+     * surface advertises the exact 10-bit/PQ pair. Otherwise keep SDR. */
+    const bool want_hdr = __atomic_load_n(&g_hdr_requested, __ATOMIC_RELAXED);
+    VkSurfaceFormatKHR fmt = nf ? fmts[0] : (VkSurfaceFormatKHR){ VK_FORMAT_R8G8B8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR };
+    bool hdr_found = false;
+#ifdef VK_EXT_swapchain_colorspace
+    if (want_hdr) {
         for (uint32_t i = 0; i < nf; i++) {
-            if (fmts[i].format == want && fmts[i].colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
+            if (fmts[i].format == VK_FORMAT_A2B10G10R10_UNORM_PACK32 &&
+                fmts[i].colorSpace == VK_COLOR_SPACE_HDR10_ST2084_EXT) {
                 fmt = fmts[i];
-                pass = 2;
+                hdr_found = true;
                 break;
             }
         }
     }
+#endif
+    if (!hdr_found) {
+        for (int pass = 0; pass < 2; pass++) {
+            const VkFormat want = pass ? VK_FORMAT_B8G8R8A8_UNORM : VK_FORMAT_R8G8B8A8_UNORM;
+            for (uint32_t i = 0; i < nf; i++) {
+                if (fmts[i].format == want && fmts[i].colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
+                    fmt = fmts[i];
+                    pass = 2;
+                    break;
+                }
+            }
+        }
+    }
+    g_ps.hdr_active = hdr_found;
     /* Android may make more images than asked for (10 for 6 on a Dimensity
      * 8300), so the arrays are sized from what the swapchain reports. */
     uint32_t n = MAX(caps.minImageCount, 3u);
@@ -1718,7 +1741,7 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
             pc[6] = (float)g_ps.f.w;
             pc[7] = (float)g_ps.f.h;
         }
-        quad(cb, f, 0, g_ps.pipe[p], src, pc, iw, ih);
+        pc[7] = g_ps.hdr_active ? 1.0f : 0.0f; /* HDR conversion after the display gamma ramp */\n        quad(cb, f, 0, g_ps.pipe[p], src, pc, iw, ih);
         const bool fsr_rcas = use_fsr && cas && g_ps.pipe[P_RCAS] && p == P_RCAS;
         nis_status(8, nis_done ? (nis_sharpen_only ? 4 : 3) :
                    fsr_easu ? (fsr_rcas ? 6 : 5) : fsr_rcas ? 7 : use_fsr ? 8 :
