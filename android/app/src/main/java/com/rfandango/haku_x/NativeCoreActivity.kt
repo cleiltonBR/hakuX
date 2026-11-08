@@ -765,6 +765,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     items += getString(exit) to ::exitGame
     showMenuDialog(
       AlertDialog.Builder(this)
+        .setTitle("hakuX  •  Acesso rápido")
         .setItems(items.map { it.first }.toTypedArray()) { _, which -> items[which].second() }
         .setNegativeButton(R.string.overlay_menu_resume, null)
     )
