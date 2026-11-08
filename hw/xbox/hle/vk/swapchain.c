@@ -145,7 +145,7 @@ static void nis_status(int index, int value)
 }
 void hle_present_nis_status(int status[12])
 {
-    for (unsigned i = 0; i < 12; i) status[i] = __atomic_load_n(&g_nis_status[i], __ATOMIC_RELAXED);
+    for (unsigned i = 0; i < 12; i++) status[i] = __atomic_load_n(&g_nis_status[i], __ATOMIC_RELAXED);
 }
 
 /* ---- shaders ---- */
