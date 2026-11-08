@@ -176,7 +176,7 @@
   <string name="settings_export_logs_done">Logs saved as %1$s</string>
   <string name="settings_export_logs_failed">Couldn\'t export the logs</string>
   <string name="settings_uncap">Uncapped frame rate</string>
-  <string name="settings_uncap_desc">Present every frame at once instead of waiting for the display.</string>
+  <string name="settings_uncap_desc">Removes the presentation queue wait when supported. Games tied to Xbox VBlank need a compatible FPS patch; game speed is never increased.</string>
   <string name="settings_scale">Resolution scale</string>
   <string name="settings_scale_value">%1$dx the game\'s resolution</string>
   <string name="settings_scale_desc">Dimensions shown are examples for a 640×480 (480p) game; actual dimensions depend on the game\'s video mode. Higher scales use substantially more GPU memory and processing power.</string>

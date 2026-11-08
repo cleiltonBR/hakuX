@@ -471,9 +471,9 @@ private fun GameList(
                 },
               )
             }
-            if (disc != null && ModCatalog.has(context, key)) {
+            if (disc != null && disc.titleId != 0L) {
               DropdownMenuItem(
-                text = { Text(stringResource(R.string.library_menu_mods)) },
+                text = { Text(if (ModCatalog.has(context, key)) "Mods e patches / atualizar catálogo" else "Baixar mods e patches") },
                 leadingIcon = { Icon(Icons.Filled.Star, contentDescription = null) },
                 onClick = {
                   menuFor = null

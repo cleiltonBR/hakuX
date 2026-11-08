@@ -693,48 +693,11 @@ static uint64_t next_vblank(uint64_t prev)
     return next + (uint64_t)c;
 }
 
-/* Uncapped (the app's setting: HAKUX_HLE_UNCAP; debug.hakux.uncap 1 / 0
- * on demand), read by the vblank thread now and then. */
-static bool uncapped(void)
+/* The console's VBlank clock remains tied to its video mode. Uncapped
+ * presentation must never advance guest interrupts early: many titles use
+ * those interrupts to advance simulation, animation and physics. */
+static uint64_t wait_vblank(uint64_t next)
 {
-    static int on = -1;
-    static unsigned polls;
-    if (on < 0) {
-        on = getenv("HAKUX_HLE_UNCAP") != NULL;
-    }
-    if (polls++ % 32 == 0) {
-        char v[PROP_VALUE_MAX] = "";
-        if (hle_prop_get("debug.hakux.uncap", v) > 0) {
-            on = atoi(v) != 0;
-        }
-    }
-    return on;
-}
-
-#define EARLY_GAP_NS 1000000ull     /* uncapped: early vblanks at most this often */
-#define EARLY_POLL_NS 250000ull
-
-/* Uncapped push-buffer mode: the title's own D3D flips in its vblank
- * handler (and with a presentation interval of n, every n vblanks), so
- * while PGRAPH waits in FLIP_STALL (the buffer it would draw next is still
- * the one shown: the flip counters' read equals write) an early vblank
- * comes once the last one was handled; the frame rate then follows
- * rendering, as IMMEDIATE swaps do in D3D mode. Titles that count vblanks run fast, as frame-locked ones do
- * there. Returns when the vblank is due: next, or earlier. */
-static uint64_t wait_vblank(uint64_t next, uint64_t last)
-{
-    if (g_pbmode && uncapped()) {
-        for (uint64_t t = now_ns(); t < next; t = now_ns()) {
-            if (t - last >= EARLY_GAP_NS && hle_pb_flip_waiting() &&
-                !(ld(NV_PCRTC_INTR_0) & PCRTC_VBLANK)) {
-                return t;
-            }
-            const uint64_t until = next < t + EARLY_POLL_NS ? next : t + EARLY_POLL_NS;
-            const struct timespec ts = {(time_t)(until / 1000000000ull), (long)(until % 1000000000ull)};
-            clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &ts, NULL);
-        }
-        return next;
-    }
     const struct timespec ts = {(time_t)(next / 1000000000ull), (long)(next % 1000000000ull)};
     while (clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &ts, NULL) != 0) {
     }
@@ -753,7 +716,7 @@ static void *vblank_thread(void *arg)
             next = now_ns();
         }
         const uint64_t due = next_vblank(next);
-        next = wait_vblank(due, next);
+        next = wait_vblank(due);
         __atomic_store_n(&g_last_vblank_ns, next, __ATOMIC_RELEASE);
         __atomic_fetch_or(reg(NV_PCRTC_INTR_0), PCRTC_VBLANK, __ATOMIC_ACQ_REL);
         __atomic_fetch_add(&g_vblanks, 1, __ATOMIC_RELAXED);

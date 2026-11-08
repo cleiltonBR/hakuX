@@ -5,6 +5,8 @@ import android.content.res.AssetManager
 import android.util.Log
 import org.json.JSONObject
 import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
 import java.util.Locale
 
 /**
@@ -45,13 +47,96 @@ object ModCatalog {
     map
   }
 
+  private fun localFolder(context: Context, gameKey: String) =
+    File(context.filesDir, "downloaded_mods/${gameKey.uppercase(Locale.ROOT)}")
+
   private fun folder(context: Context, gameKey: String) = folders(context)[gameKey.uppercase(Locale.ROOT)]
 
-  /** Whether the disc with this game key has mods or cheats. */
-  fun has(context: Context, gameKey: String) = folder(context, gameKey) != null
+  /** Whether this exact disc release has bundled or downloaded content. */
+  fun has(context: Context, gameKey: String) =
+    localFolder(context, gameKey).isDirectory || folder(context, gameKey) != null
+
+  /**
+   * Downloads the curated files for one exact TitleID.version from this
+   * project's public mods catalog. Files are staged and swapped atomically;
+   * no game files or user-created mods are overwritten.
+   */
+  fun download(context: Context, gameKey: String): Boolean {
+    val key = gameKey.uppercase(Locale.ROOT)
+    if (!key.matches(Regex("[0-9A-F]{8}\\.\\d+"))) return false
+    val connection = (URL("https://api.github.com/repos/cleiltonBR/hakuX/git/trees/ui%2Fxbox-series-x-on-build307?recursive=1")
+      .openConnection() as HttpURLConnection).apply {
+      connectTimeout = 15000
+      readTimeout = 30000
+      setRequestProperty("Accept", "application/vnd.github+json")
+      setRequestProperty("User-Agent", "HakuX-Android")
+    }
+    val stage = File(context.cacheDir, "mods-download/$key.tmp")
+    return try {
+      val body = connection.inputStream.bufferedReader().use { it.readText() }
+      val tree = JSONObject(body).getJSONArray("tree")
+      val prefix = "$ROOT/$key/"
+      val entries = (0 until tree.length()).map { tree.getJSONObject(it) }
+        .filter { it.optString("type") == "blob" && it.optString("path").startsWith(prefix) }
+      if (entries.isEmpty()) return false
+      stage.deleteRecursively()
+      var total = 0L
+      for (entry in entries) {
+        val path = entry.getString("path")
+        val relative = path.removePrefix(prefix)
+        val parts = relative.split('/')
+        if (relative.isBlank() || parts.any { it.isBlank() || it == "." || it == ".." } ||
+            relative.startsWith("/") || relative.contains('\\')) continue
+        val size = entry.optLong("size", 0L)
+        if (size < 0 || size > 16L * 1024 * 1024 || total + size > 64L * 1024 * 1024)
+          throw IllegalStateException("Catálogo excede o limite de tamanho")
+        val encoded = relative.split('/').joinToString("/") {
+          java.net.URLEncoder.encode(it, "UTF-8").replace("+", "%20")
+        }
+        val raw = URL("https://raw.githubusercontent.com/cleiltonBR/hakuX/ui/xbox-series-x-on-build307/$ROOT/$key/$encoded")
+          .openConnection() as HttpURLConnection
+        raw.connectTimeout = 15000
+        raw.readTimeout = 30000
+        raw.setRequestProperty("User-Agent", "HakuX-Android")
+        val target = File(stage, relative)
+        target.parentFile?.mkdirs()
+        raw.inputStream.use { input -> target.outputStream().use { output ->
+          total += input.copyTo(output)
+          if (total > 64L * 1024 * 1024) throw IllegalStateException("Download excede 64 MB")
+        } }
+        raw.disconnect()
+      }
+      if (stage.listFiles().isNullOrEmpty()) return false
+      val parent = localFolder(context, key).parentFile!!
+      parent.mkdirs()
+      val target = localFolder(context, key)
+      val backup = File(parent, "$key.old")
+      backup.deleteRecursively()
+      if (target.exists() && !target.renameTo(backup)) throw IllegalStateException("Não foi possível preparar a atualização")
+      if (!stage.renameTo(target)) {
+        if (backup.exists()) backup.renameTo(target)
+        throw IllegalStateException("Não foi possível instalar o catálogo baixado")
+      }
+      backup.deleteRecursively()
+      true
+    } catch (e: Exception) {
+      Log.w(TAG, "$key: download failed: ${e.message}")
+      stage.deleteRecursively()
+      false
+    } finally {
+      connection.disconnect()
+    }
+  }
 
   /** The disc's mods (by folder name) and cheats (in file order). */
   fun load(context: Context, gameKey: String): GameMods {
+    val local = localFolder(context, gameKey)
+    if (local.isDirectory) {
+      val mods = local.listFiles().orEmpty().filter { it.isDirectory }.sortedBy { it.name }
+        .mapNotNull { dir -> File(dir, "mod.txt").takeIf { it.isFile }?.let { parseMod(dir.name, it.readText()) } }
+      val cheats = File(local, "cheats.txt").takeIf { it.isFile }?.let { parseCheats(it.readText()) }.orEmpty()
+      return GameMods(mods, cheats)
+    }
     val dir = folder(context, gameKey) ?: return GameMods(emptyList(), emptyList())
     val am = context.assets
     val base = "$ROOT/$dir"
@@ -138,6 +223,10 @@ object ModCatalog {
    * paths and host files.
    */
   fun extract(context: Context, gameKey: String, mod: String): List<Pair<String, File>> {
+    val local = File(localFolder(context, gameKey), "$mod/files")
+    if (local.isDirectory) {
+      return local.walkTopDown().filter { it.isFile }.map { it.relativeTo(local).path to it }.toList()
+    }
     val dir = folder(context, gameKey) ?: return emptyList()
     val am = context.assets
     val src = "$ROOT/$dir/$mod/files"

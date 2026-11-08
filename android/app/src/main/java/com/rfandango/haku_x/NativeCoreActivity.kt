@@ -937,6 +937,40 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
    * or leave the game. The game stops while it is open; Resume, a tap outside
    * it or back closes it and the game goes on (showMenuDialog).
    */
+  /** Downloads the curated catalog for the currently running disc release. */
+  private fun downloadModsForCurrentGame() {
+    val key = gameKey()
+    if (key.startsWith("path:")) {
+      Toast.makeText(this, "Este jogo não possui Title ID para localizar patches compatíveis.", Toast.LENGTH_LONG).show()
+      return
+    }
+    val dialog = AlertDialog.Builder(this)
+      .setTitle("Mods e patches")
+      .setMessage("Baixar ou atualizar o catálogo deste jogo? Os patches serão aplicados na próxima inicialização.")
+      .setNegativeButton("Cancelar", null)
+      .setPositiveButton("Baixar", null)
+      .create()
+    dialog.setOnShowListener {
+      dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener { button ->
+        button.isEnabled = false
+        button.text = "Baixando..."
+        Thread {
+          val ok = ModCatalog.download(this, key)
+          runOnUiThread {
+            dialog.dismiss()
+            Toast.makeText(
+              this,
+              if (ok) "Download concluído. Reinicie o jogo para aplicar os patches."
+              else "Não há conteúdo para esta versão ou o download falhou.",
+              Toast.LENGTH_LONG,
+            ).show()
+          }
+        }.start()
+      }
+    }
+    dialog.show()
+  }
+
   /** Xbox Series X quick menu; the full list scrolls on compact screens. */
   private fun showMenu() {
     if (editorBar != null) return
@@ -961,6 +995,10 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
       actions += { saveStates.showSlots(save = true) }
       items += getString(R.string.overlay_menu_load_state) to "Carregar ou excluir um estado salvo"
       actions += { saveStates.showSlots(save = false) }
+    }
+    if (discUri != null && !gameKey().startsWith("path:")) {
+      items += "Baixar mods e patches" to "Buscar conteúdo compatível para este jogo"
+      actions += ::downloadModsForCurrentGame
     }
     if (runCheats.isNotEmpty()) {
       items += getString(R.string.overlay_menu_cheats) to "Ativar ou desativar trapaças do jogo"

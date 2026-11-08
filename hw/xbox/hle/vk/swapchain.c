@@ -40,6 +40,7 @@
 #include "nis_shader_sources.h"
 
 #include <string.h>
+#include <stdlib.h>
 
 #include <android/native_window.h>
 
@@ -934,6 +935,32 @@ static void drop_window(void)
     }
 }
 
+/* Uncapped presentation is independent from the Xbox's VBlank clock.
+ * Prefer MAILBOX (no tearing, latest frame wins), then IMMEDIATE (no queue
+ * wait, may tear). FIFO remains the guaranteed fallback. */
+static VkPresentModeKHR choose_present_mode(void)
+{
+    if (!getenv("HAKUX_HLE_UNCAP")) return VK_PRESENT_MODE_FIFO_KHR;
+    VkPresentModeKHR modes[32];
+    uint32_t count = (uint32_t)(sizeof(modes) / sizeof(modes[0]));
+    if (vkGetPhysicalDeviceSurfacePresentModesKHR(g_hvk.phys, g_ps.surf, &count, modes) != VK_SUCCESS)
+        return VK_PRESENT_MODE_FIFO_KHR;
+    for (uint32_t i = 0; i < count; i++) {
+        if (modes[i] == VK_PRESENT_MODE_MAILBOX_KHR) {
+            hle_log("hakuX-hle-back", "present: uncapped MAILBOX; guest VBlank remains fixed");
+            return VK_PRESENT_MODE_MAILBOX_KHR;
+        }
+    }
+    for (uint32_t i = 0; i < count; i++) {
+        if (modes[i] == VK_PRESENT_MODE_IMMEDIATE_KHR) {
+            hle_log("hakuX-hle-back", "present: uncapped IMMEDIATE; tearing may occur, guest VBlank remains fixed");
+            return VK_PRESENT_MODE_IMMEDIATE_KHR;
+        }
+    }
+    hle_log("hakuX-hle-back", "present: surface supports FIFO only; output remains refresh-limited");
+    return VK_PRESENT_MODE_FIFO_KHR;
+}
+
 static bool make_swapchain(uint32_t w, uint32_t h)
 {
     VkSurfaceCapabilitiesKHR caps;
@@ -1008,7 +1035,7 @@ static bool make_swapchain(uint32_t w, uint32_t h)
         .imageExtent = { w, h }, .imageArrayLayers = 1,
         .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
         .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE, .preTransform = tf, .compositeAlpha = ca,
-        .presentMode = VK_PRESENT_MODE_FIFO_KHR, .clipped = VK_TRUE, .oldSwapchain = old };
+        .presentMode = choose_present_mode(), .clipped = VK_TRUE, .oldSwapchain = old };
     VkSwapchainKHR sc = VK_NULL_HANDLE;
     VkResult r = T.vkCreateSwapchainKHR(g_hvk.dev, &ci, NULL, &sc);
     drop_images();
