@@ -415,8 +415,8 @@ private fun GameList(
     val disc = info[game.uri]
     var focused by remember { mutableStateOf(false) }
     val cardWidth = if (landscape) 190.dp else 176.dp
-    val coverWidth = if (landscape) 146.dp else 116.dp
-    val coverHeight = if (landscape) 126.dp else 166.dp
+    val coverWidth = if (landscape) 104.dp else 82.dp
+    val coverHeight = if (landscape) 90.dp else 116.dp
     val carouselOffset = gameIndex - carouselIndex
     val cardModifier = Modifier
       .then(if (viewMode == "carousel") Modifier.width(cardWidth).height(if (landscape) 280.dp else 300.dp).graphicsLayer {
@@ -455,9 +455,9 @@ private fun GameList(
           }
         }
       } else if (viewMode == "grid") {
-        Column(Modifier.padding(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(Modifier.padding(6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
           SeriesXGameCover(game, covers[game.uri], icons[game.uri], Modifier.width(coverWidth).height(coverHeight))
-          Text(game.title, Modifier.fillMaxWidth().padding(top = 9.dp), style = titleStyle, maxLines = 2, overflow = TextOverflow.Ellipsis)
+          Text(game.title, Modifier.fillMaxWidth().padding(top = 5.dp), style = MaterialTheme.typography.labelLarge.copy(color = colors.onSurface), maxLines = 2, overflow = TextOverflow.Ellipsis)
           if (disc != null && disc.titleId != 0L) IdLine(disc, idStyle)
         }
       } else {
@@ -523,18 +523,18 @@ private fun GameList(
     }
     "list" -> LazyColumn(
       modifier = Modifier.fillMaxSize(),
-      contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp),
+      contentPadding = PaddingValues(start = 10.dp, end = 10.dp, bottom = 10.dp),
       verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
       item { Text("TODOS OS JOGOS", style = MaterialTheme.typography.labelLarge, color = colors.onSurfaceVariant) }
       items(games, key = { it.uri.toString() }) { GameEntry(it) }
     }
     else -> LazyVerticalGrid(
-      columns = GridCells.Adaptive(minSize = if (landscape) 190.dp else 148.dp),
+      columns = GridCells.Adaptive(minSize = if (landscape) 145.dp else 108.dp),
       modifier = Modifier.fillMaxSize(),
       contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp),
-      horizontalArrangement = Arrangement.spacedBy(10.dp),
-      verticalArrangement = Arrangement.spacedBy(10.dp),
+      horizontalArrangement = Arrangement.spacedBy(6.dp),
+      verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
       item(span = { GridItemSpan(maxLineSpan) }) {
         Text("TODOS OS JOGOS", style = MaterialTheme.typography.labelLarge, color = colors.onSurfaceVariant)
