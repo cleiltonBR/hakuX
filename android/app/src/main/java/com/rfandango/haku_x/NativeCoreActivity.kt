@@ -656,7 +656,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
         text = ""
         visibility = View.GONE
         setTextColor(Color.rgb(16, 124, 16))
-        setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+        setTextSize(TypedValue.COMPLEX_UNIT_SP, if (quickGrid) 9f else 11f)
         typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD)
         letterSpacing = 0.025f
         setPadding(0, 0, 0, 0)
@@ -765,7 +765,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
       LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
         gravity = if (quickGrid) Gravity.CENTER else Gravity.CENTER_VERTICAL
-        setPadding(dp(12), dp(12), dp(12), dp(12))
+        setPadding(dp(if (quickGrid) 4 else 12), dp(if (quickGrid) 8 else 12), dp(if (quickGrid) 4 else 12), dp(if (quickGrid) 8 else 12))
         background = GradientDrawable().apply {
           setColor(Color.rgb(10, 20, 13))
           cornerRadius = dp(12).toFloat()
@@ -773,13 +773,13 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
         }
         isFocusable = true
         isClickable = true
-        minimumHeight = dp(if (quickGrid) 82 else 64)
+        minimumHeight = dp(if (quickGrid) 72 else 64)
         setOnClickListener { onSelect(index); dialog.dismiss() }
         addView(TextView(this@NativeCoreActivity).apply {
           text = entry.first
           gravity = if (quickGrid) Gravity.CENTER else Gravity.START
           setTextColor(Color.WHITE)
-          setTextSize(TypedValue.COMPLEX_UNIT_SP, if (quickGrid) 14f else 15f)
+          setTextSize(TypedValue.COMPLEX_UNIT_SP, if (quickGrid) 11f else 15f)
           typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
         })
         if (entry.second.isNotBlank()) addView(TextView(this@NativeCoreActivity).apply {
@@ -791,21 +791,26 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
         })
       }
     if (quickGrid) {
-      entries.chunked(2).forEachIndexed { rowIndex, rowEntries ->
+      // Match the reference layout: five compact tiles per row on phone-sized screens.
+      val columns = if (resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) 5 else 5
+      entries.chunked(columns).forEachIndexed { rowIndex, rowEntries ->
         val row = LinearLayout(this).apply {
           orientation = LinearLayout.HORIZONTAL
           gravity = Gravity.CENTER
         }
         rowEntries.forEachIndexed { column, entry ->
-          val index = rowIndex * 2 + column
+          val index = rowIndex * columns + column
           row.addView(makeTile(index, entry), LinearLayout.LayoutParams(
             0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f
           ).apply {
-            if (column == 0) rightMargin = dp(5) else leftMargin = dp(5)
-            bottomMargin = dp(8)
+            if (column > 0) leftMargin = dp(3)
+            if (column < rowEntries.lastIndex) rightMargin = dp(3)
+            bottomMargin = dp(7)
           })
         }
-        if (rowEntries.size == 1) row.addView(android.view.View(this), LinearLayout.LayoutParams(0, 1, 1f))
+        repeat(columns - rowEntries.size) {
+          row.addView(android.view.View(this), LinearLayout.LayoutParams(0, 1, 1f))
+        }
         list.addView(row, LinearLayout.LayoutParams(
           ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
         ))
@@ -833,7 +838,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     dialog = showMenuDialog(AlertDialog.Builder(this).setView(root).setCancelable(true))
     dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
     val dialogWidth = minOf(resources.displayMetrics.widthPixels - dp(32), dp(620))
-    val contentHeight = dp(124 + entries.size * 78)
+    val contentHeight = dp(if (quickGrid) 190 + ((entries.size + 4) / 5) * 82 else 124 + entries.size * 78)
     val dialogHeight = minOf(resources.displayMetrics.heightPixels - dp(48), dp(760), contentHeight)
     dialog.window?.setLayout(dialogWidth, dialogHeight)
   }
