@@ -34,7 +34,7 @@ object CustomCoverSource {
   }
 
   /** Blocking; callers must use Dispatchers.IO. Returns the number of imported images. */
-  fun download(context: Context, source: String): Int {
+  fun download(context: Context, source: String, libraryTitles: Set<String>? = null): Int {
     val url = URL(source)
     require(url.protocol == "https" || url.protocol == "http") { "Use um link HTTP ou HTTPS." }
     val dir = File(context.applicationContext.filesDir, "custom_xbox_covers")
@@ -48,7 +48,7 @@ object CustomCoverSource {
           connection.inputStream.use { importZip(it, dir) }
         path.endsWith(".json") || mime.contains("json") -> {
           val json = connection.inputStream.bufferedReader().use { it.readText() }
-          importManifest(finalUrl, JSONObject(json), dir)
+          importManifest(finalUrl, JSONObject(json), dir, libraryTitles)
         }
         path.endsWith(".png") || path.endsWith(".jpg") || path.endsWith(".jpeg") ||
           path.endsWith(".webp") || mime.startsWith("image/") -> {
@@ -89,8 +89,10 @@ object CustomCoverSource {
     return imported
   }
 
-  private fun importManifest(base: URL, json: JSONObject, dir: File): Int {
+  private fun importManifest(base: URL, json: JSONObject, dir: File, libraryTitles: Set<String>?): Int {
     val entries = json.optJSONObject("covers") ?: json
+    val wanted = libraryTitles?.map(::matchKey)?.filter { it.isNotBlank() }?.toSet()
+    if (wanted != null && wanted.isEmpty()) return 0
     val keys = entries.keys()
     var imported = 0
     while (keys.hasNext() && imported < MAX_IMAGES) {
@@ -104,6 +106,7 @@ object CustomCoverSource {
       if (path.isBlank()) continue
       val key = normalize(title)
       if (key.isBlank()) continue
+      if (wanted != null && matchKey(title) !in wanted) continue
       val (resolved, conn) = request(URL(base, path))
       try {
         require(!conn.contentType.orEmpty().contains("html", true)) {
@@ -190,6 +193,9 @@ object CustomCoverSource {
       throw error
     }
   }
+
+  private fun matchKey(value: String): String = normalize(value)
+    .replace(Regex("_(usa|europe|world|japan|japanese|korea|france|germany|italy|spain)$"), "")
 
   private fun normalize(value: String): String = value.substringBeforeLast('.', value)
     .lowercase(Locale.ROOT)
