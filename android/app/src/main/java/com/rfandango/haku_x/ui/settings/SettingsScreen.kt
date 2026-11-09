@@ -27,6 +27,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -40,6 +41,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -202,6 +204,9 @@ fun SettingsScreen(
             )
           }
         }
+        CompositionLocalProvider(
+          LocalDensity provides LocalDensity.current.copy(fontScale = LocalDensity.current.fontScale * 0.88f),
+        ) {
         Column(
           Modifier.weight(1f).fillMaxSize().padding(start = 8.dp)
             .clip(RoundedCornerShape(12.dp)).background(Color(0xFF0B100C))
@@ -494,6 +499,7 @@ fun SettingsScreen(
       )
       }
 
+        }
         }
       }
     }
