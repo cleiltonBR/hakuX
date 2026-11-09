@@ -42,6 +42,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -205,7 +206,7 @@ fun SettingsScreen(
           }
         }
         CompositionLocalProvider(
-          LocalDensity provides LocalDensity.current.copy(fontScale = LocalDensity.current.fontScale * 0.88f),
+          LocalDensity provides Density(density = LocalDensity.current.density, fontScale = LocalDensity.current.fontScale * 0.88f),
         ) {
         Column(
           Modifier.weight(1f).fillMaxSize().padding(start = 8.dp)
