@@ -1,5 +1,7 @@
 package com.rfandango.haku_x.ui.common
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,9 +18,10 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -84,9 +87,14 @@ fun SubScreen(
     snackbarHost = { snackbar?.let { SnackbarHost(it) } },
     topBar = {
       TopAppBar(
+        colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(
+          containerColor = MaterialTheme.colorScheme.background,
+          titleContentColor = MaterialTheme.colorScheme.onSurface,
+        ),
         title = {
           Column {
-            Text(title)
+            Text("HAKUX FSR", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+            Text(title, style = MaterialTheme.typography.titleMedium)
             if (subtitle != null) {
               Text(
                 subtitle,
@@ -133,7 +141,7 @@ fun Section(title: String) {
     title,
     style = MaterialTheme.typography.labelLarge,
     color = MaterialTheme.colorScheme.primary,
-    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 4.dp),
+    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 6.dp),
   )
 }
 
@@ -166,7 +174,12 @@ fun SwitchItem(title: String, summary: String?, checked: Boolean, onChange: (Boo
     headlineContent = { Text(title) },
     supportingContent = summary?.let { { Text(it) } },
     trailingContent = { Switch(checked = checked, onCheckedChange = null) },
-    modifier = Modifier.toggleable(value = checked, role = Role.Switch, onValueChange = onChange),
+    modifier = Modifier
+      .padding(horizontal = 12.dp, vertical = 3.dp)
+      .clip(RoundedCornerShape(12.dp))
+      .background(MaterialTheme.colorScheme.surfaceContainerLow)
+      .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp))
+      .toggleable(value = checked, role = Role.Switch, onValueChange = onChange),
   )
 }
 
@@ -176,8 +189,12 @@ fun CheckItem(label: String, note: String?, checked: Boolean, onChange: (Boolean
   Row(
     Modifier
       .fillMaxWidth()
+      .padding(horizontal = 12.dp, vertical = 3.dp)
+      .clip(RoundedCornerShape(12.dp))
+      .background(MaterialTheme.colorScheme.surfaceContainerLow)
+      .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp))
       .toggleable(value = checked, role = Role.Checkbox, onValueChange = onChange)
-      .padding(vertical = 4.dp),
+      .padding(horizontal = 12.dp, vertical = 8.dp),
     verticalAlignment = Alignment.CenterVertically,
   ) {
     Checkbox(checked = checked, onCheckedChange = null, modifier = Modifier.padding(end = 12.dp))
@@ -195,7 +212,12 @@ fun ActionItem(title: String, summary: String?, icon: ImageVector?, enabled: Boo
     headlineContent = { Text(title) },
     supportingContent = summary?.let { { Text(it) } },
     leadingContent = icon?.let { { Icon(it, contentDescription = null) } },
-    modifier = Modifier.clickable(enabled = enabled, onClick = onClick),
+    modifier = Modifier
+      .padding(horizontal = 12.dp, vertical = 3.dp)
+      .clip(RoundedCornerShape(12.dp))
+      .background(MaterialTheme.colorScheme.surfaceContainerLow)
+      .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp))
+      .clickable(enabled = enabled, onClick = onClick),
   )
 }
 
