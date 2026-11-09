@@ -5,6 +5,10 @@ import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.RectF
 import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.Typeface
@@ -780,27 +784,99 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
         setOnClickListener { onSelect(index); dialog.dismiss() }
         if (quickGrid) {
           val label = entry.first.lowercase(java.util.Locale.ROOT)
-          val glyph = when {
-            "resolu" in label || "imagem" in label -> "▣"
-            "fsr" in label || "fidelity" in label -> "◉"
-            "cas" in label -> "◈"
-            "nis" in label || "nitidez" in label -> "◎"
-            "gráfico" in label || "filtro" in label -> "▤"
-            "salvar" in label || "save" in label -> "▣"
-            "carregar" in label || "load" in label -> "▱"
-            "captura" in label || "tela" in label -> "▧"
-            "sair" in label || "fechar" in label || "exit" in label -> "↪"
-            "config" in label -> "⚙"
-            "controle" in label || "jogador" in label -> "⌘"
-            else -> "●"
-          }
-          addView(TextView(this@NativeCoreActivity).apply {
-            text = glyph
-            gravity = Gravity.CENTER
-            setTextColor(if (active) Color.rgb(57, 255, 20) else Color.WHITE)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
-            typeface = Typeface.create("sans-serif", Typeface.NORMAL)
-          })
+          addView(object : View(this@NativeCoreActivity) {
+            private val line = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+              style = Paint.Style.STROKE
+              strokeWidth = 2.1f
+              strokeCap = Paint.Cap.ROUND
+              strokeJoin = Paint.Join.ROUND
+            }
+            private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+            override fun onDraw(canvas: Canvas) {
+              super.onDraw(canvas)
+              val sx = width / 32f
+              val sy = height / 32f
+              canvas.save()
+              canvas.scale(sx, sy)
+              val main = if (active) Color.rgb(57, 255, 20) else Color.rgb(238, 245, 240)
+              val accent = if (active) Color.rgb(190, 255, 170) else Color.rgb(130, 190, 145)
+              line.color = main
+              fill.color = main
+              when {
+                "resolu" in label || "imagem" in label -> {
+                  canvas.drawRoundRect(RectF(3f, 5f, 29f, 23f), 3f, 3f, line)
+                  canvas.drawLine(12f, 27f, 20f, 27f, line)
+                  canvas.drawLine(16f, 23f, 16f, 27f, line)
+                  canvas.drawLine(8f, 10f, 24f, 10f, line)
+                  canvas.drawLine(8f, 14f, 19f, 14f, line)
+                  canvas.drawCircle(24f, 18f, 2f, fill)
+                }
+                "fsr" in label || "fidelity" in label -> {
+                  val path = Path().apply { moveTo(4f, 10f); lineTo(13f, 10f); lineTo(13f, 6f); lineTo(21f, 16f); lineTo(13f, 26f); lineTo(13f, 22f); lineTo(4f, 22f) }
+                  canvas.drawPath(path, line)
+                  canvas.drawLine(18f, 7f, 28f, 7f, Paint(line).apply { color = accent })
+                  canvas.drawLine(22f, 12f, 28f, 12f, Paint(line).apply { color = accent })
+                }
+                "cas" in label -> {
+                  canvas.drawRoundRect(RectF(5f, 5f, 27f, 27f), 4f, 4f, line)
+                  canvas.drawLine(16f, 2f, 16f, 9f, line); canvas.drawLine(16f, 23f, 16f, 30f, line)
+                  canvas.drawLine(2f, 16f, 9f, 16f, line); canvas.drawLine(23f, 16f, 30f, 16f, line)
+                  canvas.drawCircle(16f, 16f, 5f, Paint(line).apply { color = accent })
+                }
+                "nis" in label || "nitidez" in label -> {
+                  canvas.drawCircle(13f, 13f, 8f, line)
+                  canvas.drawLine(19f, 19f, 28f, 28f, line)
+                  canvas.drawLine(13f, 8f, 13f, 18f, Paint(line).apply { color = accent })
+                  canvas.drawLine(8f, 13f, 18f, 13f, Paint(line).apply { color = accent })
+                }
+                "gráfico" in label || "filtro" in label || "modo" in label -> {
+                  canvas.drawRoundRect(RectF(4f, 4f, 28f, 28f), 4f, 4f, line)
+                  canvas.drawPath(Path().apply { moveTo(8f, 23f); lineTo(13f, 16f); lineTo(18f, 20f); lineTo(24f, 10f) }, line)
+                  canvas.drawCircle(24f, 10f, 2f, fill)
+                }
+                "salvar" in label || "save" in label -> {
+                  canvas.drawRoundRect(RectF(5f, 4f, 27f, 28f), 3f, 3f, line)
+                  canvas.drawRect(RectF(9f, 4f, 23f, 13f), line)
+                  canvas.drawRoundRect(RectF(10f, 18f, 22f, 27f), 1f, 1f, line)
+                  canvas.drawLine(12f, 21f, 20f, 21f, Paint(line).apply { color = accent })
+                }
+                "carregar" in label || "load" in label -> {
+                  canvas.drawPath(Path().apply { moveTo(4f, 18f); lineTo(4f, 26f); lineTo(28f, 26f); lineTo(28f, 18f) }, line)
+                  canvas.drawLine(16f, 3f, 16f, 19f, line)
+                  canvas.drawPath(Path().apply { moveTo(10f, 13f); lineTo(16f, 19f); lineTo(22f, 13f) }, line)
+                  canvas.drawLine(9f, 22f, 23f, 22f, Paint(line).apply { color = accent })
+                }
+                "captura" in label || "tela" in label -> {
+                  canvas.drawRoundRect(RectF(3f, 8f, 29f, 26f), 4f, 4f, line)
+                  canvas.drawCircle(16f, 17f, 6f, line)
+                  canvas.drawCircle(16f, 17f, 2f, Paint(line).apply { color = accent })
+                  canvas.drawRoundRect(RectF(9f, 4f, 17f, 9f), 1f, 1f, line)
+                }
+                "config" in label -> {
+                  canvas.drawCircle(16f, 16f, 10f, line)
+                  canvas.drawCircle(16f, 16f, 4f, line)
+                  for (a in 0..7) {
+                    val angle = Math.toRadians((a * 45).toDouble())
+                    val x1 = 16f + (10f * kotlin.math.cos(angle)).toFloat()
+                    val y1 = 16f + (10f * kotlin.math.sin(angle)).toFloat()
+                    val x2 = 16f + (14f * kotlin.math.cos(angle)).toFloat()
+                    val y2 = 16f + (14f * kotlin.math.sin(angle)).toFloat()
+                    canvas.drawLine(x1, y1, x2, y2, line)
+                  }
+                }
+                "sair" in label || "fechar" in label || "exit" in label -> {
+                  canvas.drawPath(Path().apply { moveTo(18f, 4f); lineTo(27f, 4f); lineTo(27f, 28f); lineTo(18f, 28f) }, line)
+                  canvas.drawPath(Path().apply { moveTo(5f, 16f); lineTo(20f, 16f); moveTo(14f, 10f); lineTo(20f, 16f); lineTo(14f, 22f) }, line)
+                }
+                else -> {
+                  canvas.drawRoundRect(RectF(3f, 7f, 29f, 25f), 8f, 8f, line)
+                  canvas.drawCircle(10f, 16f, 2f, fill); canvas.drawCircle(22f, 16f, 2f, fill)
+                  canvas.drawLine(13f, 16f, 19f, 16f, line)
+                }
+              }
+              canvas.restore()
+            }
+          }, LinearLayout.LayoutParams(dp(25), dp(25)).apply { bottomMargin = dp(2) })
         }
         addView(TextView(this@NativeCoreActivity).apply {
           text = entry.first
