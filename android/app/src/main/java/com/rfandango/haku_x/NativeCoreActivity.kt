@@ -434,7 +434,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     val alertTitleId = resources.getIdentifier("alertTitle", "id", "android")
     if (alertTitleId != 0) dialog.findViewById<TextView>(alertTitleId)?.setTextColor(Color.WHITE)
     dialog.findViewById<TextView>(android.R.id.message)?.setTextColor(Color.rgb(190, 200, 192))
-    dialog.listView?.setBackgroundColor(Color.rgb(15, 18, 16))
+    dialog.listView?.setBackgroundColor(Color.rgb(4, 9, 6))
     listOf(AlertDialog.BUTTON_POSITIVE, AlertDialog.BUTTON_NEGATIVE, AlertDialog.BUTTON_NEUTRAL)
       .forEach { which -> dialog.getButton(which)?.setTextColor(Color.rgb(57, 255, 20)) }
     return dialog
@@ -768,7 +768,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
         background = GradientDrawable().apply {
           setColor(Color.rgb(10, 20, 13))
           cornerRadius = dp(10).toFloat()
-          setStroke(dp(1), Color.rgb(54, 75, 59))
+          setStroke(dp(1), Color.rgb(48, 112, 58))
         }
         isFocusable = true
         isClickable = true
@@ -783,7 +783,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
       }
       val detail = TextView(this).apply {
         text = entry.second
-        setTextColor(Color.rgb(177, 190, 180))
+        setTextColor(Color.rgb(183, 196, 185))
         setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
         setPadding(0, dp(3), 0, 0)
       }
@@ -799,7 +799,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     val resume = TextView(this).apply {
       text = "RETOMAR JOGO"
       gravity = Gravity.CENTER
-      setTextColor(Color.rgb(120, 220, 130))
+      setTextColor(Color.rgb(57, 255, 20))
       textSize = 13f
       typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
       setPadding(dp(12), dp(14), dp(12), dp(8))
