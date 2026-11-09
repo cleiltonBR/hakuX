@@ -160,17 +160,9 @@ fun LibraryScreen(
 
   Scaffold { padding ->
     Column(Modifier.padding(padding).fillMaxSize()) {
-      Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 6.dp)) {
-        Text("hakuX", style = MaterialTheme.typography.headlineSmall)
-        Text(
-          "XBOX GAME LIBRARY",
-          style = MaterialTheme.typography.labelSmall,
-          color = MaterialTheme.colorScheme.primary,
-        )
-      }
       // Dashboard, search, refresh and settings remain immediately accessible.
       Row(
-        Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, top = 8.dp),
+        Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, top = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
       ) {
         // the dashboard (Xbox Live's accounts): started, or installed from its zip first
@@ -203,7 +195,7 @@ fun LibraryScreen(
         }
       }
       Row(
-        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp),
+        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 0.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
       ) {
@@ -214,7 +206,7 @@ fun LibraryScreen(
             modifier = Modifier.weight(1f).clip(RoundedCornerShape(10.dp))
               .background(if (selected) Color(0xFF18351C) else Color.Transparent)
               .border(1.dp, if (selected) Color(0xFF5EAA63) else MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp)),
-            contentPadding = PaddingValues(horizontal = 2.dp, vertical = 2.dp),
+            contentPadding = PaddingValues(horizontal = 2.dp, vertical = 0.dp),
           ) {
             Text(label, style = MaterialTheme.typography.labelSmall, maxLines = 1,
               color = if (selected) Color(0xFF9BE69A) else MaterialTheme.colorScheme.onSurfaceVariant)
@@ -226,7 +218,7 @@ fun LibraryScreen(
       PullToRefreshBox(
         isRefreshing = state.loading,
         onRefresh = vm::refresh,
-        modifier = Modifier.weight(1f).fillMaxWidth().padding(top = 12.dp),
+        modifier = Modifier.weight(1f).fillMaxWidth().padding(top = 4.dp),
       ) {
         val games = state.visibleGames
         when {
@@ -486,10 +478,10 @@ private fun GameList(
           if (disc != null && disc.titleId != 0L) IdLine(disc, idStyle)
         }
       } else {
-        Row(Modifier.padding(horizontal = 12.dp, vertical = if (landscape) 8.dp else 12.dp), verticalAlignment = Alignment.CenterVertically) {
-          SeriesXGameCover(game, covers[game.uri], icons[game.uri], Modifier.width(if (landscape) 70.dp else 82.dp).height(if (landscape) 100.dp else 120.dp))
-          Column(Modifier.weight(1f).padding(start = 14.dp, end = 8.dp)) {
-            Text(game.title, style = titleStyle, maxLines = if (landscape) 1 else 3, overflow = TextOverflow.Ellipsis)
+        Row(Modifier.padding(horizontal = 12.dp, vertical = if (landscape) 6.dp else 7.dp), verticalAlignment = Alignment.CenterVertically) {
+          SeriesXGameCover(game, covers[game.uri], icons[game.uri], Modifier.width(72.dp).height(72.dp))
+          Column(Modifier.weight(1f).padding(start = 12.dp, end = 8.dp)) {
+            Text(game.title, style = titleStyle, maxLines = 2, overflow = TextOverflow.Ellipsis)
             if (disc != null && disc.titleId != 0L) IdLine(disc, idStyle)
           }
         }
