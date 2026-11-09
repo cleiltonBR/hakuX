@@ -48,27 +48,27 @@ private val HakuXColors = lightColorScheme(
 
 /** The same at night: near-black surfaces, the green lightened to read on them. */
 private val HakuXDarkColors = darkColorScheme(
-  primary = Color(0xFF81C784),
-  onPrimary = Color(0xFF003A0B),
-  primaryContainer = Color(0xFF1B5E20),
-  onPrimaryContainer = Color(0xFFC8E6C9),
-  secondary = Color(0xFF81C784),
+  primary = Color(0xFF39FF14),
+  onPrimary = Color(0xFF001B05),
+  primaryContainer = Color(0xFF075B19),
+  onPrimaryContainer = Color(0xFFB7FFB0),
+  secondary = Color(0xFF83F28C),
   onSecondary = Color(0xFF003A0B),
   secondaryContainer = Color(0xFF23392A),
   onSecondaryContainer = Color(0xFFC8E6C9),
-  background = Color(0xFF121212),
+  background = Color(0xFF050806),
   onBackground = Color(0xFFE6E6E6),
-  surface = Color(0xFF121212),
+  surface = Color(0xFF080D09),
   onSurface = Color(0xFFE6E6E6),
-  surfaceVariant = Color(0xFF2B2B2B),
+  surfaceVariant = Color(0xFF111B14),
   onSurfaceVariant = Color(0xFFB4B8BC),
   surfaceContainerLowest = Color(0xFF0E0E0E),
-  surfaceContainerLow = Color(0xFF1A1A1A),
-  surfaceContainer = Color(0xFF1F1F1F),
-  surfaceContainerHigh = Color(0xFF262626),
-  surfaceContainerHighest = Color(0xFF2F2F2F),
-  outline = Color(0xFF6E7378),
-  outlineVariant = Color(0xFF3A3A3A),
+  surfaceContainerLow = Color(0xFF08110A),
+  surfaceContainer = Color(0xFF0D1710),
+  surfaceContainerHigh = Color(0xFF142219),
+  surfaceContainerHighest = Color(0xFF1A2B20),
+  outline = Color(0xFF397346),
+  outlineVariant = Color(0xFF203D29),
   error = Color(0xFFEF9A9A),
 )
 
@@ -125,8 +125,9 @@ private val FocusRipple = RippleDefaults.RippleAlpha.let {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HakuXTheme(dark: Boolean = appInDarkTheme(), content: @Composable () -> Unit) {
-  MaterialTheme(colorScheme = if (dark) HakuXDarkColors else HakuXColors) {
+fun HakuXTheme(dark: Boolean = true, content: @Composable () -> Unit) {
+  // HakuX FSR keeps one consistent dark neon-green identity across every screen.
+  MaterialTheme(colorScheme = HakuXDarkColors) {
     CompositionLocalProvider(LocalRippleConfiguration provides FocusRipple, content = content)
   }
 }
