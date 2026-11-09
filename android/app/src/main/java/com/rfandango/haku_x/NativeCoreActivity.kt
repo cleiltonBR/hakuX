@@ -760,38 +760,62 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     }
     scroll.addView(list)
     lateinit var dialog: AlertDialog
-    entries.forEachIndexed { index, entry ->
-      val tile = LinearLayout(this).apply {
+    val quickGrid = title.contains("MENU RÁPIDO", ignoreCase = true)
+    fun makeTile(index: Int, entry: Pair<String, String>): LinearLayout =
+      LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
-        gravity = Gravity.CENTER_VERTICAL
-        setPadding(dp(16), dp(12), dp(16), dp(12))
+        gravity = if (quickGrid) Gravity.CENTER else Gravity.CENTER_VERTICAL
+        setPadding(dp(12), dp(12), dp(12), dp(12))
         background = GradientDrawable().apply {
           setColor(Color.rgb(10, 20, 13))
-          cornerRadius = dp(10).toFloat()
+          cornerRadius = dp(12).toFloat()
           setStroke(dp(1), Color.rgb(48, 112, 58))
         }
         isFocusable = true
         isClickable = true
-        minimumHeight = dp(64)
+        minimumHeight = dp(if (quickGrid) 82 else 64)
         setOnClickListener { onSelect(index); dialog.dismiss() }
+        addView(TextView(this@NativeCoreActivity).apply {
+          text = entry.first
+          gravity = if (quickGrid) Gravity.CENTER else Gravity.START
+          setTextColor(Color.WHITE)
+          setTextSize(TypedValue.COMPLEX_UNIT_SP, if (quickGrid) 14f else 15f)
+          typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+        })
+        if (entry.second.isNotBlank()) addView(TextView(this@NativeCoreActivity).apply {
+          text = entry.second
+          gravity = if (quickGrid) Gravity.CENTER else Gravity.START
+          setTextColor(Color.rgb(183, 196, 185))
+          setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+          setPadding(0, dp(3), 0, 0)
+        })
       }
-      val label = TextView(this).apply {
-        text = entry.first
-        setTextColor(Color.WHITE)
-        setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
-        typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+    if (quickGrid) {
+      entries.chunked(2).forEachIndexed { rowIndex, rowEntries ->
+        val row = LinearLayout(this).apply {
+          orientation = LinearLayout.HORIZONTAL
+          gravity = Gravity.CENTER
+        }
+        rowEntries.forEachIndexed { column, entry ->
+          val index = rowIndex * 2 + column
+          row.addView(makeTile(index, entry), LinearLayout.LayoutParams(
+            0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f
+          ).apply {
+            if (column == 0) rightMargin = dp(5) else leftMargin = dp(5)
+            bottomMargin = dp(8)
+          })
+        }
+        if (rowEntries.size == 1) row.addView(android.view.View(this), LinearLayout.LayoutParams(0, 1, 1f))
+        list.addView(row, LinearLayout.LayoutParams(
+          ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        ))
       }
-      val detail = TextView(this).apply {
-        text = entry.second
-        setTextColor(Color.rgb(183, 196, 185))
-        setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-        setPadding(0, dp(3), 0, 0)
+    } else {
+      entries.forEachIndexed { index, entry ->
+        list.addView(makeTile(index, entry), LinearLayout.LayoutParams(
+          ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        ).apply { bottomMargin = dp(8) })
       }
-      tile.addView(label)
-      if (entry.second.isNotBlank()) tile.addView(detail)
-      list.addView(tile, LinearLayout.LayoutParams(
-        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-      ).apply { bottomMargin = dp(8) })
     }
     root.addView(scroll, LinearLayout.LayoutParams(
       ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f
