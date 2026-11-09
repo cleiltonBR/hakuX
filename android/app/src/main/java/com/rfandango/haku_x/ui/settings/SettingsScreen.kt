@@ -12,6 +12,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -129,6 +132,7 @@ fun SettingsScreen(
   val theme by AppTheme.mode.collectAsState()
   var themeDialog by remember { mutableStateOf(false) }
   val dark = appInDarkTheme()
+  var selectedSettingsCategory by remember { mutableStateOf("graphics") }
 
   val pickFolder = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri: Uri? ->
     val old = replacing
@@ -158,19 +162,54 @@ fun SettingsScreen(
     }
   }
   SubScreen(title = stringResource(R.string.settings_title), onBack = onBack, snackbar = snackbar) { padding ->
-    Column(Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState())) {
+    Column(Modifier.padding(padding).fillMaxSize()) {
       Column(
-        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp)
-          .clip(RoundedCornerShape(20.dp))
-          .background(Brush.linearGradient(listOf(Color(0xFF202A21), Color(0xFF101411), Color(0xFF080A08))))
-          .border(1.dp, Color(0xFF344A35), RoundedCornerShape(20.dp))
-          .padding(20.dp),
+        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)
+          .clip(RoundedCornerShape(14.dp))
+          .background(Brush.linearGradient(listOf(Color(0xFF073B16), Color(0xFF101B13), Color(0xFF080A08))))
+          .border(1.dp, Color(0xFF39FF14), RoundedCornerShape(14.dp))
+          .padding(horizontal = 14.dp, vertical = 10.dp),
       ) {
-        Text("HAKUX  /  XBOX SERIES X", style = MaterialTheme.typography.labelSmall, color = Color(0xFF8BD889), letterSpacing = 1.1.sp)
-        Text("Configurações do console", style = MaterialTheme.typography.headlineSmall, color = Color.White, modifier = Modifier.padding(top = 10.dp))
-        Text("Controles, vídeo, gráficos e sistema em um só lugar.", style = MaterialTheme.typography.bodySmall, color = Color(0xFFBEC8BE), modifier = Modifier.padding(top = 6.dp))
+        Text("HAKUX FSR  /  CONFIGURAÇÕES", style = MaterialTheme.typography.labelSmall, color = Color(0xFF9BFF91), letterSpacing = 1.1.sp)
+        Text("Organizado, funcional e tecnológico", style = MaterialTheme.typography.titleMedium, color = Color.White, modifier = Modifier.padding(top = 4.dp))
       }
-
+      Row(Modifier.fillMaxSize().padding(horizontal = 8.dp, vertical = 4.dp)) {
+        Column(
+          Modifier.width(116.dp).fillMaxSize().clip(RoundedCornerShape(12.dp))
+            .background(Color(0xFF09110B)).border(1.dp, Color(0xFF284B30), RoundedCornerShape(12.dp))
+            .padding(5.dp),
+          verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(5.dp),
+        ) {
+          listOf(
+            "games" to "Jogos",
+            "controls" to "Controles",
+            "display" to "Interface",
+            "console" to "Sistema",
+            "video" to "Vídeo",
+            "graphics" to "Gráficos",
+            "updates" to "Atualizações",
+            "logs" to "Diagnóstico",
+          ).forEach { (key, label) ->
+            val selected = selectedSettingsCategory == key
+            Text(
+              label,
+              modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
+                .background(if (selected) Color(0xFF075B19) else Color.Transparent)
+                .border(1.dp, if (selected) Color(0xFF39FF14) else Color.Transparent, RoundedCornerShape(8.dp))
+                .clickable { selectedSettingsCategory = key }
+                .padding(horizontal = 8.dp, vertical = 12.dp),
+              color = if (selected) Color(0xFFB7FFB0) else Color(0xFFD5DDD6),
+              style = MaterialTheme.typography.labelMedium,
+            )
+          }
+        }
+        Column(
+          Modifier.weight(1f).fillMaxSize().padding(start = 8.dp)
+            .clip(RoundedCornerShape(12.dp)).background(Color(0xFF0B100C))
+            .border(1.dp, Color(0xFF284B30), RoundedCornerShape(12.dp))
+            .verticalScroll(rememberScrollState()).padding(vertical = 6.dp),
+        ) {
+      if (selectedSettingsCategory == "games") {
       Section(stringResource(R.string.settings_section_games))
       for (f in folders) {
         ListItem(
@@ -202,6 +241,9 @@ fun SettingsScreen(
         onChange = { automatic3dCovers = it; prefs.automatic3dCovers = it },
       )
 
+      }
+
+      if (selectedSettingsCategory == "controls") {
       Section(stringResource(R.string.settings_section_controls))
       ListItem(
         headlineContent = { Text(stringResource(R.string.settings_overlay)) },
@@ -214,6 +256,9 @@ fun SettingsScreen(
         modifier = Modifier.clickable(onClick = onControllers),
       )
 
+      }
+
+      if (selectedSettingsCategory == "display") {
       Section(stringResource(R.string.settings_section_display))
       ListItem(
         headlineContent = { Text(stringResource(R.string.settings_theme)) },
@@ -249,6 +294,9 @@ fun SettingsScreen(
         )
       }
 
+      }
+
+      if (selectedSettingsCategory == "console") {
       Section(stringResource(R.string.settings_section_console))
       ListItem(
         headlineContent = { Text(stringResource(R.string.hdd_title)) },
@@ -286,8 +334,11 @@ fun SettingsScreen(
         )
       }
 
-      NetworkSettings(prefs, onInsignia)
+      if (selectedSettingsCategory == "console") NetworkSettings(prefs, onInsignia)
 
+      }
+
+      if (selectedSettingsCategory == "video") {
       Section(stringResource(R.string.settings_section_console_video))
       Hint(stringResource(R.string.settings_console_video_desc))
       ListItem(
@@ -325,6 +376,9 @@ fun SettingsScreen(
         modifier = Modifier.clickable { cableDialog = true },
       )
 
+      }
+
+      if (selectedSettingsCategory == "graphics") {
       Section(stringResource(R.string.settings_section_graphics))
       ListItem(
         headlineContent = { Text(stringResource(R.string.settings_scale)) },
@@ -398,6 +452,9 @@ fun SettingsScreen(
         modifier = Modifier.clickable(enabled = customDrivers, onClick = onGpuDriver),
       )
 
+      }
+
+      if (selectedSettingsCategory == "updates") {
       Section(stringResource(R.string.settings_section_updates))
       ListItem(
         headlineContent = { Text(stringResource(R.string.settings_update_check)) },
@@ -427,12 +484,19 @@ fun SettingsScreen(
         },
       )
 
+      }
+
+      if (selectedSettingsCategory == "logs") {
       Section(stringResource(R.string.settings_section_logs))
       ListItem(
         headlineContent = { Text(stringResource(R.string.settings_export_logs)) },
         supportingContent = { Text(stringResource(R.string.settings_export_logs_desc)) },
         modifier = Modifier.clickable { pickLogsFolder.launch(null) },
       )
+      }
+
+        }
+      }
     }
   }
 
