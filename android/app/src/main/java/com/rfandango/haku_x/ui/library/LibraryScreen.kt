@@ -160,6 +160,17 @@ fun LibraryScreen(
 
   Scaffold { padding ->
     Column(Modifier.padding(padding).fillMaxSize()) {
+      Column(
+        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp)
+          .clip(RoundedCornerShape(14.dp))
+          .background(Brush.linearGradient(listOf(Color(0xFF064016), Color(0xFF0B170E), Color(0xFF050806))))
+          .border(1.dp, Color(0xFF39FF14), RoundedCornerShape(14.dp))
+          .padding(horizontal = 14.dp, vertical = 10.dp),
+      ) {
+        Text("HakuX FSR", style = MaterialTheme.typography.headlineSmall, color = Color.White)
+        Text("XBOX GAME LIBRARY  •  ORGANIZADO, FUNCIONAL E TECNOLÓGICO",
+          style = MaterialTheme.typography.labelSmall, color = Color(0xFF9BFF91), letterSpacing = 0.7.sp)
+      }
       // Dashboard, search, refresh and settings remain immediately accessible.
       Row(
         Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, top = 2.dp),
