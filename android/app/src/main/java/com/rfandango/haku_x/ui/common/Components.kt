@@ -141,7 +141,7 @@ fun Section(title: String) {
     title,
     style = MaterialTheme.typography.labelLarge,
     color = MaterialTheme.colorScheme.primary,
-    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 6.dp),
+    modifier = Modifier.padding(start = 8.dp, end = 8.dp, top = 10.dp, bottom = 3.dp),
   )
 }
 
@@ -152,7 +152,7 @@ fun Hint(text: String, modifier: Modifier = Modifier) {
     text,
     style = MaterialTheme.typography.bodySmall,
     color = MaterialTheme.colorScheme.onSurfaceVariant,
-    modifier = modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+    modifier = modifier.padding(horizontal = 8.dp, vertical = 4.dp),
   )
 }
 
@@ -175,7 +175,7 @@ fun SwitchItem(title: String, summary: String?, checked: Boolean, onChange: (Boo
     supportingContent = summary?.let { { Text(it) } },
     trailingContent = { Switch(checked = checked, onCheckedChange = null) },
     modifier = Modifier
-      .padding(horizontal = 12.dp, vertical = 3.dp)
+      .padding(horizontal = 6.dp, vertical = 1.dp)
       .clip(RoundedCornerShape(12.dp))
       .background(MaterialTheme.colorScheme.surfaceContainerLow)
       .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp))
