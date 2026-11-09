@@ -656,7 +656,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
         text = ""
         visibility = View.GONE
         setTextColor(Color.rgb(16, 124, 16))
-        setTextSize(TypedValue.COMPLEX_UNIT_SP, if (quickGrid) 9f else 11f)
+        setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
         typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD)
         letterSpacing = 0.025f
         setPadding(0, 0, 0, 0)
@@ -792,7 +792,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
       }
     if (quickGrid) {
       // Match the reference layout: five compact tiles per row on phone-sized screens.
-      val columns = if (resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) 5 else 5
+      val columns = 5
       entries.chunked(columns).forEachIndexed { rowIndex, rowEntries ->
         val row = LinearLayout(this).apply {
           orientation = LinearLayout.HORIZONTAL
