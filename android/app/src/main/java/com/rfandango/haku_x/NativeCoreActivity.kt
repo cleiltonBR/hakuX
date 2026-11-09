@@ -744,9 +744,15 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     entries: List<Pair<String, String>>,
     onSelect: (Int) -> Unit,
   ) {
+    val quickGrid = title.contains("MENU RÁPIDO", ignoreCase = true)
     val root = LinearLayout(this).apply {
       orientation = LinearLayout.VERTICAL
-      setPadding(dp(18), dp(16), dp(18), dp(12))
+      // The quick-menu panel must reserve real room for its tile grid instead
+      // of clipping the tiles against the dialog's outer frame.
+      setPadding(dp(if (quickGrid) 12 else 18), dp(if (quickGrid) 12 else 16),
+        dp(if (quickGrid) 12 else 18), dp(if (quickGrid) 10 else 12))
+      clipChildren = false
+      clipToPadding = false
       setBackgroundColor(Color.rgb(15, 18, 16))
     }
     val heading = TextView(this).apply {
@@ -758,14 +764,15 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
       setPadding(dp(2), dp(4), dp(2), dp(10))
     }
     root.addView(heading)
-    val scroll = ScrollView(this).apply { isFillViewport = false; clipToPadding = false }
+    val scroll = ScrollView(this).apply { isFillViewport = quickGrid; clipChildren = false; clipToPadding = false; overScrollMode = View.OVER_SCROLL_NEVER }
     val list = LinearLayout(this).apply {
       orientation = LinearLayout.VERTICAL
-      setPadding(0, 0, 0, dp(4))
+      setPadding(0, 0, 0, dp(6))
+      clipChildren = false
+      clipToPadding = false
     }
     scroll.addView(list)
     lateinit var dialog: AlertDialog
-    val quickGrid = title.contains("MENU RÁPIDO", ignoreCase = true)
     fun makeTile(index: Int, entry: Pair<String, String>): LinearLayout =
       LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
@@ -780,7 +787,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
         }
         isFocusable = true
         isClickable = true
-        minimumHeight = dp(if (quickGrid) 68 else 64)
+        minimumHeight = dp(if (quickGrid) 78 else 64)
         setOnClickListener { onSelect(index); dialog.dismiss() }
         if (quickGrid) {
           val label = entry.first.lowercase(java.util.Locale.ROOT)
@@ -944,9 +951,13 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     root.addView(resume)
     dialog = showMenuDialog(AlertDialog.Builder(this).setView(root).setCancelable(true))
     dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
-    val dialogWidth = minOf(resources.displayMetrics.widthPixels - dp(32), dp(620))
-    val contentHeight = dp(if (quickGrid) 184 + ((entries.size + 4) / 5) * 72 else 124 + entries.size * 78)
-    val dialogHeight = minOf(resources.displayMetrics.heightPixels - dp(48), dp(760), contentHeight)
+    val dialogWidth = minOf(resources.displayMetrics.widthPixels - dp(if (quickGrid) 24 else 32), dp(620))
+    val availableHeight = resources.displayMetrics.heightPixels - dp(if (quickGrid) 32 else 48)
+    // Reserve enough height for the actual tile rows; ScrollView handles any
+    // overflow on short screens without shrinking/cropping the outer panel.
+    val contentHeight = dp(if (quickGrid) 154 + ((entries.size + 4) / 5) * 86 else 124 + entries.size * 78)
+    val dialogHeight = if (quickGrid) minOf(availableHeight, dp(760), contentHeight)
+      else minOf(availableHeight, dp(760), contentHeight)
     dialog.window?.setLayout(dialogWidth, dialogHeight)
   }
 
