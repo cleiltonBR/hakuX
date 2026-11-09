@@ -1383,7 +1383,6 @@ static bool nis_dispatch(VkCommandBuffer cb, PsFrame *frame, VkImageView input,
     }
     last_failure = 0;
     nis_status(3, 0);
-    nis_status(2, 1);
     VkDescriptorBufferInfo buffer = { g_ps.nis_config,
         (VkDeviceSize)(frame - g_ps.fr) * g_ps.nis_config_stride, sizeof(float) * 64 };
     VkDescriptorImageInfo sampler = { .sampler = g_ps.smp };
@@ -1426,7 +1425,7 @@ static bool nis_dispatch(VkCommandBuffer cb, PsFrame *frame, VkImageView input,
     const int sharp_pct = (int)(sharpness * 100.0f + 0.5f);
     if (input_w != last_w || input_h != last_h || output_w != last_ow ||
         output_h != last_oh || sharp_pct != last_sharpness) {
-        hle_log("hakuX-hle-back", "NIS dispatch EXECUTED: %ux%u -> %ux%u, sharpness=%d%%, groups=%ux%u",
+        hle_log("hakuX-hle-back", "NIS dispatch RECORDED: %ux%u -> %ux%u, sharpness=%d%%, groups=%ux%u",
                 input_w, input_h, output_w, output_h, sharp_pct, gx, gy);
         last_w = input_w; last_h = input_h; last_ow = output_w; last_oh = output_h;
         last_sharpness = sharp_pct;
@@ -1724,6 +1723,9 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
     if (r == VK_SUCCESS) {
         g_ps.submitted = value;
         f->value = value;
+        /* The command buffer is now accepted by Vulkan; only report NIS as
+         * submitted after this point, not merely when vkCmdDispatch is recorded. */
+        if (nis_done) nis_status(2, 1);
     } else {
         hle_vk_check(r, "vkQueueSubmit2 (present)");
     }

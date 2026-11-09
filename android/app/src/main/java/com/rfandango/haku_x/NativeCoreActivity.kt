@@ -96,7 +96,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
         if (n != null && n.size >= 9) {
           val reason = when (n[3]) { 1 -> "recursos/pipeline"; 2 -> "dimensões"; 3 -> "imagem de saída"; 4 -> "configuração"; 5 -> "escala fora de 0,5–1,0"; else -> "nenhum" }
           val path = when (n[8]) { 4 -> "NIS nitidez"; 3 -> "NIS"; 2 -> "SGSR"; 1 -> "redução"; else -> "bilinear" }
-          v.text = "NIS ${if (n[1] == 1) "ON" else "OFF"} | GPU ${if (n[0] == 1) "OK" else "INDISPONÍVEL"} | ${if (n[2] == 1) "EXECUTADO" else "NÃO EXECUTADO"}\n${n[4]}x${n[5]} → ${n[6]}x${n[7]} | saída: $path | motivo: $reason"
+          v.text = "NIS ${if (n[1] == 1) "ON" else "OFF"} | GPU ${if (n[0] == 1) "OK" else "INDISPONÍVEL"} | ${if (n[2] == 1) "SUBMETIDO" else "NÃO SUBMETIDO"}\n${n[4]}x${n[5]} → ${n[6]}x${n[7]} | saída: $path | motivo: $reason"
         }
       }
       hitchView?.takeIf { hitchesOn }?.let { v ->
