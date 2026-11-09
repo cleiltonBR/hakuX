@@ -187,9 +187,16 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
     prefs.custom3dCoverSource = url
     _state.update { it.copy(coverDownloadRunning = true, coverDownloadMessage = "Preparando download…") }
     val app = getApplication<Application>()
+    val libraryTitles = _state.value.visibleGames
+      .flatMap { game -> listOf(game.title, GameScanner.fileTitle(game.relativePath, brackets = true)) }
+      .toSet()
+    if (libraryTitles.isEmpty()) {
+      _state.update { it.copy(coverDownloadMessage = "Adicione jogos à biblioteca antes de baixar as capas.") }
+      return
+    }
     viewModelScope.launch {
       val result = withContext(Dispatchers.IO) {
-        runCatching { com.rfandango.haku_x.data.CustomCoverSource.download(app, url) }
+        runCatching { com.rfandango.haku_x.data.CustomCoverSource.download(app, url, libraryTitles) }
       }
       _state.update {
         it.copy(
