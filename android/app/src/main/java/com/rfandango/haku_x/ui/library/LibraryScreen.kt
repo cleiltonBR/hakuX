@@ -414,12 +414,12 @@ private fun GameList(
   fun GameEntry(game: Game, gameIndex: Int = 0) {
     val disc = info[game.uri]
     var focused by remember { mutableStateOf(false) }
-    val cardWidth = if (landscape) 190.dp else 176.dp
+    val cardWidth = if (landscape) 250.dp else 176.dp
     val coverWidth = if (landscape) 104.dp else 82.dp
     val coverHeight = if (landscape) 90.dp else 116.dp
     val carouselOffset = gameIndex - carouselIndex
     val cardModifier = Modifier
-      .then(if (viewMode == "carousel") Modifier.width(cardWidth).height(if (landscape) 280.dp else 300.dp).graphicsLayer {
+      .then(if (viewMode == "carousel") Modifier.width(cardWidth).height(if (landscape) 205.dp else 300.dp).graphicsLayer {
         rotationY = (-carouselOffset * 24f).coerceIn(-48f, 48f)
         val depthScale = 1f - (carouselOffset.absoluteValue * 0.10f).coerceAtMost(0.30f)
         scaleX = depthScale
@@ -448,8 +448,8 @@ private fun GameList(
           SeriesXGameCover(game, covers[game.uri], icons[game.uri], Modifier.fillMaxSize())
           Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xF0000000)))).padding(horizontal = 14.dp, vertical = 18.dp)) {
             Column {
-              Text(game.title, style = MaterialTheme.typography.titleLarge, color = Color.White, maxLines = 2, overflow = TextOverflow.Ellipsis)
-              if (disc != null && disc.titleId != 0L) IdLine(disc, idStyle.copy(color = Color(0xFFB8C8B8)))
+              Text(game.title, style = if (landscape) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.titleLarge, color = Color.White, maxLines = 2, overflow = TextOverflow.Ellipsis)
+              if (disc != null && disc.titleId != 0L) IdLine(disc, (if (landscape) idStyle.copy(fontSize = 12.sp, lineHeight = 14.sp) else idStyle).copy(color = Color(0xFFB8C8B8)))
               Text(if (gameIndex == carouselIndex) "A  •  INICIAR JOGO" else "SELECIONAR", style = MaterialTheme.typography.labelSmall, color = Color(0xFF9BE69A), modifier = Modifier.padding(top = 8.dp))
             }
           }
@@ -502,9 +502,9 @@ private fun GameList(
 
   when (viewMode) {
     "carousel" -> Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
-      Text("HAKUX FSR  /  3D COVER FLOW", Modifier.padding(top = 12.dp, bottom = 10.dp), style = MaterialTheme.typography.labelLarge, color = Color(0xFF9BE69A))
+      Text("HAKUX FSR  /  3D COVER FLOW", Modifier.padding(top = if (landscape) 2.dp else 12.dp, bottom = if (landscape) 2.dp else 10.dp), style = MaterialTheme.typography.labelLarge, color = Color(0xFF9BE69A))
       BoxWithConstraints(Modifier.fillMaxWidth().weight(1f)) {
-        val carouselCardWidth = if (landscape) 190.dp else 176.dp
+        val carouselCardWidth = if (landscape) 250.dp else 176.dp
         val side = ((maxWidth - carouselCardWidth) / 2).coerceAtLeast(12.dp)
         LazyRow(
           state = carouselState,
