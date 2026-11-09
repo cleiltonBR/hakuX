@@ -158,22 +158,23 @@ fun LibraryScreen(
     onPauseOrDispose {}
   }
 
+  val screenLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
   Scaffold { padding ->
     Column(Modifier.padding(padding).fillMaxSize()) {
       Column(
-        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp)
+        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = if (screenLandscape) 2.dp else 6.dp)
           .clip(RoundedCornerShape(14.dp))
           .background(Brush.linearGradient(listOf(Color(0xFF064016), Color(0xFF0B170E), Color(0xFF050806))))
           .border(1.dp, Color(0xFF39FF14), RoundedCornerShape(14.dp))
-          .padding(horizontal = 14.dp, vertical = 10.dp),
+          .padding(horizontal = 14.dp, vertical = if (screenLandscape) 3.dp else 10.dp),
       ) {
-        Text("HakuX FSR", style = MaterialTheme.typography.headlineSmall, color = Color.White)
-        Text("XBOX GAME LIBRARY  •  ORGANIZADO, FUNCIONAL E TECNOLÓGICO",
+        Text("HakuX FSR", style = if (screenLandscape) MaterialTheme.typography.titleLarge else MaterialTheme.typography.headlineSmall, color = Color.White)
+        if (!screenLandscape) Text("XBOX GAME LIBRARY  •  ORGANIZADO, FUNCIONAL E TECNOLÓGICO",
           style = MaterialTheme.typography.labelSmall, color = Color(0xFF9BFF91), letterSpacing = 0.7.sp)
       }
       // Dashboard, search, refresh and settings remain immediately accessible.
       Row(
-        Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, top = 2.dp),
+        Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, top = if (screenLandscape) 0.dp else 2.dp).then(if (screenLandscape) Modifier.height(44.dp) else Modifier),
         verticalAlignment = Alignment.CenterVertically,
       ) {
         // the dashboard (Xbox Live's accounts): started, or installed from its zip first
@@ -206,7 +207,7 @@ fun LibraryScreen(
         }
       }
       Row(
-        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 0.dp),
+        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 0.dp).then(if (screenLandscape) Modifier.height(38.dp) else Modifier),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
       ) {
@@ -229,7 +230,7 @@ fun LibraryScreen(
       PullToRefreshBox(
         isRefreshing = state.loading,
         onRefresh = vm::refresh,
-        modifier = Modifier.weight(1f).fillMaxWidth().padding(top = 4.dp),
+        modifier = Modifier.weight(1f).fillMaxWidth().padding(top = if (screenLandscape) 0.dp else 4.dp),
       ) {
         val games = state.visibleGames
         when {
@@ -414,12 +415,12 @@ private fun GameList(
   fun GameEntry(game: Game, gameIndex: Int = 0) {
     val disc = info[game.uri]
     var focused by remember { mutableStateOf(false) }
-    val cardWidth = if (landscape) 250.dp else 176.dp
+    val cardWidth = if (landscape) 270.dp else 176.dp
     val coverWidth = if (landscape) 104.dp else 82.dp
     val coverHeight = if (landscape) 90.dp else 116.dp
     val carouselOffset = gameIndex - carouselIndex
     val cardModifier = Modifier
-      .then(if (viewMode == "carousel") Modifier.width(cardWidth).height(if (landscape) 205.dp else 300.dp).graphicsLayer {
+      .then(if (viewMode == "carousel") Modifier.width(cardWidth).height(if (landscape) 245.dp else 300.dp).graphicsLayer {
         rotationY = (-carouselOffset * 24f).coerceIn(-48f, 48f)
         val depthScale = 1f - (carouselOffset.absoluteValue * 0.10f).coerceAtMost(0.30f)
         scaleX = depthScale
@@ -502,23 +503,23 @@ private fun GameList(
 
   when (viewMode) {
     "carousel" -> Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
-      Text("HAKUX FSR  /  3D COVER FLOW", Modifier.padding(top = if (landscape) 2.dp else 12.dp, bottom = if (landscape) 2.dp else 10.dp), style = MaterialTheme.typography.labelLarge, color = Color(0xFF9BE69A))
+      if (!landscape) Text("HAKUX FSR  /  3D COVER FLOW", Modifier.padding(top = 12.dp, bottom = 10.dp), style = MaterialTheme.typography.labelLarge, color = Color(0xFF9BE69A))
       BoxWithConstraints(Modifier.fillMaxWidth().weight(1f)) {
-        val carouselCardWidth = if (landscape) 250.dp else 176.dp
+        val carouselCardWidth = if (landscape) 270.dp else 176.dp
         val side = ((maxWidth - carouselCardWidth) / 2).coerceAtLeast(12.dp)
         LazyRow(
           state = carouselState,
           flingBehavior = rememberSnapFlingBehavior(carouselState),
           modifier = Modifier.fillMaxSize(),
-          contentPadding = PaddingValues(horizontal = side, vertical = 12.dp),
+          contentPadding = PaddingValues(horizontal = side, vertical = if (landscape) 2.dp else 12.dp),
           horizontalArrangement = Arrangement.spacedBy(18.dp),
           verticalAlignment = Alignment.CenterVertically,
         ) { itemsIndexed(games, key = { _, game -> game.uri.toString() }) { index, game -> GameEntry(game, index) } }
       }
       val selectedGame = games.getOrNull(carouselIndex.coerceIn(games.indices))
       selectedGame?.let { selected ->
-        Text(selected.title, style = MaterialTheme.typography.titleLarge, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
-        Text("DESLIZE PARA EXPLORAR  •  TOQUE PARA INICIAR  •  SEGURE PARA OPÇÕES", style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant, modifier = Modifier.padding(bottom = 14.dp))
+        Text(selected.title, style = if (landscape) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleLarge, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 20.dp, vertical = if (landscape) 2.dp else 8.dp))
+        Text("DESLIZE PARA EXPLORAR  •  TOQUE PARA INICIAR  •  SEGURE PARA OPÇÕES", style = if (landscape) MaterialTheme.typography.labelSmall else MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant, modifier = Modifier.padding(bottom = if (landscape) 2.dp else 14.dp))
       }
     }
     "list" -> LazyColumn(
