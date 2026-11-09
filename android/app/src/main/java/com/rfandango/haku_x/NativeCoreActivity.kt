@@ -429,14 +429,14 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     dialog.window?.setBackgroundDrawable(GradientDrawable().apply {
       setColor(Color.rgb(15, 18, 16))
       cornerRadius = dp(18).toFloat()
-      setStroke(dp(1), Color.rgb(54, 75, 59))
+      setStroke(dp(1), Color.rgb(48, 112, 58))
     })
     val alertTitleId = resources.getIdentifier("alertTitle", "id", "android")
     if (alertTitleId != 0) dialog.findViewById<TextView>(alertTitleId)?.setTextColor(Color.WHITE)
     dialog.findViewById<TextView>(android.R.id.message)?.setTextColor(Color.rgb(190, 200, 192))
     dialog.listView?.setBackgroundColor(Color.rgb(15, 18, 16))
     listOf(AlertDialog.BUTTON_POSITIVE, AlertDialog.BUTTON_NEGATIVE, AlertDialog.BUTTON_NEUTRAL)
-      .forEach { which -> dialog.getButton(which)?.setTextColor(Color.rgb(120, 220, 130)) }
+      .forEach { which -> dialog.getButton(which)?.setTextColor(Color.rgb(57, 255, 20)) }
     return dialog
   }
 
@@ -734,7 +734,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
   }
 
 
-  /** Xbox Series X-styled, scrollable dialog used by every in-game menu. */
+  /** HakuX FSR-styled, scrollable panel used by every in-game menu. */
   private fun showSeriesXMenu(
     title: String,
     entries: List<Pair<String, String>>,
@@ -766,7 +766,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
         gravity = Gravity.CENTER_VERTICAL
         setPadding(dp(16), dp(12), dp(16), dp(12))
         background = GradientDrawable().apply {
-          setColor(Color.rgb(31, 37, 33))
+          setColor(Color.rgb(10, 20, 13))
           cornerRadius = dp(10).toFloat()
           setStroke(dp(1), Color.rgb(54, 75, 59))
         }
@@ -977,7 +977,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     dialog.show()
   }
 
-  /** Xbox Series X quick menu; the full list scrolls on compact screens. */
+  /** HakuX FSR quick menu; the full list scrolls on compact screens. */
   private fun showMenu() {
     if (editorBar != null) return
     val shown = controlsShown ?: !hasGamepad()
@@ -1013,7 +1013,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     val exit = if (launchedExternally) R.string.overlay_menu_exit_frontend else R.string.overlay_menu_exit
     items += getString(exit) to "Fechar o jogo"
     actions += ::exitGame
-    showSeriesXMenu("Menu rápido", items) { actions[it]() }
+    showSeriesXMenu("HakuX FSR  •  Menu rápido", items) { actions[it]() }
   }
 
   /** Selects independently which performance and graphics details appear over gameplay. */
