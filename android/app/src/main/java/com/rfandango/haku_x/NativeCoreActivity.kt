@@ -766,7 +766,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
       LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
         gravity = if (quickGrid) Gravity.CENTER else Gravity.CENTER_VERTICAL
-        setPadding(dp(if (quickGrid) 3 else 12), dp(if (quickGrid) 7 else 12), dp(if (quickGrid) 3 else 12), dp(if (quickGrid) 7 else 12))
+        setPadding(dp(if (quickGrid) 2 else 12), dp(if (quickGrid) 4 else 12), dp(if (quickGrid) 2 else 12), dp(if (quickGrid) 4 else 12))
         val active = entry.first.contains("✓") || entry.second.contains("ATIVADO", ignoreCase = true)
         background = GradientDrawable().apply {
           setColor(if (quickGrid && active) Color.rgb(8, 72, 24) else Color.rgb(10, 20, 13))
@@ -776,7 +776,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
         }
         isFocusable = true
         isClickable = true
-        minimumHeight = dp(if (quickGrid) 78 else 64)
+        minimumHeight = dp(if (quickGrid) 68 else 64)
         setOnClickListener { onSelect(index); dialog.dismiss() }
         if (quickGrid) {
           val label = entry.first.lowercase(java.util.Locale.ROOT)
@@ -798,7 +798,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
             text = glyph
             gravity = Gravity.CENTER
             setTextColor(if (active) Color.rgb(57, 255, 20) else Color.WHITE)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 22f)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
             typeface = Typeface.create("sans-serif", Typeface.NORMAL)
           })
         }
@@ -806,7 +806,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
           text = entry.first
           gravity = if (quickGrid) Gravity.CENTER else Gravity.START
           setTextColor(if (quickGrid && active) Color.rgb(183, 255, 176) else Color.WHITE)
-          setTextSize(TypedValue.COMPLEX_UNIT_SP, if (quickGrid) 9f else 15f)
+          setTextSize(TypedValue.COMPLEX_UNIT_SP, if (quickGrid) 8f else 15f)
           typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
           maxLines = if (quickGrid) 2 else 3
           ellipsize = android.text.TextUtils.TruncateAt.END
@@ -815,7 +815,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
           text = entry.second
           gravity = if (quickGrid) Gravity.CENTER else Gravity.START
           setTextColor(if (quickGrid && active) Color.rgb(57, 255, 20) else Color.rgb(183, 196, 185))
-          setTextSize(TypedValue.COMPLEX_UNIT_SP, if (quickGrid) 8f else 11f)
+          setTextSize(TypedValue.COMPLEX_UNIT_SP, if (quickGrid) 7f else 11f)
           maxLines = if (quickGrid) 1 else 5
           ellipsize = android.text.TextUtils.TruncateAt.END
           setPadding(0, dp(if (quickGrid) 1 else 3), 0, 0)
@@ -836,7 +836,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
           ).apply {
             if (column > 0) leftMargin = dp(3)
             if (column < rowEntries.lastIndex) rightMargin = dp(3)
-            bottomMargin = dp(7)
+            bottomMargin = dp(5)
           })
         }
         repeat(columns - rowEntries.size) {
@@ -869,7 +869,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     dialog = showMenuDialog(AlertDialog.Builder(this).setView(root).setCancelable(true))
     dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
     val dialogWidth = minOf(resources.displayMetrics.widthPixels - dp(32), dp(620))
-    val contentHeight = dp(if (quickGrid) 190 + ((entries.size + 4) / 5) * 82 else 124 + entries.size * 78)
+    val contentHeight = dp(if (quickGrid) 184 + ((entries.size + 4) / 5) * 72 else 124 + entries.size * 78)
     val dialogHeight = minOf(resources.displayMetrics.heightPixels - dp(48), dp(760), contentHeight)
     dialog.window?.setLayout(dialogWidth, dialogHeight)
   }
