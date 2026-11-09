@@ -371,34 +371,6 @@ private fun SeriesXGameCover(
   }
 }
 
-/** A console-style featured title, using the downloaded box art when available. */
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun FeaturedGameCard(game: Game, cover: ImageBitmap?, icon: ImageBitmap?, landscape: Boolean, onLaunch: () -> Unit) {
-  val shape = RoundedCornerShape(22.dp)
-  Row(
-    Modifier
-      .fillMaxWidth()
-      .height(if (landscape) 126.dp else 172.dp)
-      .clip(shape)
-      .background(Brush.linearGradient(listOf(Color(0xFF202A21), Color(0xFF101411), Color(0xFF080A08))))
-      .border(1.dp, Color(0xFF344A35), shape)
-      .combinedClickable(onClick = onLaunch, onLongClick = onLaunch)
-      .padding(horizontal = 18.dp, vertical = if (landscape) 8.dp else 16.dp),
-    verticalAlignment = Alignment.CenterVertically,
-  ) {
-    Column(Modifier.weight(1f)) {
-      Text("HAKUX  /  XBOX SERIES X", style = MaterialTheme.typography.labelSmall, color = Color(0xFF8BD889))
-      Spacer(Modifier.height(if (landscape) 4.dp else 10.dp))
-      Text(game.title, style = MaterialTheme.typography.headlineSmall, color = Color.White, maxLines = 2, overflow = TextOverflow.Ellipsis)
-      Spacer(Modifier.height(if (landscape) 4.dp else 10.dp))
-      Text("INICIAR JOGO  ›", style = MaterialTheme.typography.labelLarge, color = Color(0xFF9BE69A))
-    }
-    Spacer(Modifier.width(12.dp))
-    SeriesXGameCover(game, cover, icon, Modifier.width(if (landscape) 72.dp else 92.dp).height(if (landscape) 104.dp else 136.dp))
-  }
-}
-
 /**
  * The games, as cards. A fast scroll brings several cards in a frame, and the
  * debug build's Compose code runs interpreted (a debuggable app is never
@@ -554,7 +526,6 @@ private fun GameList(
       contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp),
       verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-      item { FeaturedGameCard(games.first(), covers[games.first().uri], icons[games.first().uri], landscape) { onLaunch(games.first()) } }
       item { Text("TODOS OS JOGOS", style = MaterialTheme.typography.labelLarge, color = colors.onSurfaceVariant) }
       items(games, key = { it.uri.toString() }) { GameEntry(it) }
     }
@@ -565,9 +536,6 @@ private fun GameList(
       horizontalArrangement = Arrangement.spacedBy(10.dp),
       verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-      item(span = { GridItemSpan(maxLineSpan) }) {
-        FeaturedGameCard(games.first(), covers[games.first().uri], icons[games.first().uri], landscape) { onLaunch(games.first()) }
-      }
       item(span = { GridItemSpan(maxLineSpan) }) {
         Text("TODOS OS JOGOS", style = MaterialTheme.typography.labelLarge, color = colors.onSurfaceVariant)
       }
