@@ -746,11 +746,12 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
       setBackgroundColor(Color.rgb(15, 18, 16))
     }
     val heading = TextView(this).apply {
-      text = title.uppercase(java.util.Locale.getDefault())
+      text = if (title.contains("MENU RÁPIDO", ignoreCase = true)) "HAKUX FSR" else title.uppercase(java.util.Locale.getDefault())
       setTextColor(Color.WHITE)
-      setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
+      setTextSize(TypedValue.COMPLEX_UNIT_SP, 17f)
       typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
-      setPadding(dp(2), dp(4), dp(2), dp(14))
+      setTextColor(Color.rgb(183, 255, 176))
+      setPadding(dp(2), dp(4), dp(2), dp(10))
     }
     root.addView(heading)
     val scroll = ScrollView(this).apply { isFillViewport = false; clipToPadding = false }
@@ -765,29 +766,59 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
       LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
         gravity = if (quickGrid) Gravity.CENTER else Gravity.CENTER_VERTICAL
-        setPadding(dp(if (quickGrid) 4 else 12), dp(if (quickGrid) 8 else 12), dp(if (quickGrid) 4 else 12), dp(if (quickGrid) 8 else 12))
+        setPadding(dp(if (quickGrid) 3 else 12), dp(if (quickGrid) 7 else 12), dp(if (quickGrid) 3 else 12), dp(if (quickGrid) 7 else 12))
+        val active = entry.first.contains("✓") || entry.second.contains("ATIVADO", ignoreCase = true)
         background = GradientDrawable().apply {
-          setColor(Color.rgb(10, 20, 13))
-          cornerRadius = dp(12).toFloat()
-          setStroke(dp(1), Color.rgb(48, 112, 58))
+          setColor(if (quickGrid && active) Color.rgb(8, 72, 24) else Color.rgb(10, 20, 13))
+          cornerRadius = dp(if (quickGrid) 9 else 12).toFloat()
+          setStroke(dp(if (quickGrid && active) 2 else 1),
+            if (quickGrid && active) Color.rgb(57, 255, 20) else Color.rgb(48, 112, 58))
         }
         isFocusable = true
         isClickable = true
-        minimumHeight = dp(if (quickGrid) 72 else 64)
+        minimumHeight = dp(if (quickGrid) 78 else 64)
         setOnClickListener { onSelect(index); dialog.dismiss() }
+        if (quickGrid) {
+          val label = entry.first.lowercase(java.util.Locale.ROOT)
+          val glyph = when {
+            "resolu" in label || "imagem" in label -> "▣"
+            "fsr" in label || "fidelity" in label -> "◉"
+            "cas" in label -> "◈"
+            "nis" in label || "nitidez" in label -> "◎"
+            "gráfico" in label || "filtro" in label -> "▤"
+            "salvar" in label || "save" in label -> "▣"
+            "carregar" in label || "load" in label -> "▱"
+            "captura" in label || "tela" in label -> "▧"
+            "sair" in label || "fechar" in label || "exit" in label -> "↪"
+            "config" in label -> "⚙"
+            "controle" in label || "jogador" in label -> "⌘"
+            else -> "●"
+          }
+          addView(TextView(this@NativeCoreActivity).apply {
+            text = glyph
+            gravity = Gravity.CENTER
+            setTextColor(if (active) Color.rgb(57, 255, 20) else Color.WHITE)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 22f)
+            typeface = Typeface.create("sans-serif", Typeface.NORMAL)
+          })
+        }
         addView(TextView(this@NativeCoreActivity).apply {
           text = entry.first
           gravity = if (quickGrid) Gravity.CENTER else Gravity.START
-          setTextColor(Color.WHITE)
-          setTextSize(TypedValue.COMPLEX_UNIT_SP, if (quickGrid) 11f else 15f)
+          setTextColor(if (quickGrid && active) Color.rgb(183, 255, 176) else Color.WHITE)
+          setTextSize(TypedValue.COMPLEX_UNIT_SP, if (quickGrid) 9f else 15f)
           typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+          maxLines = if (quickGrid) 2 else 3
+          ellipsize = android.text.TextUtils.TruncateAt.END
         })
         if (entry.second.isNotBlank()) addView(TextView(this@NativeCoreActivity).apply {
           text = entry.second
           gravity = if (quickGrid) Gravity.CENTER else Gravity.START
-          setTextColor(Color.rgb(183, 196, 185))
-          setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
-          setPadding(0, dp(3), 0, 0)
+          setTextColor(if (quickGrid && active) Color.rgb(57, 255, 20) else Color.rgb(183, 196, 185))
+          setTextSize(TypedValue.COMPLEX_UNIT_SP, if (quickGrid) 8f else 11f)
+          maxLines = if (quickGrid) 1 else 5
+          ellipsize = android.text.TextUtils.TruncateAt.END
+          setPadding(0, dp(if (quickGrid) 1 else 3), 0, 0)
         })
       }
     if (quickGrid) {
