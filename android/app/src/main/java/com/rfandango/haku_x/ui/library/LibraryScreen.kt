@@ -519,7 +519,7 @@ private fun GameList(
 
   when (viewMode) {
     "carousel" -> Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
-      Text("XBOX GAME LIBRARY  /  3D COVER FLOW", Modifier.padding(top = 12.dp, bottom = 10.dp), style = MaterialTheme.typography.labelLarge, color = Color(0xFF9BE69A))
+      Text("HAKUX FSR  /  3D COVER FLOW", Modifier.padding(top = 12.dp, bottom = 10.dp), style = MaterialTheme.typography.labelLarge, color = Color(0xFF9BE69A))
       BoxWithConstraints(Modifier.fillMaxWidth().weight(1f)) {
         val carouselCardWidth = if (landscape) 190.dp else 176.dp
         val side = ((maxWidth - carouselCardWidth) / 2).coerceAtLeast(12.dp)
