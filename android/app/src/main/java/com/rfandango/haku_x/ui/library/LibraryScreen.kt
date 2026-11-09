@@ -445,14 +445,36 @@ private fun GameList(
       )
     Box(cardModifier) {
       if (viewMode == "carousel") {
-        Box(Modifier.fillMaxSize().background(Color(0xFF080D09))) {
-          SeriesXGameCover(game, covers[game.uri], icons[game.uri], Modifier.fillMaxSize())
-          Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xF0000000)))).padding(horizontal = 14.dp, vertical = 18.dp)) {
-            Column {
-              Text(game.title, style = if (landscape) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.titleLarge, color = Color.White, maxLines = 2, overflow = TextOverflow.Ellipsis)
-              if (disc != null && disc.titleId != 0L) IdLine(disc, (if (landscape) idStyle.copy(fontSize = 12.sp, lineHeight = 14.sp) else idStyle).copy(color = Color(0xFFB8C8B8)))
-              Text(if (gameIndex == carouselIndex) "A  •  INICIAR JOGO" else "SELECIONAR", style = MaterialTheme.typography.labelSmall, color = Color(0xFF9BE69A), modifier = Modifier.padding(top = 8.dp))
+        // Keep the 3D artwork completely unobstructed; all labels live in a
+        // dedicated footer below the cover, including on the side cards.
+        Column(Modifier.fillMaxSize().background(Color(0xFF080D09))) {
+          Box(Modifier.fillMaxWidth().weight(1f).padding(horizontal = 8.dp, vertical = 6.dp), contentAlignment = Alignment.Center) {
+            SeriesXGameCover(game, covers[game.uri], icons[game.uri], Modifier.fillMaxSize())
+          }
+          Column(
+            Modifier.fillMaxWidth()
+              .background(Color(0xE908100B))
+              .padding(horizontal = 10.dp, vertical = if (landscape) 7.dp else 9.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+          ) {
+            Text(
+              game.title,
+              style = if (landscape) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleSmall,
+              color = Color.White,
+              maxLines = 2,
+              overflow = TextOverflow.Ellipsis,
+              textAlign = TextAlign.Center,
+            )
+            if (disc != null && disc.titleId != 0L) {
+              IdLine(disc, idStyle.copy(color = Color(0xFFB8C8B8)))
             }
+            Text(
+              if (gameIndex == carouselIndex) "A  •  INICIAR JOGO" else "SELECIONAR",
+              style = MaterialTheme.typography.labelSmall,
+              color = Color(0xFF9BE69A),
+              modifier = Modifier.padding(top = 3.dp),
+            )
           }
         }
       } else if (viewMode == "grid") {
@@ -516,10 +538,13 @@ private fun GameList(
           verticalAlignment = Alignment.CenterVertically,
         ) { itemsIndexed(games, key = { _, game -> game.uri.toString() }) { index, game -> GameEntry(game, index) } }
       }
-      val selectedGame = games.getOrNull(carouselIndex.coerceIn(games.indices))
-      selectedGame?.let { selected ->
-        Text(selected.title, style = if (landscape) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleLarge, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 20.dp, vertical = if (landscape) 2.dp else 8.dp))
-        Text("DESLIZE PARA EXPLORAR  •  TOQUE PARA INICIAR  •  SEGURE PARA OPÇÕES", style = if (landscape) MaterialTheme.typography.labelSmall else MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant, modifier = Modifier.padding(bottom = if (landscape) 2.dp else 14.dp))
+      if (games.isNotEmpty()) {
+        Text(
+          "DESLIZE PARA EXPLORAR  •  TOQUE PARA INICIAR  •  SEGURE PARA OPÇÕES",
+          style = MaterialTheme.typography.labelSmall,
+          color = colors.onSurfaceVariant,
+          modifier = Modifier.padding(bottom = if (landscape) 2.dp else 14.dp),
+        )
       }
     }
     "list" -> LazyColumn(
