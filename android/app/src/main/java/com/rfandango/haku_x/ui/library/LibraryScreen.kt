@@ -439,12 +439,12 @@ private fun GameList(
   fun GameEntry(game: Game, gameIndex: Int = 0) {
     val disc = info[game.uri]
     var focused by remember { mutableStateOf(false) }
-    val cardWidth = if (landscape) 224.dp else 204.dp
+    val cardWidth = if (landscape) 190.dp else 176.dp
     val coverWidth = if (landscape) 146.dp else 116.dp
     val coverHeight = if (landscape) 126.dp else 166.dp
     val carouselOffset = gameIndex - carouselIndex
     val cardModifier = Modifier
-      .then(if (viewMode == "carousel") Modifier.width(cardWidth).height(if (landscape) 330.dp else 350.dp).graphicsLayer {
+      .then(if (viewMode == "carousel") Modifier.width(cardWidth).height(if (landscape) 280.dp else 300.dp).graphicsLayer {
         rotationY = (-carouselOffset * 24f).coerceIn(-48f, 48f)
         val depthScale = 1f - (carouselOffset.absoluteValue * 0.10f).coerceAtMost(0.30f)
         scaleX = depthScale
@@ -529,7 +529,8 @@ private fun GameList(
     "carousel" -> Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
       Text("XBOX GAME LIBRARY  /  3D COVER FLOW", Modifier.padding(top = 12.dp, bottom = 10.dp), style = MaterialTheme.typography.labelLarge, color = Color(0xFF9BE69A))
       BoxWithConstraints(Modifier.fillMaxWidth().weight(1f)) {
-        val side = ((maxWidth - 204.dp) / 2).coerceAtLeast(12.dp)
+        val carouselCardWidth = if (landscape) 190.dp else 176.dp
+        val side = ((maxWidth - carouselCardWidth) / 2).coerceAtLeast(12.dp)
         LazyRow(
           state = carouselState,
           flingBehavior = rememberSnapFlingBehavior(carouselState),
