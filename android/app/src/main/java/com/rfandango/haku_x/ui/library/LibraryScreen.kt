@@ -172,9 +172,12 @@ fun LibraryScreen(
         if (!screenLandscape) Text("XBOX GAME LIBRARY  •  ORGANIZADO, FUNCIONAL E TECNOLÓGICO",
           style = MaterialTheme.typography.labelSmall, color = Color(0xFF9BFF91), letterSpacing = 0.7.sp)
       }
-      // Dashboard, search, refresh and settings remain immediately accessible.
+      // In landscape the search field is hidden to free vertical space.
+      // Keep the navigation/action icons in a full touch-target row.
       Row(
-        Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, top = if (screenLandscape) 0.dp else 2.dp).then(if (screenLandscape) Modifier.height(44.dp) else Modifier),
+        Modifier.fillMaxWidth()
+          .padding(start = 4.dp, end = 4.dp, top = if (screenLandscape) 0.dp else 2.dp)
+          .then(if (screenLandscape) Modifier.height(48.dp) else Modifier),
         verticalAlignment = Alignment.CenterVertically,
       ) {
         // the dashboard (Xbox Live's accounts): started, or installed from its zip first
@@ -184,7 +187,8 @@ fun LibraryScreen(
         ) {
           Icon(Icons.Filled.Home, contentDescription = stringResource(R.string.library_dashboard))
         }
-        SearchField(state.query, vm::setQuery, Modifier.weight(1f))
+        if (!screenLandscape) SearchField(state.query, vm::setQuery, Modifier.weight(1f))
+        else Spacer(Modifier.weight(1f))
         IconButton(onClick = { coverSourceText = vm.coverSource; coverSourceDialog = true }, modifier = Modifier.padding(start = 2.dp)) {
           Icon(Icons.Filled.Star, contentDescription = "Capas 3D")
         }
@@ -207,7 +211,9 @@ fun LibraryScreen(
         }
       }
       Row(
-        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 0.dp).then(if (screenLandscape) Modifier.height(38.dp) else Modifier),
+        Modifier.fillMaxWidth()
+          .padding(horizontal = 12.dp, vertical = if (screenLandscape) 2.dp else 0.dp)
+          .then(if (screenLandscape) Modifier.height(48.dp) else Modifier),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
       ) {
