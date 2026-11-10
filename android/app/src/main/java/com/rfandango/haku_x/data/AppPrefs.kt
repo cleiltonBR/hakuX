@@ -37,6 +37,11 @@ class AppPrefs(context: Context) {
       gamesFolders = listOfNotNull(value) + gamesFolders.drop(1)
     }
 
+  /** Destination chosen for games downloaded from the integrated store. */
+  var downloadFolderUri: Uri?
+    get() = sp.getString(KEY_DOWNLOAD_FOLDER, null)?.let(Uri::parse) ?: gamesFolderUri
+    set(value) = sp.edit { if (value == null) remove(KEY_DOWNLOAD_FOLDER) else putString(KEY_DOWNLOAD_FOLDER, value.toString()) }
+
   var setupComplete: Boolean
     get() = sp.getBoolean(KEY_SETUP_COMPLETE, false)
     set(value) = sp.edit { putBoolean(KEY_SETUP_COMPLETE, value) }
@@ -299,6 +304,7 @@ class AppPrefs(context: Context) {
     const val NAME = "x1box_prefs"
     private const val KEY_GAMES_FOLDER = "gamesFolderUri"
     private const val KEY_GAMES_FOLDERS = "gamesFolders"
+    private const val KEY_DOWNLOAD_FOLDER = "store_download_folder"
     private const val KEY_SETUP_COMPLETE = "setup_complete"
     private const val KEY_PREVIOUS_MIGRATED = "previous_version_migrated"
     private const val KEY_SHOW_FPS = "show_fps"
