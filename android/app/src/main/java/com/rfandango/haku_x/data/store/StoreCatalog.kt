@@ -185,6 +185,15 @@ data class ArchiveXboxItem(
   val coverUrl: String get() = "https://archive.org/services/img/$identifier"
 }
 
+data class ArchiveXboxSearchPage(
+  val items: List<ArchiveXboxItem>,
+  val total: Int,
+  val page: Int,
+  val rows: Int,
+) {
+  val hasMore: Boolean get() = page * rows < total
+}
+
 object InternetArchiveXboxRepository {
   private const val SEARCH_ENDPOINT = "https://archive.org/advancedsearch.php"
 
@@ -193,19 +202,23 @@ object InternetArchiveXboxRepository {
     require(query.length >= 2) { "Digite pelo menos 2 caracteres para pesquisar." }
     val safe = buildString {
       query.forEach { character ->
-        if (character in "+-&|!(){}[]^\"~*?:\\/") append('\\')
+        if (character in "+-&|!(){}[]^\"~*?:\\") append('\\')
         append(character)
       }
     }
-    // Exclude later Xbox generations explicitly: this Store is for original Xbox games.
-    return """mediatype:software AND (subject:xbox OR title:xbox OR description:xbox) AND (title:"$safe" OR description:"$safe" OR subject:"$safe") AND NOT (title:"Xbox 360" OR description:"Xbox 360" OR subject:"Xbox 360" OR title:"Xbox One" OR description:"Xbox One" OR subject:"Xbox One" OR title:"Xbox Series" OR description:"Xbox Series" OR subject:"Xbox Series")"""
+    // Xbox software only. Explicitly exclude newer generations and homebrew-labelled records.
+    return """mediatype:software AND subject:xbox AND (title:"$safe" OR description:"$safe") AND NOT (title:"Xbox 360" OR description:"Xbox 360" OR subject:"Xbox 360" OR title:"Xbox One" OR description:"Xbox One" OR subject:"Xbox One" OR title:"Xbox Series" OR description:"Xbox Series" OR subject:"Xbox Series" OR title:homebrew OR description:homebrew OR subject:homebrew)"""
   }
 
-  fun search(rawQuery: String, rows: Int = 40): List<ArchiveXboxItem> {
+  fun search(rawQuery: String, rows: Int = 40): List<ArchiveXboxItem> =
+    searchPage(rawQuery, page = 1, rows = rows).items
+
+  fun searchPage(rawQuery: String, page: Int = 1, rows: Int = 40): ArchiveXboxSearchPage {
     val lucene = buildSearchQuery(rawQuery)
     val limit = rows.coerceIn(1, 100)
+    val pageNumber = page.coerceAtLeast(1)
     val encoded = java.net.URLEncoder.encode(lucene, Charsets.UTF_8.name())
-    val url = URL("$SEARCH_ENDPOINT?q=$encoded&fl[]=identifier&fl[]=title&fl[]=description&fl[]=year&rows=$limit&page=1&output=json")
+    val url = URL("$SEARCH_ENDPOINT?q=$encoded&fl[]=identifier&fl[]=title&fl[]=description&fl[]=year&rows=$limit&page=$pageNumber&output=json")
     val connection = (url.openConnection() as HttpURLConnection).apply {
       requestMethod = "GET"
       connectTimeout = 12_000
@@ -218,8 +231,9 @@ object InternetArchiveXboxRepository {
       val status = connection.responseCode
       require(status in 200..299) { "Internet Archive respondeu HTTP $status" }
       val root = JSONObject(connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() })
-      val docs = root.optJSONObject("response")?.optJSONArray("docs") ?: JSONArray()
-      return buildList {
+      val response = root.optJSONObject("response")
+      val docs = response?.optJSONArray("docs") ?: JSONArray()
+      val items = buildList {
         for (index in 0 until docs.length()) {
           val item = docs.optJSONObject(index) ?: continue
           val identifier = item.optString("identifier").trim()
@@ -233,6 +247,7 @@ object InternetArchiveXboxRepository {
           add(ArchiveXboxItem(identifier, title, description, item.optString("year").takeIf { it.isNotBlank() }))
         }
       }
+      return ArchiveXboxSearchPage(items, response?.optInt("numFound", items.size) ?: items.size, pageNumber, limit)
     } finally {
       connection.disconnect()
     }
