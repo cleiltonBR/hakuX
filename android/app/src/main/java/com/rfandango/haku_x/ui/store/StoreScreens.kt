@@ -27,6 +27,7 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -252,6 +253,7 @@ fun StoreScreen() {
 fun DownloadsScreen() {
   val downloads by ArchiveXboxDownloads.downloads.collectAsState()
   val context = LocalContext.current
+  LaunchedEffect(context) { ArchiveXboxDownloads.restore(context) }
   val prefs = remember { AppPrefs(context) }
   var destinationUri by remember { mutableStateOf(prefs.downloadFolderUri) }
   var destinationError by remember { mutableStateOf<String?>(null) }
