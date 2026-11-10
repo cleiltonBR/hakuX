@@ -4,7 +4,7 @@ name: Build hakuX (APK)
 
 on:
   push:
-    branches: [master, feature/nvidia-image-scaling, feature/resolution-scales-1x-8x, feature/fractional-resolution-scales, feature/fractional-fsr-cas-validation, feature/android-hdr-output, ui/xbox-series-x-on-build307]
+    branches: [master, feature/nvidia-image-scaling, feature/resolution-scales-1x-8x, feature/fractional-resolution-scales, feature/fractional-fsr-cas-validation, feature/android-hdr-output, ui/xbox-series-x-on-build307, feature/sgsr2-build420]
   pull_request:
     branches: [master, feature/nvidia-image-scaling, feature/resolution-scales-1x-8x, feature/fractional-resolution-scales]
   workflow_dispatch:
