@@ -1,5 +1,9 @@
 package com.rfandango.haku_x.ui.store
 import android.net.Uri
+import android.webkit.WebResourceRequest
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.documentfile.provider.DocumentFile
@@ -66,6 +70,10 @@ fun StoreScreen() {
   val scope = rememberCoroutineScope()
   val uriHandler = LocalUriHandler.current
   var query by remember { mutableStateOf("") }
+  var selectedStoreTab by remember { mutableStateOf("catalog") }
+  var customUrl by remember { mutableStateOf("") }
+  var activeCustomUrl by remember { mutableStateOf("") }
+  var customPageError by remember { mutableStateOf<String?>(null) }
   var results by remember { mutableStateOf<List<ArchiveXboxItem>>(emptyList()) }
   var message by remember { mutableStateOf("Carregando biblioteca online do Xbox Clássico…") }
   var loading by remember { mutableStateOf(false) }
@@ -125,6 +133,11 @@ fun StoreScreen() {
   }
 
   Column(modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+      FilterChip(selected = selectedStoreTab == "catalog", onClick = { selectedStoreTab = "catalog" }, label = { Text("Catálogo Xbox") })
+      FilterChip(selected = selectedStoreTab == "link", onClick = { selectedStoreTab = "link" }, label = { Text("Importar por link") })
+    }
+    if (selectedStoreTab == "catalog") {
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
       Text("Biblioteca Xbox Clássico", style = MaterialTheme.typography.headlineSmall)
       Text("Catálogo online · ${results.size} jogos carregados", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -180,6 +193,23 @@ fun StoreScreen() {
       }
     }
     if (loading && results.isNotEmpty()) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+    } else {
+      CustomLinkBrowser(
+        url = customUrl,
+        onUrlChange = { customUrl = it },
+        activeUrl = activeCustomUrl,
+        onLoad = { raw ->
+          val candidate = raw.trim().let { if (it.startsWith("http://", true) || it.startsWith("https://", true)) it else "https://$it" }
+          val parsed = runCatching { Uri.parse(candidate) }.getOrNull()
+          if (parsed?.scheme in listOf("http", "https") && !parsed.host.isNullOrBlank()) {
+            activeCustomUrl = candidate
+            customUrl = candidate
+            customPageError = null
+          } else customPageError = "Informe um endereço HTTP ou HTTPS válido."
+        },
+        error = customPageError,
+      )
+    }
   }
 
   selectedGame?.let { game ->
@@ -323,4 +353,61 @@ private fun formatBytes(bytes: Long): String {
     unit++
   }
   return String.format(java.util.Locale.ROOT, "%.1f %s", value, units[unit])
+}
+
+
+/** Optional in-app browser for user-supplied catalog pages. The original Xbox catalog remains untouched. */
+@Composable
+private fun CustomLinkBrowser(
+  url: String,
+  onUrlChange: (String) -> Unit,
+  activeUrl: String,
+  onLoad: (String) -> Unit,
+  error: String?,
+) {
+  Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Text("Abra uma página de catálogo ou uma fonte personalizada.", style = MaterialTheme.typography.bodySmall)
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+      OutlinedTextField(
+        value = url,
+        onValueChange = onUrlChange,
+        modifier = Modifier.weight(1f),
+        singleLine = true,
+        label = { Text("Endereço do site") },
+        placeholder = { Text("https://exemplo.com/roms/xbox") },
+      )
+      Button(onClick = { onLoad(url) }, enabled = url.isNotBlank()) { Text("Abrir") }
+    }
+    error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+    if (activeUrl.isBlank()) {
+      Column(modifier = Modifier.fillMaxWidth().weight(1f), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+        Text("Cole um link para carregar o conteúdo do site nesta aba.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+      }
+    } else {
+      AndroidView(
+        modifier = Modifier.fillMaxWidth().weight(1f),
+        factory = { context ->
+          WebView(context).apply {
+            settings.javaScriptEnabled = true
+            settings.domStorageEnabled = true
+            settings.allowFileAccess = false
+            settings.allowContentAccess = false
+            settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
+            webViewClient = object : WebViewClient() {
+              override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+                val scheme = request.url.scheme?.lowercase(java.util.Locale.ROOT)
+                return scheme != "https" && scheme != "http"
+              }
+            }
+          }
+        },
+        update = { view ->
+          if (view.tag != activeUrl) {
+            view.tag = activeUrl
+            view.loadUrl(activeUrl)
+          }
+        },
+      )
+    }
+  }
 }
