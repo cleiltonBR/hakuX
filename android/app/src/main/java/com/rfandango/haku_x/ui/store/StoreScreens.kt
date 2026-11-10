@@ -326,8 +326,18 @@ fun DownloadsScreen() {
                 Text("Concluído", color = MaterialTheme.colorScheme.primary)
                 item.outputName?.let { Text("Salvo em: $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
               }
-              ArchiveDownload.Status.CANCELLED -> Text("Cancelado")
-              ArchiveDownload.Status.FAILED -> Text(item.error ?: "Falha no download.", color = MaterialTheme.colorScheme.error)
+              ArchiveDownload.Status.CANCELLED -> {
+                Text(item.error ?: "Download interrompido.", color = MaterialTheme.colorScheme.error)
+                if (item.downloadUrl != null) {
+                  TextButton(onClick = { ArchiveXboxDownloads.resume(context, item) }) { Text("Continuar download") }
+                }
+              }
+              ArchiveDownload.Status.FAILED -> {
+                Text(item.error ?: "Falha no download.", color = MaterialTheme.colorScheme.error)
+                if (item.downloadUrl != null) {
+                  TextButton(onClick = { ArchiveXboxDownloads.resume(context, item) }) { Text("Continuar download") }
+                }
+              }
             }
           }
         }
