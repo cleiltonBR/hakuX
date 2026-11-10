@@ -107,7 +107,9 @@ fun StoreScreen() {
       try {
         val nextPage = if (reset) 1 else currentPage + 1
         val page = withContext(Dispatchers.IO) { InternetArchiveXboxRepository.searchPage(term, page = nextPage, rows = 100) }
-        results = if (reset) page.items else results + page.items.filterNot { new -> results.any { it.identifier == new.identifier } }
+        results = if (reset) page.items else results + page.items.filterNot { new ->
+          results.any { old -> old.identifier == new.identifier && old.archiveFileName == new.archiveFileName }
+        }
         currentPage = page.page
         hasMore = page.hasMore
         loadedQuery = term
@@ -173,7 +175,7 @@ fun StoreScreen() {
         items(visibleGames, key = { game -> game.archiveFileName?.let { "${game.identifier}:$it" } ?: "${game.identifier}:${game.title}" }) { game ->
           Card(modifier = Modifier.fillMaxWidth()) {
             Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-              AsyncImage(model = game.coverUrl, contentDescription = "Capa de ${game.title}", modifier = Modifier.fillMaxWidth().aspectRatio(0.72f), contentScale = ContentScale.Crop)
+              ArchiveGameCover(game = game)
               Text(game.title, modifier = Modifier.padding(horizontal = 8.dp), style = MaterialTheme.typography.titleSmall, maxLines = 2, minLines = 2)
               Text(game.genre + (game.year?.let { " · $it" } ?: ""), modifier = Modifier.padding(horizontal = 8.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
               Text(game.region, modifier = Modifier.padding(horizontal = 8.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, maxLines = 1)
@@ -271,6 +273,21 @@ fun StoreScreen() {
       dismissButton = { TextButton(onClick = { selectedGame = null; options = emptyList(); selectedOption = null }) { Text("Cancelar") } },
     )
   }
+}
+
+/** Loads a title-specific cover only for cards that are composed on screen. */
+@Composable
+private fun ArchiveGameCover(game: ArchiveXboxItem) {
+  var coverUrl by remember(game.title) { mutableStateOf<String?>(null) }
+  LaunchedEffect(game.title) {
+    coverUrl = withContext(Dispatchers.IO) { InternetArchiveXboxRepository.resolveCoverUrl(game.title) }
+  }
+  AsyncImage(
+    model = coverUrl,
+    contentDescription = "Capa de ${game.title}",
+    modifier = Modifier.fillMaxWidth().aspectRatio(0.72f),
+    contentScale = ContentScale.Crop,
+  )
 }
 
 /** Live view of downloads handled by ArchiveXboxDownloads. */
