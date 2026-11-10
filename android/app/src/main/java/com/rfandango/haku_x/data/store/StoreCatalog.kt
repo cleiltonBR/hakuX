@@ -266,17 +266,21 @@ object InternetArchiveXboxRepository {
     return ArchiveXboxSearchPage(games.drop(offset).take(limit), games.size, pageNumber, limit)
   }
 
-  /** Resolve a real game cover using Wikimedia's summary endpoint, then search API fallback. */
+  /** Resolves the best matching Wikipedia page thumbnail for an Xbox game. */
+  private val coverCache = java.util.concurrent.ConcurrentHashMap<String, String?>()
+
   fun resolveCoverUrl(title: String): String? {
-    fun requestJson(url: String): JSONObject? {
+    val key = title.trim().lowercase(Locale.ROOT)
+    if (coverCache.containsKey(key)) return coverCache[key]
+
+    fun getJson(url: String): JSONObject? {
       val connection = (URL(url).openConnection() as HttpURLConnection).apply {
         requestMethod = "GET"
-        connectTimeout = 12_000
-        readTimeout = 12_000
+        connectTimeout = 10_000
+        readTimeout = 10_000
         instanceFollowRedirects = true
         setRequestProperty("Accept", "application/json")
-        setRequestProperty("Api-User-Agent", "HakuX/1.0 (Android Xbox emulator)")
-        setRequestProperty("User-Agent", "HakuX/1.0 (Android Xbox emulator; game cover lookup)")
+        setRequestProperty("User-Agent", "HakuX/1.0 (Android; Xbox game cover lookup)")
       }
       return try {
         if (connection.responseCode !in 200..299) null
@@ -288,17 +292,40 @@ object InternetArchiveXboxRepository {
       }
     }
 
-    val pageTitle = java.net.URLEncoder.encode(title.trim().replace(' ', '_'), Charsets.UTF_8.name())
-    val summary = requestJson("https://en.wikipedia.org/api/rest_v1/page/summary/$pageTitle")
-    val directThumbnail = summary?.optJSONObject("thumbnail")?.optString("source")
-    if (!directThumbnail.isNullOrBlank() && directThumbnail.startsWith("https://")) return directThumbnail
+    fun thumbnailFor(pageTitle: String): String? {
+      val encoded = java.net.URLEncoder.encode(pageTitle, Charsets.UTF_8.name())
+      val json = getJson("https://en.wikipedia.org/w/api.php?action=query&titles=$encoded&prop=pageimages&piprop=thumbnail&pithumbsize=600&format=json")
+      val pages = json?.optJSONObject("query")?.optJSONObject("pages") ?: return null
+      val iterator = pages.keys()
+      while (iterator.hasNext()) {
+        val image = pages.optJSONObject(iterator.next())?.optJSONObject("thumbnail")?.optString("source")
+        if (!image.isNullOrBlank() && image.startsWith("https://")) return image
+      }
+      return null
+    }
 
-    val query = java.net.URLEncoder.encode("\\\"$title\\\" video game", Charsets.UTF_8.name())
-    val search = requestJson("https://en.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch=$query&gsrnamespace=0&gsrlimit=8&prop=pageimages&piprop=thumbnail&pithumbsize=600&format=json&redirects=1")
-    val pages = search?.optJSONObject("query")?.optJSONObject("pages") ?: return null
-    return pages.keys().asSequence()
-      .mapNotNull { pages.optJSONObject(it)?.optJSONObject("thumbnail")?.optString("source") }
-      .firstOrNull { it.startsWith("https://") }
+    val directTitle = title.trim().replace(Regex("\\s+"), "_")
+    val direct = thumbnailFor(directTitle)
+    if (direct != null) {
+      coverCache[key] = direct
+      return direct
+    }
+
+    val searchTerm = java.net.URLEncoder.encode("$title Xbox video game", Charsets.UTF_8.name())
+    val search = getJson("https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=$searchTerm&srnamespace=0&srlimit=5&format=json")
+    val entries = search?.optJSONObject("query")?.optJSONArray("search")
+    if (entries != null) {
+      for (index in 0 until entries.length()) {
+        val pageTitle = entries.optJSONObject(index)?.optString("title") ?: continue
+        val image = thumbnailFor(pageTitle)
+        if (image != null) {
+          coverCache[key] = image
+          return image
+        }
+      }
+    }
+    coverCache[key] = null
+    return null
   }
 
   fun search(rawQuery: String, rows: Int = 40): List<ArchiveXboxItem> =
