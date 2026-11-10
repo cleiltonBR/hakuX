@@ -3,6 +3,7 @@ import android.net.Uri
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.webkit.DownloadListener
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -208,6 +209,21 @@ fun StoreScreen() {
           } else customPageError = "Informe um endereço HTTP ou HTTPS válido."
         },
         error = customPageError,
+        onDownload = { downloadUrl, fileName, mimeType, contentLength ->
+          runCatching {
+            ArchiveXboxDownloads.enqueueDirect(
+              context = context,
+              title = fileName?.substringBeforeLast('.')?.ifBlank { "Download da web" } ?: "Download da web",
+              rawUrl = downloadUrl,
+              suggestedFileName = fileName,
+              totalBytes = contentLength,
+            )
+          }.onSuccess {
+            customPageError = "Download adicionado à fila do HakuX. Acompanhe na aba Downloads."
+          }.onFailure { failure ->
+            customPageError = failure.message ?: "Não foi possível iniciar este download."
+          }
+        },
       )
     }
   }
@@ -310,8 +326,9 @@ fun DownloadsScreen() {
               ArchiveDownload.Status.QUEUED -> Text("Na fila")
               ArchiveDownload.Status.DOWNLOADING -> {
                 val fraction = if (item.total > 0) (item.done.toFloat() / item.total).coerceIn(0f, 1f) else 0f
-                LinearProgressIndicator(progress = { fraction }, modifier = Modifier.fillMaxWidth())
-                Text("${formatBytes(item.done)} / ${formatBytes(item.total)} (${(fraction * 100).toInt()}%)", style = MaterialTheme.typography.labelSmall)
+                if (item.total > 0L) LinearProgressIndicator(progress = { fraction }, modifier = Modifier.fillMaxWidth())
+                else LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                Text(if (item.total > 0L) "${formatBytes(item.done)} / ${formatBytes(item.total)} (${(fraction * 100).toInt()}%)" else "${formatBytes(item.done)} baixados", style = MaterialTheme.typography.labelSmall)
                 TextButton(onClick = { ArchiveXboxDownloads.cancel() }) { Text("Cancelar download") }
               }
               ArchiveDownload.Status.EXTRACTING -> {
@@ -364,6 +381,7 @@ private fun CustomLinkBrowser(
   activeUrl: String,
   onLoad: (String) -> Unit,
   error: String?,
+  onDownload: (String, String?, String?, Long) -> Unit,
 ) {
   Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
     Text("Abra uma página de catálogo ou uma fonte personalizada.", style = MaterialTheme.typography.bodySmall)
@@ -393,6 +411,10 @@ private fun CustomLinkBrowser(
             settings.allowFileAccess = false
             settings.allowContentAccess = false
             settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
+            setDownloadListener(DownloadListener { downloadUrl, userAgent, contentDisposition, mimeType, contentLength ->
+              val fileName = android.webkit.URLUtil.guessFileName(downloadUrl, contentDisposition, mimeType)
+              onDownload(downloadUrl, fileName, mimeType, contentLength)
+            })
             webViewClient = object : WebViewClient() {
               override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                 val scheme = request.url.scheme?.lowercase(java.util.Locale.ROOT)
