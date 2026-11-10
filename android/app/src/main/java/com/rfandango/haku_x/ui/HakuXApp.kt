@@ -2,6 +2,16 @@ package com.rfandango.haku_x.ui
 
 import android.net.Uri
 import android.widget.Toast
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Gamepad
+import androidx.compose.material.icons.filled.Storefront
+import androidx.compose.material3.Icon
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -11,6 +21,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.navigation.NavType
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -30,6 +41,8 @@ import com.rfandango.haku_x.ui.driver.GpuDriverScreen
 import com.rfandango.haku_x.ui.hdd.HddScreen
 import com.rfandango.haku_x.ui.insignia.InsigniaWizard
 import com.rfandango.haku_x.ui.library.LibraryScreen
+import com.rfandango.haku_x.ui.store.DownloadsScreen
+import com.rfandango.haku_x.ui.store.StoreScreen
 import com.rfandango.haku_x.ui.mods.ModsScreen
 import com.rfandango.haku_x.ui.settings.GameSettingsScreen
 import com.rfandango.haku_x.ui.settings.SettingsScreen
@@ -44,6 +57,8 @@ private object Routes {
   const val MIGRATE_AGAIN = "migrate_again"
   const val SETUP = "setup"
   const val LIBRARY = "library"
+  const val STORE = "store"
+  const val DOWNLOADS = "downloads"
   const val SETTINGS = "settings"
   const val CONTROLS = "controls"
   const val CONTROLLERS = "controllers"
@@ -100,7 +115,36 @@ fun HakuXApp(
   LaunchedEffect(Unit) {
     if (openInsignia && start == Routes.LIBRARY) nav.navigate(Routes.INSIGNIA)
   }
-  NavHost(nav, startDestination = start) {
+  val backStack by nav.currentBackStackEntryAsState()
+  val currentRoute = backStack?.destination?.route
+  val showMainTabs = currentRoute in setOf(Routes.LIBRARY, Routes.STORE, Routes.DOWNLOADS)
+  Scaffold(
+    bottomBar = {
+      if (showMainTabs) {
+        NavigationBar {
+          NavigationBarItem(
+            selected = currentRoute == Routes.LIBRARY,
+            onClick = { nav.navigate(Routes.LIBRARY) { launchSingleTop = true; restoreState = true } },
+            icon = { Icon(Icons.Filled.Gamepad, contentDescription = null) },
+            label = { Text("Biblioteca") },
+          )
+          NavigationBarItem(
+            selected = currentRoute == Routes.STORE,
+            onClick = { nav.navigate(Routes.STORE) { launchSingleTop = true; restoreState = true } },
+            icon = { Icon(Icons.Filled.Storefront, contentDescription = null) },
+            label = { Text("Loja") },
+          )
+          NavigationBarItem(
+            selected = currentRoute == Routes.DOWNLOADS,
+            onClick = { nav.navigate(Routes.DOWNLOADS) { launchSingleTop = true; restoreState = true } },
+            icon = { Icon(Icons.Filled.Download, contentDescription = null) },
+            label = { Text("Downloads") },
+          )
+        }
+      }
+    },
+  ) { contentPadding ->
+  NavHost(nav, startDestination = start, modifier = androidx.compose.ui.Modifier.padding(contentPadding)) {
     composable(Routes.MIGRATE) {
       MigrateScreen(onDone = {
         nav.navigate(if (needsSetup) Routes.SETUP else Routes.LIBRARY) { popUpTo(Routes.MIGRATE) { inclusive = true } }
@@ -149,6 +193,8 @@ fun HakuXApp(
         },
       )
     }
+    composable(Routes.STORE) { StoreScreen() }
+    composable(Routes.DOWNLOADS) { DownloadsScreen() }
     composable(
       Routes.MODS,
       arguments = listOf(
@@ -211,5 +257,6 @@ fun HakuXApp(
         onBack = { nav.popBackStack() },
       )
     }
+  }
   }
 }
