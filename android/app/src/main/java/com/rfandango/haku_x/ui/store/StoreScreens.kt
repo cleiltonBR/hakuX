@@ -173,6 +173,7 @@ fun StoreScreen() {
               AsyncImage(model = game.coverUrl, contentDescription = "Capa de ${game.title}", modifier = Modifier.fillMaxWidth().aspectRatio(0.72f), contentScale = ContentScale.Crop)
               Text(game.title, modifier = Modifier.padding(horizontal = 8.dp), style = MaterialTheme.typography.titleSmall, maxLines = 2, minLines = 2)
               Text(game.genre + (game.year?.let { " · $it" } ?: ""), modifier = Modifier.padding(horizontal = 8.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+              Text(game.region, modifier = Modifier.padding(horizontal = 8.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, maxLines = 1)
               Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = { toggleFavorite(game.identifier) }) { Text(if (game.identifier in favorites) "♥" else "♡") }
                 TextButton(onClick = { uriHandler.openUri(game.detailsUrl) }) { Text("Detalhes") }

@@ -180,6 +180,7 @@ data class ArchiveXboxItem(
   val title: String,
   val description: String,
   val year: String?,
+  val region: String = "Região não identificada",
 ) {
   val genre: String get() = classifyGenre("$title $description")
   val detailsUrl: String get() = "https://archive.org/details/$identifier"
@@ -193,6 +194,17 @@ data class ArchiveXboxSearchPage(
   val rows: Int,
 ) {
   val hasMore: Boolean get() = page * rows < total
+}
+
+private fun classifyRegion(raw: String): String {
+  val value = Normalizer.normalize(raw, Normalizer.Form.NFD)
+    .replace(Regex("\\p{Mn}+"), "").lowercase(Locale.ROOT)
+  return when {
+    Regex("\\b(ntsc[- _]?j|japan|japanese|jpn)\\b").containsMatchIn(value) -> "NTSC-J"
+    Regex("\\b(ntsc[- _]?u|ntsc[- _]?usa|usa|united states|north america|canada)\\b").containsMatchIn(value) -> "NTSC-U"
+    Regex("\\b(pal|europe|european|australia|australian|uk|united kingdom|germany|france|italy|spain)\\b").containsMatchIn(value) -> "PAL"
+    else -> "Região não identificada"
+  }
 }
 
 private fun classifyGenre(raw: String): String {
@@ -221,8 +233,8 @@ object InternetArchiveXboxRepository {
         append(character)
       }
     }
-    // Xbox software only. Explicitly exclude newer generations and homebrew-labelled records.
-    val xboxOnly = """mediatype:software AND subject:xbox AND NOT (title:"Xbox 360" OR description:"Xbox 360" OR subject:"Xbox 360" OR title:"Xbox One" OR description:"Xbox One" OR subject:"Xbox One" OR title:"Xbox Series" OR description:"Xbox Series" OR subject:"Xbox Series" OR title:homebrew OR description:homebrew OR subject:homebrew)"""
+    // The primary store catalog is scoped to the exact Xbox Classic collection supplied by the user.
+    val xboxOnly = """collection:Xbox_classico_Velho_BX_Retrogamer AND mediatype:software AND NOT (title:"Xbox 360" OR description:"Xbox 360" OR title:"Xbox One" OR description:"Xbox One" OR title:"Xbox Series" OR description:"Xbox Series" OR title:homebrew OR description:homebrew OR subject:homebrew)"""
     return if (query.isBlank()) xboxOnly else "$xboxOnly AND (title:\"$safe\" OR description:\"$safe\")"
   }
 
@@ -234,7 +246,7 @@ object InternetArchiveXboxRepository {
     val limit = rows.coerceIn(1, 100)
     val pageNumber = page.coerceAtLeast(1)
     val encoded = java.net.URLEncoder.encode(lucene, Charsets.UTF_8.name())
-    val url = URL("$SEARCH_ENDPOINT?q=$encoded&fl[]=identifier&fl[]=title&fl[]=description&fl[]=year&rows=$limit&page=$pageNumber&output=json")
+    val url = URL("$SEARCH_ENDPOINT?q=$encoded&fl[]=identifier&fl[]=title&fl[]=description&fl[]=year&fl[]=subject&rows=$limit&page=$pageNumber&output=json")
     val connection = (url.openConnection() as HttpURLConnection).apply {
       requestMethod = "GET"
       connectTimeout = 12_000
@@ -260,7 +272,13 @@ object InternetArchiveXboxRepository {
             is JSONArray -> (0 until descriptionValue.length()).joinToString(" ") { descriptionValue.optString(it) }
             else -> descriptionValue?.toString().orEmpty()
           }.take(500)
-          add(ArchiveXboxItem(identifier, title, description, item.optString("year").takeIf { it.isNotBlank() }))
+          val subjectValue = item.opt("subject")
+          val subjects = when (subjectValue) {
+            is JSONArray -> (0 until subjectValue.length()).joinToString(" ") { subjectValue.optString(it) }
+            else -> subjectValue?.toString().orEmpty()
+          }
+          val region = classifyRegion("$title $description $subjects")
+          add(ArchiveXboxItem(identifier, title, description, item.optString("year").takeIf { it.isNotBlank() }, region))
         }
       }
       return ArchiveXboxSearchPage(items, response?.optInt("numFound", items.size) ?: items.size, pageNumber, limit)
