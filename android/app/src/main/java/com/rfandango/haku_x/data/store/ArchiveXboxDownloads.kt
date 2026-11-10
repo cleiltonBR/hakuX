@@ -127,7 +127,7 @@ object ArchiveXboxDownloads {
       .edit().putString("items", array.toString()).apply()
   }
 
-  suspend fun options(identifier: String): List<ArchiveDownloadOption> = withContext(Dispatchers.IO) {
+  suspend fun options(identifier: String, targetFileName: String? = null): List<ArchiveDownloadOption> = withContext(Dispatchers.IO) {
     require(identifier.matches(Regex("[A-Za-z0-9._-]{1,120}"))) { "Identificador inválido do Internet Archive." }
     val connection = (URL("https://archive.org/metadata/$identifier").openConnection() as HttpURLConnection).apply {
       connectTimeout = 12_000
@@ -153,6 +153,7 @@ object ArchiveXboxDownloads {
           val name = rawName.substringAfterLast('/').trim()
           val extension = name.substringAfterLast('.', "").lowercase(Locale.ROOT)
           if (extension !in GAME_EXTENSIONS || name.isBlank() || name == "." || name == ".." || name.contains("..")) continue
+          if (targetFileName != null && rawName != targetFileName && name != targetFileName) continue
           val size = file.optString("size").toLongOrNull() ?: 0L
           if (size <= 0L) continue
           val encodedId = encodePathSegment(identifier)
