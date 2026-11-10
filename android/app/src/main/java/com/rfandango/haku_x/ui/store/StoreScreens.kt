@@ -12,27 +12,35 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
+import com.rfandango.haku_x.data.store.ArchiveDownload
+import com.rfandango.haku_x.data.store.ArchiveDownloadOption
+import com.rfandango.haku_x.data.store.ArchiveXboxDownloads
 import com.rfandango.haku_x.data.store.ArchiveXboxItem
 import com.rfandango.haku_x.data.store.InternetArchiveXboxRepository
-import coil.compose.AsyncImage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -44,11 +52,17 @@ fun StoreScreen() {
   var results by remember { mutableStateOf<List<ArchiveXboxItem>>(emptyList()) }
   var message by remember { mutableStateOf("Pesquise jogos do Xbox clássico no Internet Archive.") }
   var loading by remember { mutableStateOf(false) }
+  var checkingFiles by remember { mutableStateOf(false) }
   var currentPage by remember { mutableStateOf(1) }
   var hasMore by remember { mutableStateOf(false) }
   var searchedQuery by remember { mutableStateOf("") }
+  var selectedGame by remember { mutableStateOf<ArchiveXboxItem?>(null) }
+  var options by remember { mutableStateOf<List<ArchiveDownloadOption>>(emptyList()) }
+  var selectedOption by remember { mutableStateOf<ArchiveDownloadOption?>(null) }
+  var dialogMessage by remember { mutableStateOf<String?>(null) }
   val scope = rememberCoroutineScope()
   val uriHandler = LocalUriHandler.current
+  val context = LocalContext.current
 
   Column(
     modifier = Modifier.fillMaxSize().padding(20.dp),
@@ -126,6 +140,31 @@ fun StoreScreen() {
             TextButton(onClick = { uriHandler.openUri(game.detailsUrl) }) {
               Text("Abrir no Internet Archive")
             }
+            TextButton(
+              enabled = !checkingFiles && !loading,
+              onClick = {
+                scope.launch {
+                  checkingFiles = true
+                  dialogMessage = null
+                  try {
+                    val available = withContext(Dispatchers.IO) { ArchiveXboxDownloads.options(game.identifier) }
+                    if (available.isEmpty()) {
+                      message = "Este item não oferece arquivos ISO/XISO/CSO/CCI com licença aberta reconhecida."
+                    } else {
+                      selectedGame = game
+                      options = available
+                      selectedOption = available.first()
+                    }
+                  } catch (error: Exception) {
+                    message = error.message ?: "Não foi possível verificar a licença e os arquivos deste item."
+                  } finally {
+                    checkingFiles = false
+                  }
+                }
+              },
+            ) {
+              Text(if (checkingFiles) "Verificando licença…" else "Verificar download permitido")
+            }
           }
         }
       }
@@ -159,11 +198,53 @@ fun StoreScreen() {
       }
     }
   }
+
+  selectedGame?.let { game ->
+    AlertDialog(
+      onDismissRequest = { selectedGame = null; options = emptyList(); selectedOption = null },
+      title = { Text("Download autorizado") },
+      text = {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+          Text("O Internet Archive informa uma licença aberta compatível para este item. Escolha um arquivo de jogo:")
+          options.forEach { option ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+              RadioButton(selected = selectedOption == option, onClick = { selectedOption = option })
+              Column {
+                Text(option.name, style = MaterialTheme.typography.bodyMedium)
+                Text(formatBytes(option.bytes), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+              }
+            }
+          }
+          Text("O arquivo será salvo na primeira pasta de jogos configurada e aparecerá na Biblioteca após a atualização.", style = MaterialTheme.typography.bodySmall)
+          dialogMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        }
+      },
+      confirmButton = {
+        TextButton(
+          enabled = selectedOption != null,
+          onClick = {
+            val option = selectedOption
+            if (option != null) {
+              ArchiveXboxDownloads.enqueue(context, game.identifier, game.title, option)
+              message = "Download adicionado. Acompanhe o progresso na aba Downloads."
+              selectedGame = null
+              options = emptyList()
+              selectedOption = null
+            }
+          },
+        ) { Text("Baixar para a Biblioteca") }
+      },
+      dismissButton = {
+        TextButton(onClick = { selectedGame = null; options = emptyList(); selectedOption = null }) { Text("Cancelar") }
+      },
+    )
+  }
 }
 
-/** Download queue destination; wired to the download manager in the next integration stage. */
+/** Live view of downloads handled by ArchiveXboxDownloads. */
 @Composable
 fun DownloadsScreen() {
+  val downloads by ArchiveXboxDownloads.downloads.collectAsState()
   Column(
     modifier = Modifier.fillMaxSize().padding(20.dp),
     verticalArrangement = Arrangement.spacedBy(18.dp),
@@ -172,22 +253,52 @@ fun DownloadsScreen() {
       Icon(Icons.Filled.Refresh, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(32.dp))
       Column {
         Text("Downloads", style = MaterialTheme.typography.headlineSmall)
-        Text("Acompanhe os jogos que você baixar", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Arquivos salvos na pasta de jogos", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
       }
     }
-    Column(
-      modifier = Modifier.fillMaxWidth().weight(1f),
-      verticalArrangement = Arrangement.Center,
-      horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-      Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(52.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-      Text("Nenhum download iniciado", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 12.dp))
-      Text(
-        "Os downloads ainda não estão conectados ao gerenciador da Loja.",
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(top = 8.dp),
-      )
+    if (downloads.isEmpty()) {
+      Column(
+        modifier = Modifier.fillMaxWidth().weight(1f),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+      ) {
+        Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(52.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Nenhum download iniciado", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 12.dp))
+        Text("Os downloads iniciados na Loja aparecerão aqui.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
+      }
+    } else {
+      LazyColumn(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        items(downloads, key = { "${it.identifier}:${it.fileName}" }) { item ->
+          Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(item.title, style = MaterialTheme.typography.titleMedium)
+            Text(item.fileName, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            when (item.status) {
+              ArchiveDownload.Status.QUEUED -> Text("Na fila")
+              ArchiveDownload.Status.DOWNLOADING -> {
+                val fraction = if (item.total > 0) (item.done.toFloat() / item.total).coerceIn(0f, 1f) else 0f
+                LinearProgressIndicator(progress = { fraction }, modifier = Modifier.fillMaxWidth())
+                Text("${formatBytes(item.done)} / ${formatBytes(item.total)} (${(fraction * 100).toInt()}%)", style = MaterialTheme.typography.labelSmall)
+                TextButton(onClick = { ArchiveXboxDownloads.cancel() }) { Text("Cancelar download") }
+              }
+              ArchiveDownload.Status.COMPLETED -> Text("Concluído · Atualize a Biblioteca para localizar o jogo.", color = MaterialTheme.colorScheme.primary)
+              ArchiveDownload.Status.CANCELLED -> Text("Cancelado")
+              ArchiveDownload.Status.FAILED -> Text(item.error ?: "Falha no download.", color = MaterialTheme.colorScheme.error)
+            }
+          }
+        }
+      }
     }
   }
+}
+
+private fun formatBytes(bytes: Long): String {
+  if (bytes <= 0L) return "Tamanho desconhecido"
+  val units = listOf("B", "KB", "MB", "GB", "TB")
+  var value = bytes.toDouble()
+  var unit = 0
+  while (value >= 1024.0 && unit < units.lastIndex) {
+    value /= 1024.0
+    unit++
+  }
+  return String.format(java.util.Locale.ROOT, "%.1f %s", value, units[unit])
 }
