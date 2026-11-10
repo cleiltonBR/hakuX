@@ -185,7 +185,6 @@ data class ArchiveXboxItem(
 ) {
   val genre: String get() = classifyGenre("$title $description")
   val detailsUrl: String get() = "https://archive.org/details/$identifier"
-  val coverUrl: String get() = "https://archive.org/services/img/$identifier"
 }
 
 data class ArchiveXboxSearchPage(
@@ -265,6 +264,30 @@ object InternetArchiveXboxRepository {
     val pageNumber = page.coerceAtLeast(1)
     val offset = (pageNumber - 1) * limit
     return ArchiveXboxSearchPage(games.drop(offset).take(limit), games.size, pageNumber, limit)
+  }
+
+  /** Resolve an individual game cover through Wikipedia page thumbnails. */
+  fun resolveCoverUrl(title: String): String? {
+    val query = java.net.URLEncoder.encode("$title video game", Charsets.UTF_8.name())
+    val endpoint = "https://en.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch=$query&gsrnamespace=0&gsrlimit=5&prop=pageimages&piprop=thumbnail&pithumbsize=600&format=json&redirects=1"
+    val connection = (URL(endpoint).openConnection() as HttpURLConnection).apply {
+      requestMethod = "GET"
+      connectTimeout = 8_000
+      readTimeout = 8_000
+      instanceFollowRedirects = true
+      setRequestProperty("User-Agent", "HakuX-Store/1.0 (Xbox game cover lookup)")
+    }
+    return try {
+      if (connection.responseCode !in 200..299) return null
+      val json = connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+      val pages = JSONObject(json).optJSONObject("query")?.optJSONObject("pages") ?: return null
+      val candidates = pages.keys().asSequence().mapNotNull { pages.optJSONObject(it)?.optJSONObject("thumbnail")?.optString("source") }
+      candidates.firstOrNull { it.startsWith("https://") }
+    } catch (_: Exception) {
+      null
+    } finally {
+      connection.disconnect()
+    }
   }
 
   fun search(rawQuery: String, rows: Int = 40): List<ArchiveXboxItem> =
