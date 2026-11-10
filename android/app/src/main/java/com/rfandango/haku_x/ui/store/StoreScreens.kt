@@ -46,6 +46,7 @@ fun StoreScreen() {
   var loading by remember { mutableStateOf(false) }
   var currentPage by remember { mutableStateOf(1) }
   var hasMore by remember { mutableStateOf(false) }
+  var searchedQuery by remember { mutableStateOf("") }
   val scope = rememberCoroutineScope()
   val uriHandler = LocalUriHandler.current
 
@@ -78,10 +79,12 @@ fun StoreScreen() {
             results = page.items
             currentPage = page.page
             hasMore = page.hasMore
+            searchedQuery = query.trim()
             message = if (results.isEmpty()) "Nenhum resultado encontrado para essa pesquisa." else "${page.total} jogo(s) encontrado(s). Mostrando ${results.size}."
           } catch (error: Exception) {
             results = emptyList()
             hasMore = false
+            searchedQuery = ""
             message = error.message ?: "Não foi possível consultar o Internet Archive."
           } finally {
             loading = false
@@ -127,7 +130,7 @@ fun StoreScreen() {
         }
       }
     }
-    if (hasMore) {
+    if (hasMore && query.trim() == searchedQuery) {
       Button(
         onClick = {
           scope.launch {
