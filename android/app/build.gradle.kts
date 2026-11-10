@@ -159,6 +159,10 @@ tasks.named("preBuild") { dependsOn(syncModAssets) }
 dependencies {
   implementation("androidx.core:core-ktx:1.15.0")
   implementation("androidx.documentfile:documentfile:1.0.1")
+  // Read common game archive formats downloaded from the store.
+  implementation("com.github.junrar:junrar:7.5.10")
+  implementation("org.apache.commons:commons-compress:1.28.0")
+  implementation("org.tukaani:xz:1.10")
 
   // The UI: Jetpack Compose with Material 3.
   implementation(platform("androidx.compose:compose-bom:2025.06.00"))
