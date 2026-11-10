@@ -124,7 +124,10 @@ fun StoreScreen() {
   val gridState = rememberLazyGridState()
   val genres = listOf("Todos", "FPS", "Luta", "Corrida", "Ação", "Esportes", "RPG", "Plataforma", "Outros")
   val visibleGames = remember(results, selectedGenre, favoritesOnly, favorites, alphabetical) {
-    val filtered = results.filter { game -> (selectedGenre == "Todos" || game.genre == selectedGenre) && (!favoritesOnly || game.identifier in favorites) }
+    val filtered = results.filter { game ->
+      val favoriteKey = game.archiveFileName?.let { "${game.identifier}:$it" } ?: game.identifier
+      (selectedGenre == "Todos" || game.genre == selectedGenre) && (!favoritesOnly || favoriteKey in favorites)
+    }
     if (alphabetical) filtered.sortedBy { it.title.lowercase(java.util.Locale.ROOT) } else filtered
   }
   LaunchedEffect(Unit) { loadCatalog(reset = true, term = "") }
@@ -167,7 +170,7 @@ fun StoreScreen() {
       }
     } else {
       LazyVerticalGrid(state = gridState, columns = GridCells.Adaptive(minSize = 148.dp), modifier = Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        items(visibleGames, key = { it.identifier }) { game ->
+        items(visibleGames, key = { game -> game.archiveFileName?.let { "${game.identifier}:$it" } ?: "${game.identifier}:${game.title}" }) { game ->
           Card(modifier = Modifier.fillMaxWidth()) {
             Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
               AsyncImage(model = game.coverUrl, contentDescription = "Capa de ${game.title}", modifier = Modifier.fillMaxWidth().aspectRatio(0.72f), contentScale = ContentScale.Crop)
@@ -175,7 +178,13 @@ fun StoreScreen() {
               Text(game.genre + (game.year?.let { " · $it" } ?: ""), modifier = Modifier.padding(horizontal = 8.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
               Text(game.region, modifier = Modifier.padding(horizontal = 8.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, maxLines = 1)
               Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = { toggleFavorite(game.identifier) }) { Text(if (game.identifier in favorites) "♥" else "♡") }
+                TextButton(onClick = {
+                  val favoriteKey = game.archiveFileName?.let { "${game.identifier}:$it" } ?: game.identifier
+                  toggleFavorite(favoriteKey)
+                }) {
+                  val favoriteKey = game.archiveFileName?.let { "${game.identifier}:$it" } ?: game.identifier
+                  Text(if (favoriteKey in favorites) "♥" else "♡")
+                }
                 TextButton(onClick = { uriHandler.openUri(game.detailsUrl) }) { Text("Detalhes") }
               }
               Button(modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 4.dp), enabled = checkingId == null && !loading, onClick = {
