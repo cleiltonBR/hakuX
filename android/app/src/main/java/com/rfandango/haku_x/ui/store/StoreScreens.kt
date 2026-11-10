@@ -56,7 +56,7 @@ fun StoreScreen() {
       verticalArrangement = Arrangement.Center,
       horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-      Icon(Icons.Filled.Storefront, contentDescription = null, modifier = Modifier.size(52.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+      Icon(Icons.Filled.Home, contentDescription = null, modifier = Modifier.size(52.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
       Text("Catálogo em preparação", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 12.dp))
       Text(
         "Os jogos só serão exibidos quando houver fontes reais verificadas e links de arquivo disponíveis. Nenhum servidor vazio ou jogo fictício será mostrado.",
@@ -87,7 +87,7 @@ fun DownloadsScreen() {
       verticalArrangement = Arrangement.Center,
       horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-      Icon(Icons.Filled.CloudDownload, contentDescription = null, modifier = Modifier.size(52.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+      Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(52.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
       Text("Nenhum download iniciado", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 12.dp))
       Text(
         "Quando o gerenciador de downloads for conectado à loja, os downloads ativos, pausados e concluídos aparecerão aqui.",
