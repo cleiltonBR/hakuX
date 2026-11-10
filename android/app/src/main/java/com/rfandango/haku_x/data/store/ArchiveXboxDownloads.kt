@@ -1,7 +1,6 @@
 package com.rfandango.haku_x.data.store
 
 import android.content.Context
-import android.net.Uri
 import androidx.documentfile.provider.DocumentFile
 import com.rfandango.haku_x.data.AppPrefs
 import com.rfandango.haku_x.data.Storage
@@ -14,6 +13,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -130,7 +131,7 @@ object ArchiveXboxDownloads {
               var done = 0L
               var lastUpdate = 0L
               while (true) {
-                kotlinx.coroutines.ensureActive()
+                currentCoroutineContext().ensureActive()
                 val count = input.read(buffer)
                 if (count < 0) break
                 output.write(buffer, 0, count)
