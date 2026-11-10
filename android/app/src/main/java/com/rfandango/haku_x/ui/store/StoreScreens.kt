@@ -320,6 +320,7 @@ fun DownloadsScreen() {
               ArchiveDownload.Status.EXTRACTING -> {
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                 Text("Extraindo arquivos compactados…")
+                TextButton(onClick = { ArchiveXboxDownloads.cancel() }) { Text("Cancelar extração") }
               }
               ArchiveDownload.Status.COMPLETED -> {
                 Text("Concluído", color = MaterialTheme.colorScheme.primary)
