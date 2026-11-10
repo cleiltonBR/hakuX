@@ -42,6 +42,7 @@ data class ArchiveDownload(
   val status: Status = Status.QUEUED,
   val error: String? = null,
   val outputName: String? = null,
+  val downloadUrl: String? = null,
 ) {
   enum class Status { QUEUED, DOWNLOADING, EXTRACTING, COMPLETED, CANCELLED, FAILED }
 }
@@ -110,7 +111,7 @@ object ArchiveXboxDownloads {
     val existing = mutableDownloads.value.firstOrNull { downloadKey(it.identifier, it.fileName) == key }
     if (existing?.status in setOf(ArchiveDownload.Status.QUEUED, ArchiveDownload.Status.DOWNLOADING, ArchiveDownload.Status.COMPLETED)) return
 
-    val entry = ArchiveDownload(identifier, title, option.name, total = option.bytes)
+    val entry = ArchiveDownload(identifier, title, option.name, total = option.bytes, downloadUrl = option.downloadUrl)
     requests[key] = option
     mutableDownloads.value = mutableDownloads.value.filterNot {
       downloadKey(it.identifier, it.fileName) == key
@@ -119,6 +120,11 @@ object ArchiveXboxDownloads {
     if (queueWorker?.isActive != true) {
       queueWorker = scope.launch { processQueue(context.applicationContext) }
     }
+  }
+
+  fun resume(context: Context, item: ArchiveDownload) {
+    val url = item.downloadUrl ?: return
+    enqueue(context, item.identifier, item.title, ArchiveDownloadOption(item.fileName, item.total, url))
   }
 
   private suspend fun processQueue(context: Context) {
