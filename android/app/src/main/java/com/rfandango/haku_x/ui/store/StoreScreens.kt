@@ -7,38 +7,52 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
+import com.rfandango.haku_x.data.store.ArchiveXboxItem
+import com.rfandango.haku_x.data.store.InternetArchiveXboxRepository
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
-/**
- * Store landing page. It deliberately does not invent catalog entries: validated,
- * populated catalog sources will be connected here as the store integration advances.
- */
+/** Internet Archive search, constrained to Xbox software metadata. */
 @Composable
 fun StoreScreen() {
   var query by remember { mutableStateOf("") }
+  var results by remember { mutableStateOf<List<ArchiveXboxItem>>(emptyList()) }
+  var message by remember { mutableStateOf("Pesquise jogos do Xbox clássico no Internet Archive.") }
+  var loading by remember { mutableStateOf(false) }
+  val scope = rememberCoroutineScope()
+  val uriHandler = LocalUriHandler.current
+
   Column(
     modifier = Modifier.fillMaxSize().padding(20.dp),
-    verticalArrangement = Arrangement.spacedBy(18.dp),
+    verticalArrangement = Arrangement.spacedBy(14.dp),
   ) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
       Icon(Icons.Filled.Home, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(32.dp))
       Column {
         Text("Loja HakuX", style = MaterialTheme.typography.headlineSmall)
-        Text("Encontre jogos e escolha a fonte de download", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Jogos do Xbox clássico · Internet Archive", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
       }
     }
     OutlinedTextField(
@@ -46,22 +60,51 @@ fun StoreScreen() {
       onValueChange = { query = it },
       modifier = Modifier.fillMaxWidth(),
       singleLine = true,
-      label = { Text("Pesquisar jogos") },
-      placeholder = { Text("Nome, plataforma ou categoria") },
+      label = { Text("Pesquisar jogos de Xbox") },
+      placeholder = { Text("Digite o nome do jogo") },
     )
-    Column(
-      modifier = Modifier.fillMaxWidth().weight(1f),
-      verticalArrangement = Arrangement.Center,
-      horizontalAlignment = Alignment.CenterHorizontally,
+    Button(
+      onClick = {
+        scope.launch {
+          loading = true
+          message = "Pesquisando no Internet Archive…"
+          try {
+            results = withContext(Dispatchers.IO) { InternetArchiveXboxRepository.search(query) }
+            message = if (results.isEmpty()) "Nenhum resultado encontrado para essa pesquisa." else "${results.size} resultado(s) encontrados."
+          } catch (error: Exception) {
+            results = emptyList()
+            message = error.message ?: "Não foi possível consultar o Internet Archive."
+          } finally {
+            loading = false
+          }
+        }
+      },
+      enabled = query.trim().length >= 2 && !loading,
+      modifier = Modifier.fillMaxWidth(),
     ) {
-      Icon(Icons.Filled.Home, contentDescription = null, modifier = Modifier.size(52.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-      Text("Catálogo em preparação", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 12.dp))
-      Text(
-        "Os jogos só serão exibidos quando houver fontes reais verificadas e links de arquivo disponíveis. Nenhum servidor vazio ou jogo fictício será mostrado.",
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(top = 8.dp),
-      )
+      Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+      Text(if (loading) " Pesquisando…" else " Pesquisar no Internet Archive")
+    }
+    Text(message, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    LazyColumn(
+      modifier = Modifier.fillMaxWidth().weight(1f),
+      verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+      items(results, key = { it.identifier }) { game ->
+        Column(
+          modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+          verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+          Text(game.title, style = MaterialTheme.typography.titleMedium)
+          game.year?.let { Text("Ano: $it", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+          if (game.description.isNotBlank()) {
+            Text(game.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 3)
+          }
+          TextButton(onClick = { uriHandler.openUri(game.detailsUrl) }) {
+            Text("Abrir item no Internet Archive")
+          }
+        }
+      }
     }
   }
 }
@@ -88,7 +131,7 @@ fun DownloadsScreen() {
       Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(52.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
       Text("Nenhum download iniciado", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 12.dp))
       Text(
-        "Quando o gerenciador de downloads for conectado à loja, os downloads ativos, pausados e concluídos aparecerão aqui.",
+        "Os downloads ainda não estão conectados ao gerenciador da Loja.",
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(top = 8.dp),
