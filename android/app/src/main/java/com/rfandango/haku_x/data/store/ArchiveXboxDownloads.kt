@@ -61,6 +61,7 @@ object ArchiveXboxDownloads {
   private val requests = linkedMapOf<String, ArchiveDownloadOption>()
   private var queueWorker: Job? = null
   private var activeTransfer: Job? = null
+  private var activeKey: String? = null
   private var appContext: Context? = null
 
   /** Restore interrupted transfers after process recreation; partial files stay in the selected SAF folder. */
@@ -220,6 +221,10 @@ object ArchiveXboxDownloads {
       downloadKey(it.identifier, it.fileName) == key
     } + entry
     persist()
+    androidx.core.content.ContextCompat.startForegroundService(
+      context.applicationContext,
+      android.content.Intent(context.applicationContext, ArchiveDownloadService::class.java),
+    )
 
     if (queueWorker?.isActive != true) {
       queueWorker = scope.launch { processQueue(context.applicationContext) }
@@ -240,9 +245,11 @@ object ArchiveXboxDownloads {
         update(next.copy(status = ArchiveDownload.Status.FAILED, error = "Não foi possível recuperar os dados deste download."))
         continue
       }
+      activeKey = key
       activeTransfer = scope.launch { downloadOne(context, next, option) }
       activeTransfer?.join()
       activeTransfer = null
+      activeKey = null
     }
   }
 
@@ -404,8 +411,20 @@ object ArchiveXboxDownloads {
   private fun safeFolderName(value: String): String =
     value.replace(Regex("[\\\\/:*?\"<>|]"), "_").trim().trim('.').take(80).ifBlank { "Jogo Xbox" }
 
+  @Synchronized
+  fun cancel(identifier: String, fileName: String) {
+    val key = downloadKey(identifier, fileName)
+    val item = mutableDownloads.value.firstOrNull { downloadKey(it.identifier, it.fileName) == key } ?: return
+    if (activeKey == key) activeTransfer?.cancel()
+    else if (item.status == ArchiveDownload.Status.QUEUED) {
+      update(item.copy(status = ArchiveDownload.Status.CANCELLED, error = "Download cancelado antes de iniciar."))
+    }
+  }
+
+  @Deprecated("Use cancel(identifier, fileName) to cancel a specific queue item.")
   fun cancel() {
-    activeTransfer?.cancel()
+    mutableDownloads.value.firstOrNull { it.status == ArchiveDownload.Status.DOWNLOADING || it.status == ArchiveDownload.Status.EXTRACTING }
+      ?.let { cancel(it.identifier, it.fileName) }
   }
 
   private fun downloadKey(identifier: String, fileName: String): String =

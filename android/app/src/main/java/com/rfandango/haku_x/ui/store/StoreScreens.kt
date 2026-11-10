@@ -323,18 +323,21 @@ fun DownloadsScreen() {
             Text(item.title, style = MaterialTheme.typography.titleMedium)
             Text(item.fileName, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             when (item.status) {
-              ArchiveDownload.Status.QUEUED -> Text("Na fila")
+              ArchiveDownload.Status.QUEUED -> {
+                Text("Na fila")
+                TextButton(onClick = { ArchiveXboxDownloads.cancel(item.identifier, item.fileName) }) { Text("Cancelar download") }
+              }
               ArchiveDownload.Status.DOWNLOADING -> {
                 val fraction = if (item.total > 0) (item.done.toFloat() / item.total).coerceIn(0f, 1f) else 0f
                 if (item.total > 0L) LinearProgressIndicator(progress = { fraction }, modifier = Modifier.fillMaxWidth())
                 else LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                 Text(if (item.total > 0L) "${formatBytes(item.done)} / ${formatBytes(item.total)} (${(fraction * 100).toInt()}%)" else "${formatBytes(item.done)} baixados", style = MaterialTheme.typography.labelSmall)
-                TextButton(onClick = { ArchiveXboxDownloads.cancel() }) { Text("Cancelar download") }
+                TextButton(onClick = { ArchiveXboxDownloads.cancel(item.identifier, item.fileName) }) { Text("Cancelar download") }
               }
               ArchiveDownload.Status.EXTRACTING -> {
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                 Text("Extraindo arquivos compactados…")
-                TextButton(onClick = { ArchiveXboxDownloads.cancel() }) { Text("Cancelar extração") }
+                TextButton(onClick = { ArchiveXboxDownloads.cancel(item.identifier, item.fileName) }) { Text("Cancelar extração") }
               }
               ArchiveDownload.Status.COMPLETED -> {
                 Text("Concluído", color = MaterialTheme.colorScheme.primary)
