@@ -50,7 +50,9 @@ object ArchiveXboxDownloads {
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
   private val mutableDownloads = MutableStateFlow<List<ArchiveDownload>>(emptyList())
   val downloads: StateFlow<List<ArchiveDownload>> = mutableDownloads.asStateFlow()
-  private var activeJob: Job? = null
+  private val requests = linkedMapOf<String, ArchiveDownloadOption>()
+  private var queueWorker: Job? = null
+  private var activeTransfer: Job? = null
 
   suspend fun options(identifier: String): List<ArchiveDownloadOption> = withContext(Dispatchers.IO) {
     require(identifier.matches(Regex("[A-Za-z0-9._-]{1,120}"))) { "Identificador inválido do Internet Archive." }
@@ -94,79 +96,108 @@ object ArchiveXboxDownloads {
     }
   }
 
+  /** Adds a download to the in-memory FIFO queue. Only one transfer writes at a time. */
+  @Synchronized
   fun enqueue(context: Context, identifier: String, title: String, option: ArchiveDownloadOption) {
-    if (activeJob?.isActive == true) return
-    val app = context.applicationContext
+    val key = downloadKey(identifier, option.name)
+    val existing = mutableDownloads.value.firstOrNull { downloadKey(it.identifier, it.fileName) == key }
+    if (existing?.status in setOf(ArchiveDownload.Status.QUEUED, ArchiveDownload.Status.DOWNLOADING, ArchiveDownload.Status.COMPLETED)) return
+
     val entry = ArchiveDownload(identifier, title, option.name, total = option.bytes)
-    mutableDownloads.value = listOf(entry) + mutableDownloads.value.filterNot { it.identifier == identifier && it.fileName == option.name }
-    activeJob = scope.launch {
-      update(entry.copy(status = ArchiveDownload.Status.DOWNLOADING))
-      var partial: DocumentFile? = null
-      try {
-        val prefs = AppPrefs(app)
-        val folderUri = prefs.gamesFolders.firstOrNull()
-          ?: error("Configure uma pasta de jogos na Biblioteca antes de baixar.")
-        check(Storage.isFolderReady(app, folderUri)) { "A pasta de jogos não está disponível." }
-        val hasWrite = app.contentResolver.persistedUriPermissions.any { it.uri == folderUri && it.isWritePermission }
-        check(hasWrite) { "O HakuX não tem permissão de gravação na pasta de jogos. Selecione-a novamente nas configurações." }
-        val root = DocumentFile.fromTreeUri(app, folderUri)
-          ?: error("Não foi possível abrir a pasta de jogos.")
-        check(root.canWrite()) { "A pasta de jogos não permite gravação." }
-        val finalName = uniqueName(root, option.name)
-        partial = root.createFile("application/octet-stream", ".$finalName.partial")
-          ?: error("Não foi possível criar o arquivo temporário na pasta de jogos.")
-        val connection = (URL(option.downloadUrl).openConnection() as HttpURLConnection).apply {
-          connectTimeout = 15_000
-          readTimeout = 30_000
-          instanceFollowRedirects = true
-          setRequestProperty("User-Agent", "HakuX-Store/1.0")
-        }
-        try {
-          val status = connection.responseCode
-          check(status in 200..299) { "Falha ao baixar o arquivo (HTTP $status)." }
-          val reportedLength = connection.contentLengthLong
-          app.contentResolver.openOutputStream(partial!!.uri, "w")?.use { output ->
-            connection.inputStream.use { input ->
-              val buffer = ByteArray(128 * 1024)
-              var done = 0L
-              var lastUpdate = 0L
-              while (true) {
-                currentCoroutineContext().ensureActive()
-                val count = input.read(buffer)
-                if (count < 0) break
-                output.write(buffer, 0, count)
-                done += count
-                val now = System.currentTimeMillis()
-                if (now - lastUpdate >= 300) {
-                  update(entry.copy(done = done, total = option.bytes.takeIf { it > 0 } ?: reportedLength, status = ArchiveDownload.Status.DOWNLOADING))
-                  lastUpdate = now
-                }
-              }
-              output.flush()
-              check(done > 0L) { "O Internet Archive retornou um arquivo vazio." }
-              check(done == option.bytes) { "Download incompleto: esperado ${option.bytes} bytes, recebido $done." }
-              update(entry.copy(done = done, total = done, status = ArchiveDownload.Status.DOWNLOADING))
-            }
-          } ?: error("Não foi possível gravar na pasta de jogos.")
-        } finally {
-          connection.disconnect()
-        }
-        check(partial!!.renameTo(finalName)) { "O arquivo foi baixado, mas não foi possível finalizar o nome. Verifique a pasta de jogos." }
-        update(entry.copy(done = option.bytes, total = option.bytes, status = ArchiveDownload.Status.COMPLETED, fileName = finalName))
-      } catch (cancelled: CancellationException) {
-        partial?.delete()
-        update(entry.copy(status = ArchiveDownload.Status.CANCELLED))
-        throw cancelled
-      } catch (error: Exception) {
-        partial?.delete()
-        update(entry.copy(status = ArchiveDownload.Status.FAILED, error = error.message ?: "Falha no download."))
+    requests[key] = option
+    mutableDownloads.value = mutableDownloads.value.filterNot {
+      downloadKey(it.identifier, it.fileName) == key
+    } + entry
+
+    if (queueWorker?.isActive != true) {
+      queueWorker = scope.launch { processQueue(context.applicationContext) }
+    }
+  }
+
+  private suspend fun processQueue(context: Context) {
+    while (true) {
+      val next = mutableDownloads.value.firstOrNull { it.status == ArchiveDownload.Status.QUEUED } ?: break
+      val key = downloadKey(next.identifier, next.fileName)
+      val option = requests[key] ?: run {
+        update(next.copy(status = ArchiveDownload.Status.FAILED, error = "Não foi possível recuperar os dados deste download."))
+        continue
       }
+      activeTransfer = scope.launch { downloadOne(context, next, option) }
+      activeTransfer?.join()
+      activeTransfer = null
+      requests.remove(key)
+    }
+  }
+
+  private suspend fun downloadOne(app: Context, entry: ArchiveDownload, option: ArchiveDownloadOption) {
+    update(entry.copy(status = ArchiveDownload.Status.DOWNLOADING))
+    var partial: DocumentFile? = null
+    try {
+      val prefs = AppPrefs(app)
+      val folderUri = prefs.gamesFolders.firstOrNull()
+        ?: error("Configure uma pasta de jogos na Biblioteca antes de baixar.")
+      check(Storage.isFolderReady(app, folderUri)) { "A pasta de jogos não está disponível." }
+      val hasWrite = app.contentResolver.persistedUriPermissions.any { it.uri == folderUri && it.isWritePermission }
+      check(hasWrite) { "O HakuX não tem permissão de gravação na pasta de jogos. Selecione-a novamente nas configurações." }
+      val root = DocumentFile.fromTreeUri(app, folderUri)
+        ?: error("Não foi possível abrir a pasta de jogos.")
+      check(root.canWrite()) { "A pasta de jogos não permite gravação." }
+      val finalName = uniqueName(root, option.name)
+      partial = root.createFile("application/octet-stream", ".$finalName.partial")
+        ?: error("Não foi possível criar o arquivo temporário na pasta de jogos.")
+      val connection = (URL(option.downloadUrl).openConnection() as HttpURLConnection).apply {
+        connectTimeout = 15_000
+        readTimeout = 30_000
+        instanceFollowRedirects = true
+        setRequestProperty("User-Agent", "HakuX-Store/1.0")
+      }
+      try {
+        val status = connection.responseCode
+        check(status in 200..299) { "Falha ao baixar o arquivo (HTTP $status)." }
+        val reportedLength = connection.contentLengthLong
+        app.contentResolver.openOutputStream(partial!!.uri, "w")?.use { output ->
+          connection.inputStream.use { input ->
+            val buffer = ByteArray(128 * 1024)
+            var done = 0L
+            var lastUpdate = 0L
+            while (true) {
+              currentCoroutineContext().ensureActive()
+              val count = input.read(buffer)
+              if (count < 0) break
+              output.write(buffer, 0, count)
+              done += count
+              val now = System.currentTimeMillis()
+              if (now - lastUpdate >= 300) {
+                update(entry.copy(done = done, total = option.bytes.takeIf { it > 0 } ?: reportedLength, status = ArchiveDownload.Status.DOWNLOADING))
+                lastUpdate = now
+              }
+            }
+            output.flush()
+            check(done > 0L) { "O Internet Archive retornou um arquivo vazio." }
+            check(done == option.bytes) { "Download incompleto: esperado ${option.bytes} bytes, recebido $done." }
+            update(entry.copy(done = done, total = done, status = ArchiveDownload.Status.DOWNLOADING))
+          }
+        } ?: error("Não foi possível gravar na pasta de jogos.")
+      } finally {
+        connection.disconnect()
+      }
+      check(partial!!.renameTo(finalName)) { "O arquivo foi baixado, mas não foi possível finalizar o nome. Verifique a pasta de jogos." }
+      update(entry.copy(done = option.bytes, total = option.bytes, status = ArchiveDownload.Status.COMPLETED, fileName = finalName))
+    } catch (cancelled: CancellationException) {
+      partial?.delete()
+      update(entry.copy(status = ArchiveDownload.Status.CANCELLED))
+    } catch (error: Exception) {
+      partial?.delete()
+      update(entry.copy(status = ArchiveDownload.Status.FAILED, error = error.message ?: "Falha no download."))
     }
   }
 
   fun cancel() {
-    activeJob?.cancel()
+    activeTransfer?.cancel()
   }
+
+  private fun downloadKey(identifier: String, fileName: String): String =
+    "${identifier.lowercase(Locale.ROOT)}:${fileName.lowercase(Locale.ROOT)}"
 
   private fun update(item: ArchiveDownload) {
     mutableDownloads.value = mutableDownloads.value.map {
