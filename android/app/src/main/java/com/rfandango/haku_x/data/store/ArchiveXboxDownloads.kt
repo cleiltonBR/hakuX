@@ -9,6 +9,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -54,6 +55,8 @@ object ArchiveXboxDownloads {
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
   private val mutableDownloads = MutableStateFlow<List<ArchiveDownload>>(emptyList())
   val downloads: StateFlow<List<ArchiveDownload>> = mutableDownloads.asStateFlow()
+  private val mutableLibraryRefresh = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+  val libraryRefresh = mutableLibraryRefresh
   private val requests = linkedMapOf<String, ArchiveDownloadOption>()
   private var queueWorker: Job? = null
   private var activeTransfer: Job? = null
@@ -212,8 +215,10 @@ object ArchiveXboxDownloads {
         currentCoroutineContext().ensureActive()
         downloaded.delete()
         update(entry.copy(done = option.bytes, total = option.bytes, status = ArchiveDownload.Status.COMPLETED, outputName = folderName))
+        mutableLibraryRefresh.tryEmit(Unit)
       } else {
         update(entry.copy(done = option.bytes, total = option.bytes, status = ArchiveDownload.Status.COMPLETED, outputName = finalName))
+        mutableLibraryRefresh.tryEmit(Unit)
       }
     } catch (cancelled: CancellationException) {
       partial?.delete()
