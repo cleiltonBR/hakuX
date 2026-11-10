@@ -1421,7 +1421,6 @@ static bool nis_dispatch(VkCommandBuffer cb, PsFrame *frame, VkImageView input,
     barrier(cb, g_ps.nis_out, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
             VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
             VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
-    g_ps.nis_out_layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     const int sharp_pct = (int)(sharpness * 100.0f + 0.5f);
     if (input_w != last_w || input_h != last_h || output_w != last_ow ||
         output_h != last_oh || sharp_pct != last_sharpness) {
@@ -1725,7 +1724,12 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
         f->value = value;
         /* The command buffer is now accepted by Vulkan; only report NIS as
          * submitted after this point, not merely when vkCmdDispatch is recorded. */
-        if (nis_done) nis_status(2, 1);
+        if (nis_done) {
+            /* The output layout is now committed only if the queue accepted
+             * the command buffer; a failed submit must not poison the tracker. */
+            g_ps.nis_out_layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            nis_status(2, 1);
+        }
     } else {
         hle_vk_check(r, "vkQueueSubmit2 (present)");
     }
