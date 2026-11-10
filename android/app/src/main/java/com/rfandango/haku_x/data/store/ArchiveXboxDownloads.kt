@@ -270,6 +270,7 @@ object ArchiveXboxDownloads {
         ?: error("Não foi possível criar o arquivo temporário na pasta de destino.")
       val offset = partial!!.length().coerceAtLeast(0L)
       check(option.bytes <= 0L || offset <= option.bytes) { "O arquivo parcial é maior que o tamanho informado pelo servidor." }
+      var completedBytes = offset
       val connection = (URL(option.downloadUrl).openConnection() as HttpURLConnection).apply {
         connectTimeout = 20_000
         readTimeout = 60_000
@@ -293,7 +294,6 @@ object ArchiveXboxDownloads {
         }
         val reportedLength = connection.contentLengthLong
         val expectedTotal = option.bytes.takeIf { it > 0L } ?: reportedLength.takeIf { it > 0L }?.let { it + offset } ?: 0L
-        var completedBytes = offset
         app.contentResolver.openOutputStream(partial!!.uri, if (offset > 0L) "wa" else "w")?.use { output ->
           connection.inputStream.use { input ->
             val buffer = ByteArray(128 * 1024)
@@ -343,10 +343,10 @@ object ArchiveXboxDownloads {
         copyExtractedTree(app, stagingDirectory, extractedFolder!!)
         currentCoroutineContext().ensureActive()
         downloaded.delete()
-        update(entry.copy(done = option.bytes, total = option.bytes, status = ArchiveDownload.Status.COMPLETED, outputName = folderName))
+        update(entry.copy(done = completedBytes, total = completedBytes, status = ArchiveDownload.Status.COMPLETED, outputName = folderName))
         mutableLibraryRefresh.tryEmit(Unit)
       } else {
-        update(entry.copy(done = option.bytes, total = option.bytes, status = ArchiveDownload.Status.COMPLETED, outputName = finalName))
+        update(entry.copy(done = completedBytes, total = completedBytes, status = ArchiveDownload.Status.COMPLETED, outputName = finalName))
         mutableLibraryRefresh.tryEmit(Unit)
       }
     } catch (cancelled: CancellationException) {
