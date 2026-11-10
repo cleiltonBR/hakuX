@@ -182,7 +182,7 @@ fun StoreScreen() {
                 scope.launch {
                   checkingId = game.identifier
                   try {
-                    val available = withContext(Dispatchers.IO) { ArchiveXboxDownloads.options(game.identifier) }
+                    val available = withContext(Dispatchers.IO) { ArchiveXboxDownloads.options(game.identifier, game.archiveFileName) }
                     if (available.isEmpty()) message = "Nenhum arquivo de jogo com licença aberta reconhecida foi encontrado para ${game.title}."
                     else { selectedGame = game; options = available; selectedOption = available.first() }
                   } catch (error: Exception) {
