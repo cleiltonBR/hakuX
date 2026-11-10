@@ -40,6 +40,7 @@ data class ArchiveDownload(
   val total: Long = 0,
   val status: Status = Status.QUEUED,
   val error: String? = null,
+  val outputName: String? = null,
 ) {
   enum class Status { QUEUED, DOWNLOADING, EXTRACTING, COMPLETED, CANCELLED, FAILED }
 }
@@ -137,7 +138,7 @@ object ArchiveXboxDownloads {
     update(entry.copy(status = ArchiveDownload.Status.DOWNLOADING))
     var partial: DocumentFile? = null
     var extractedFolder: DocumentFile? = null
-    val stagingArchive = File(app.cacheDir, "hakux-${UUID.randomUUID()}.archive")
+    val stagingArchive = File(app.cacheDir, "hakux-${UUID.randomUUID()}." + entry.fileName.substringAfterLast(".", "archive"))
     val stagingDirectory = File(app.cacheDir, "hakux-extract-${UUID.randomUUID()}")
     try {
       val prefs = AppPrefs(app)
@@ -210,9 +211,9 @@ object ArchiveXboxDownloads {
         copyExtractedTree(app, stagingDirectory, extractedFolder!!)
         currentCoroutineContext().ensureActive()
         downloaded.delete()
-        update(entry.copy(done = option.bytes, total = option.bytes, status = ArchiveDownload.Status.COMPLETED, fileName = folderName))
+        update(entry.copy(done = option.bytes, total = option.bytes, status = ArchiveDownload.Status.COMPLETED, outputName = folderName))
       } else {
-        update(entry.copy(done = option.bytes, total = option.bytes, status = ArchiveDownload.Status.COMPLETED, fileName = finalName))
+        update(entry.copy(done = option.bytes, total = option.bytes, status = ArchiveDownload.Status.COMPLETED, outputName = finalName))
       }
     } catch (cancelled: CancellationException) {
       partial?.delete()
