@@ -179,6 +179,7 @@ dependencies {
 
   // JVM unit tests (the hard disk image formats: data/hdd)
   testImplementation("junit:junit:4.13.2")
+  testImplementation("org.json:json:20240303")
 }
 
 kotlin {
