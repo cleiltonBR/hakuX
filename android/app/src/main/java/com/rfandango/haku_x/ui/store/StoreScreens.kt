@@ -1,5 +1,6 @@
 package com.rfandango.haku_x.ui.store
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -13,6 +14,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -25,11 +27,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
 import com.rfandango.haku_x.data.store.ArchiveXboxItem
 import com.rfandango.haku_x.data.store.InternetArchiveXboxRepository
+import coil.compose.AsyncImage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -41,6 +45,8 @@ fun StoreScreen() {
   var results by remember { mutableStateOf<List<ArchiveXboxItem>>(emptyList()) }
   var message by remember { mutableStateOf("Pesquise jogos do Xbox clássico no Internet Archive.") }
   var loading by remember { mutableStateOf(false) }
+  var currentPage by remember { mutableStateOf(1) }
+  var hasMore by remember { mutableStateOf(false) }
   val scope = rememberCoroutineScope()
   val uriHandler = LocalUriHandler.current
 
@@ -69,10 +75,14 @@ fun StoreScreen() {
           loading = true
           message = "Pesquisando no Internet Archive…"
           try {
-            results = withContext(Dispatchers.IO) { InternetArchiveXboxRepository.search(query) }
-            message = if (results.isEmpty()) "Nenhum resultado encontrado para essa pesquisa." else "${results.size} resultado(s) encontrados."
+            val page = withContext(Dispatchers.IO) { InternetArchiveXboxRepository.searchPage(query, page = 1) }
+            results = page.items
+            currentPage = page.page
+            hasMore = page.hasMore
+            message = if (results.isEmpty()) "Nenhum resultado encontrado para essa pesquisa." else "${page.total} jogo(s) encontrado(s). Mostrando ${results.size}."
           } catch (error: Exception) {
             results = emptyList()
+            hasMore = false
             message = error.message ?: "Não foi possível consultar o Internet Archive."
           } finally {
             loading = false
@@ -91,19 +101,59 @@ fun StoreScreen() {
       verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
       items(results, key = { it.identifier }) { game ->
-        Column(
+        Row(
           modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
-          verticalArrangement = Arrangement.spacedBy(4.dp),
+          horizontalArrangement = Arrangement.spacedBy(12.dp),
+          verticalAlignment = Alignment.Top,
         ) {
-          Text(game.title, style = MaterialTheme.typography.titleMedium)
-          game.year?.let { Text("Ano: $it", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-          if (game.description.isNotBlank()) {
-            Text(game.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 3)
-          }
-          TextButton(onClick = { uriHandler.openUri(game.detailsUrl) }) {
-            Text("Abrir item no Internet Archive")
+          AsyncImage(
+            model = game.coverUrl,
+            contentDescription = "Capa de ${game.title}",
+            modifier = Modifier.size(width = 104.dp, height = 136.dp),
+            contentScale = ContentScale.Crop,
+          )
+          Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+          ) {
+            Text(game.title, style = MaterialTheme.typography.titleMedium)
+            game.year?.let { Text("Ano: $it", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            if (game.description.isNotBlank()) {
+              Text(game.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 3)
+            }
+            TextButton(onClick = { uriHandler.openUri(game.detailsUrl) }) {
+              Text("Abrir no Internet Archive")
+            }
           }
         }
+      }
+    }
+    if (hasMore) {
+      Button(
+        onClick = {
+          scope.launch {
+            loading = true
+            message = "Carregando mais resultados…"
+            try {
+              val next = withContext(Dispatchers.IO) {
+                InternetArchiveXboxRepository.searchPage(query, page = currentPage + 1)
+              }
+              results = results + next.items.filterNot { item -> results.any { it.identifier == item.identifier } }
+              currentPage = next.page
+              hasMore = next.hasMore
+              message = "${results.size} resultado(s) carregados de ${next.total}."
+            } catch (error: Exception) {
+              message = error.message ?: "Não foi possível carregar mais resultados."
+            } finally {
+              loading = false
+            }
+          }
+        },
+        enabled = !loading,
+        modifier = Modifier.fillMaxWidth(),
+      ) {
+        if (loading) CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+        Text(if (loading) " Carregando…" else " Carregar mais jogos")
       }
     }
   }
