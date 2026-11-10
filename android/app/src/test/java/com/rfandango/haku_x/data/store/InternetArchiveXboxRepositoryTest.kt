@@ -26,7 +26,7 @@ class InternetArchiveXboxRepositoryTest {
     val query = InternetArchiveXboxRepository.buildSearchQuery("Halo")
     assertTrue(query.startsWith("mediatype:software"))
     assertTrue(query.contains("subject:xbox"))
-    assertTrue(query.contains("title:\"Halo\""))
+    assertTrue(query.contains("title:\"Halo\\: Doom\""))
     assertTrue(query.contains("description:\"Xbox 360\""))
     assertTrue(query.contains("subject:\"Xbox One\""))
     assertTrue(query.contains("title:\"Xbox Series\""))
@@ -35,7 +35,7 @@ class InternetArchiveXboxRepositoryTest {
   @Test
   fun luceneSpecialCharactersInUserInputAreEscaped() {
     val query = InternetArchiveXboxRepository.buildSearchQuery("Halo: Doom")
-    assertTrue(query.contains("""title:"Halo\\: Doom""""))
+    assertTrue(query.contains("title:\"Halo\\: Doom\""))
     assertFalse(query.contains("""title:"Halo: Doom""""))
   }
 }
