@@ -25,10 +25,24 @@ class InternetArchiveXboxRepositoryTest {
   fun queryIsScopedToSoftwareAndXboxAndExcludesNewerGenerations() {
     val query = InternetArchiveXboxRepository.buildSearchQuery("Halo")
     assertTrue(query.startsWith("mediatype:software"))
+    assertTrue(query.contains("subject:xbox"))
+    assertTrue(query.contains("title:homebrew"))
+    assertTrue(query.contains("subject:\\\"Xbox 360\\\""))
     assertTrue(query.contains("title:\"Halo\""))
     assertTrue(query.contains("description:\"Xbox 360\""))
     assertTrue(query.contains("subject:\"Xbox One\""))
     assertTrue(query.contains("title:\"Xbox Series\""))
+  }
+
+  @Test
+  fun paginationReportsWhetherMoreResultsExist() {
+    val firstPage = ArchiveXboxSearchPage(emptyList(), total = 75, page = 1, rows = 40)
+    val secondPage = ArchiveXboxSearchPage(emptyList(), total = 75, page = 2, rows = 40)
+    val finalPage = ArchiveXboxSearchPage(emptyList(), total = 75, page = 3, rows = 40)
+
+    assertTrue(firstPage.hasMore)
+    assertTrue(!secondPage.hasMore)
+    assertTrue(!finalPage.hasMore)
   }
 
   @Test
