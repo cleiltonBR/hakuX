@@ -1,11 +1,11 @@
 package com.rfandango.haku_x.data.store
 
 /**
- * Hosting providers supported by the HakuX store's generic HTTPS mirror downloader.
+ * Sources backed by existing public game-file collections.
  *
- * These are hosting platforms, not pre-populated game servers. A catalog maintainer
- * must publish an authorized file and put its public HTTPS URL in the game manifest.
- * The app probes each actual URL before presenting availability or speed information.
+ * A source is listed here only when it can discover real published files. Generic
+ * object-storage services that require the project owner to upload games are not
+ * presented as game servers.
  */
 data class StoreProviderProfile(
   val id: String,
@@ -25,39 +25,19 @@ data class StoreProviderProfile(
 
 object StoreProviderRegistry {
   /**
-   * Ordering is a deployment preference based on published transfer policy, not a
-   * measured speed ranking. Real speed depends on geography, routing and load.
+   * This is an availability/source order, not a speed ranking. Range support and
+   * throughput must be measured against the exact file URL at runtime.
    */
   val providers: List<StoreProviderProfile> = listOf(
     StoreProviderProfile(
-      id = "cloudflare-r2",
-      displayName = "Cloudflare R2",
-      hosts = setOf("r2.dev"),
+      id = "internet-archive",
+      displayName = "Internet Archive",
+      hosts = setOf("archive.org"),
       supportsPublicFiles = true,
-      supportsHttpRange = true,
-      freeEgressPolicy = "Transferência de saída sem cobrança; camada Standard inclui 10 GB-mês grátis.",
-      limitations = "Para produção, usar domínio personalizado. O endereço r2.dev é limitado e indicado para desenvolvimento.",
+      supportsHttpRange = false,
+      freeEgressPolicy = "Não há garantia de velocidade ou disponibilidade; consultar as condições atuais do serviço.",
+      limitations = "Cada item possui seu próprio manifesto de arquivos; nem todo resultado contém ISO, XISO ou ROM. A disponibilidade pode mudar.",
       recommendation = 1,
-    ),
-    StoreProviderProfile(
-      id = "backblaze-b2",
-      displayName = "Backblaze B2",
-      hosts = setOf("backblazeb2.com"),
-      supportsPublicFiles = true,
-      supportsHttpRange = true,
-      freeEgressPolicy = "Até 3 vezes o armazenamento médio mensal em downloads sem custo; excedentes podem ser cobrados.",
-      limitations = "Buckets públicos continuam contabilizando downloads na conta do proprietário; excedentes e políticas da conta devem ser monitorados.",
-      recommendation = 2,
-    ),
-    StoreProviderProfile(
-      id = "github-releases",
-      displayName = "GitHub Releases",
-      hosts = setOf("github.com", "githubusercontent.com"),
-      supportsPublicFiles = true,
-      supportsHttpRange = true,
-      freeEgressPolicy = "Sem quota publicada de largura de banda para assets de Releases.",
-      limitations = "Cada asset precisa ter menos de 2 GiB; adequado para homebrew, demos e arquivos divididos em partes.",
-      recommendation = 3,
     ),
   )
 
