@@ -191,7 +191,12 @@ object InternetArchiveXboxRepository {
   internal fun buildSearchQuery(rawQuery: String): String {
     val query = rawQuery.trim()
     require(query.length >= 2) { "Digite pelo menos 2 caracteres para pesquisar." }
-    val safe = query.replace(Regex("""([+\\-&|!(){}\\[\\]^"~*?:\\\\/])"""), "\\\\$1")
+    val safe = buildString {
+      query.forEach { character ->
+        if (character in "+-&|!(){}[]^\"~*?:\\/") append('\\')
+        append(character)
+      }
+    }
     // Exclude later Xbox generations explicitly: this Store is for original Xbox games.
     return """mediatype:software AND (subject:xbox OR title:xbox OR description:xbox) AND (title:"$safe" OR description:"$safe" OR subject:"$safe") AND NOT (title:"Xbox 360" OR description:"Xbox 360" OR subject:"Xbox 360" OR title:"Xbox One" OR description:"Xbox One" OR subject:"Xbox One" OR title:"Xbox Series" OR description:"Xbox Series" OR subject:"Xbox Series")"""
   }
