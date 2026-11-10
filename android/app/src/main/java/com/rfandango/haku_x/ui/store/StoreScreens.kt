@@ -16,6 +16,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -102,11 +103,20 @@ fun StoreScreen() {
     }
   }
 
-  LaunchedEffect(Unit) { loadCatalog(reset = true, term = "") }
+  val gridState = rememberLazyGridState()
   val genres = listOf("Todos", "FPS", "Luta", "Corrida", "Ação", "Esportes", "RPG", "Plataforma", "Outros")
   val visibleGames = remember(results, selectedGenre, favoritesOnly, favorites, alphabetical) {
     val filtered = results.filter { game -> (selectedGenre == "Todos" || game.genre == selectedGenre) && (!favoritesOnly || game.identifier in favorites) }
     if (alphabetical) filtered.sortedBy { it.title.lowercase(java.util.Locale.ROOT) } else filtered
+  }
+  LaunchedEffect(Unit) { loadCatalog(reset = true, term = "") }
+  LaunchedEffect(gridState, visibleGames.size, hasMore, loading, loadedQuery, query) {
+    androidx.compose.runtime.snapshotFlow { gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1 }
+      .collect { lastVisible ->
+        if (!loading && hasMore && loadedQuery == query.trim() && lastVisible >= visibleGames.size - 8 && visibleGames.isNotEmpty()) {
+          loadCatalog(reset = false, term = loadedQuery)
+        }
+      }
   }
 
   Column(modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -133,7 +143,7 @@ fun StoreScreen() {
         Text("Buscando jogos do Xbox Clássico…", modifier = Modifier.padding(top = 12.dp))
       }
     } else {
-      LazyVerticalGrid(columns = GridCells.Adaptive(minSize = 148.dp), modifier = Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+      LazyVerticalGrid(state = gridState, columns = GridCells.Adaptive(minSize = 148.dp), modifier = Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         items(visibleGames, key = { it.identifier }) { game ->
           Card(modifier = Modifier.fillMaxWidth()) {
             Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
@@ -164,12 +174,7 @@ fun StoreScreen() {
         }
       }
     }
-    if (hasMore && loadedQuery == query.trim()) {
-      Button(onClick = { loadCatalog(reset = false, term = loadedQuery) }, enabled = !loading, modifier = Modifier.fillMaxWidth()) {
-        if (loading) CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-        Text(if (loading) " Carregando…" else "Carregar mais jogos")
-      }
-    }
+    if (loading && results.isNotEmpty()) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
   }
 
   selectedGame?.let { game ->
