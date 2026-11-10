@@ -118,7 +118,8 @@ object ArchiveXboxDownloads {
     while (true) {
       val next = mutableDownloads.value.firstOrNull { it.status == ArchiveDownload.Status.QUEUED } ?: break
       val key = downloadKey(next.identifier, next.fileName)
-      val option = requests[key] ?: run {
+      val option = requests[key]
+      if (option == null) {
         update(next.copy(status = ArchiveDownload.Status.FAILED, error = "Não foi possível recuperar os dados deste download."))
         continue
       }
