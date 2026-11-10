@@ -1,4 +1,7 @@
 package com.rfandango.haku_x.ui.store
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import android.net.Uri
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
@@ -8,6 +11,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.documentfile.provider.DocumentFile
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -264,7 +268,13 @@ fun StoreScreen() {
 fun DownloadsScreen() {
   val downloads by ArchiveXboxDownloads.downloads.collectAsState()
   val context = LocalContext.current
-  LaunchedEffect(context) { ArchiveXboxDownloads.restore(context) }
+  val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+  LaunchedEffect(context) {
+    ArchiveXboxDownloads.restore(context)
+    if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+      notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+    }
+  }
   val prefs = remember { AppPrefs(context) }
   var destinationUri by remember { mutableStateOf(prefs.downloadFolderUri) }
   var destinationError by remember { mutableStateOf<String?>(null) }
