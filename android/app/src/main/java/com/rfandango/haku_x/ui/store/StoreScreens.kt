@@ -1,5 +1,9 @@
 package com.rfandango.haku_x.ui.store
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.documentfile.provider.DocumentFile
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -36,6 +40,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.rfandango.haku_x.data.AppPrefs
+import com.rfandango.haku_x.data.Storage
 import com.rfandango.haku_x.data.store.ArchiveDownload
 import com.rfandango.haku_x.data.store.ArchiveDownloadOption
 import com.rfandango.haku_x.data.store.ArchiveXboxDownloads
@@ -215,7 +221,7 @@ fun StoreScreen() {
               }
             }
           }
-          Text("O arquivo será salvo na primeira pasta de jogos configurada e aparecerá na Biblioteca após a atualização.", style = MaterialTheme.typography.bodySmall)
+          Text("Arquivos ZIP, RAR e 7z serão extraídos automaticamente. O jogo extraído será salvo na pasta escolhida em Downloads e ficará disponível na Biblioteca.", style = MaterialTheme.typography.bodySmall)
           dialogMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         }
       },
@@ -245,6 +251,24 @@ fun StoreScreen() {
 @Composable
 fun DownloadsScreen() {
   val downloads by ArchiveXboxDownloads.downloads.collectAsState()
+  val context = LocalContext.current
+  val prefs = remember { AppPrefs(context) }
+  var destinationUri by remember { mutableStateOf(prefs.downloadFolderUri) }
+  var destinationError by remember { mutableStateOf<String?>(null) }
+  val pickDestination = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri: Uri? ->
+    if (uri != null) {
+      Storage.persistPermission(context, uri)
+      val folder = DocumentFile.fromTreeUri(context, uri)
+      if (Storage.isFolderReady(context, uri) && folder?.canWrite() == true) {
+        prefs.downloadFolderUri = uri
+        if (uri !in prefs.gamesFolders) prefs.gamesFolders = prefs.gamesFolders + uri
+        destinationUri = uri
+        destinationError = null
+      } else {
+        destinationError = "Não foi possível acessar essa pasta para leitura e gravação. Escolha outra pasta."
+      }
+    }
+  }
   Column(
     modifier = Modifier.fillMaxSize().padding(20.dp),
     verticalArrangement = Arrangement.spacedBy(18.dp),
@@ -255,6 +279,19 @@ fun DownloadsScreen() {
         Text("Downloads", style = MaterialTheme.typography.headlineSmall)
         Text("Arquivos salvos na pasta de jogos", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
       }
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+      Text("Pasta de destino dos jogos", style = MaterialTheme.typography.titleMedium)
+      Text(
+        destinationUri?.let { Storage.folderLabel(context, it) } ?: "Nenhuma pasta selecionada",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
+      Button(onClick = { pickDestination.launch(destinationUri) }, modifier = Modifier.fillMaxWidth()) {
+        Text("Escolher pasta de destino")
+      }
+      Text("A pasta escolhida também será adicionada às pastas monitoradas pela Biblioteca.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+      destinationError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
     }
     if (downloads.isEmpty()) {
       Column(
@@ -280,7 +317,14 @@ fun DownloadsScreen() {
                 Text("${formatBytes(item.done)} / ${formatBytes(item.total)} (${(fraction * 100).toInt()}%)", style = MaterialTheme.typography.labelSmall)
                 TextButton(onClick = { ArchiveXboxDownloads.cancel() }) { Text("Cancelar download") }
               }
-              ArchiveDownload.Status.COMPLETED -> Text("Concluído · Atualize a Biblioteca para localizar o jogo.", color = MaterialTheme.colorScheme.primary)
+              ArchiveDownload.Status.EXTRACTING -> {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                Text("Extraindo arquivos compactados…")
+              }
+              ArchiveDownload.Status.COMPLETED -> {
+                Text("Concluído", color = MaterialTheme.colorScheme.primary)
+                item.outputName?.let { Text("Salvo em: $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+              }
               ArchiveDownload.Status.CANCELLED -> Text("Cancelado")
               ArchiveDownload.Status.FAILED -> Text(item.error ?: "Falha no download.", color = MaterialTheme.colorScheme.error)
             }
