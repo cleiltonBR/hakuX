@@ -35,7 +35,7 @@ class InternetArchiveXboxRepositoryTest {
   fun luceneSpecialCharactersInUserInputAreEscaped() {
     val query = InternetArchiveXboxRepository.buildSearchQuery("Halo: Doom")
     assertTrue(query.contains("title:\"Halo\\: Doom\""))
-    assertFalse(query.contains("title:\\\"Halo: Doom\\\""))
+    assertFalse(query.contains("title:\"Halo: Doom\""))
   }
 }
 
