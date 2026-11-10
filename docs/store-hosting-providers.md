@@ -1,29 +1,31 @@
-# HakuX Store hosting providers
+# HakuX Store — fontes de jogos
 
-The store accepts public HTTPS mirror URLs in its remote catalog. The provider registry
-recognizes these hosting platforms and supplies a display name when a manifest does not
-specify one.
+A loja deve listar fontes que já disponibilizam arquivos de jogos. Serviços genéricos de
+armazenamento que exigem que o mantenedor do HakuX envie os jogos não são tratados como
+servidores de jogos e não aparecem no catálogo de fontes.
 
-## Supported hosting platforms
+## Fonte integrada
 
-| Provider | Best use | Transfer policy / caveat |
+| Fonte | Conteúdo descoberto | Acesso |
 | --- | --- | --- |
-| Cloudflare R2 | Primary host for large public files | No internet egress charge; Standard includes 10 GB-month of storage and request allowances. Use a custom domain for production. The `r2.dev` development hostname is rate-limited. |
-| Backblaze B2 | Secondary mirror / archive | Public buckets support direct downloads and byte-range requests. Free egress is up to 3x average stored data; monitor account usage. |
-| GitHub Releases | Homebrew, demos, patches and smaller authorized packages | No published bandwidth quota for release assets, but each asset must be smaller than 2 GiB. Split larger files into verified parts. |
+| Internet Archive | Itens publicados com arquivos ISO, XISO, ROM, CSO, CCI, CHD, BIN/CUE, GDI e pacotes ZIP/7Z/RAR | Pesquisa pública, metadados do item e URL direta por arquivo |
 
-This is a hosting compatibility list, not a list of game download URLs. The HakuX team
-must own or have permission to publish every file. No game files, credentials, API keys,
-or third-party mirrors are bundled in the application.
+A integração usa a Advanced Search API para localizar itens, a Metadata API para
+inspecionar os arquivos realmente presentes e URLs diretas no endpoint de download.
+Um resultado só entra no catálogo quando seu manifesto contém pelo menos um arquivo
+com extensão reconhecida.
 
-## Publishing a mirror
+## Comportamento do HakuX
 
-1. Upload an authorized file to a public bucket/release.
-2. Use its final HTTPS download URL (not a landing page or countdown page).
-3. Add the URL to the game's `mirrors` array in the catalog manifest.
-4. Include the exact byte size and SHA-256 checksum when available.
-5. Mark `direct` and `supportsRanges` only after testing the actual URL.
-6. HakuX probes each mirror. Latency is not a speed test; the app must measure transfer throughput before ranking by MB/s.
+- Pesquisar pelo nome informado pelo usuário, sem carregar uma lista fictícia de jogos.
+- Ler os arquivos publicados para cada item e mostrar cada download disponível.
+- Exibir tamanho quando fornecido nos metadados.
+- Não presumir suporte a HTTP Range: testar a URL real antes de habilitar retomada.
+- Medir throughput em uma amostra limitada antes de classificar velocidade.
+- Não confundir página do item com o endereço direto do arquivo.
 
-Provider pricing, quotas and terms can change. The published policy is not a promise of
-unlimited account usage or a guaranteed download speed.
+## Próximas fontes
+
+Novas fontes só devem ser adicionadas depois de confirmar que possuem catálogo consultável,
+arquivos de jogos reais e links de download acessíveis. R2, B2 e GitHub Releases são
+infraestrutura de hospedagem, não catálogos preenchidos, e por isso não são listados aqui.
