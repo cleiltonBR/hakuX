@@ -4,9 +4,9 @@ import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.Gamepad
-import androidx.compose.material.icons.filled.Storefront
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -125,19 +125,19 @@ fun HakuXApp(
           NavigationBarItem(
             selected = currentRoute == Routes.LIBRARY,
             onClick = { nav.navigate(Routes.LIBRARY) { launchSingleTop = true; restoreState = true } },
-            icon = { Icon(Icons.Filled.Gamepad, contentDescription = null) },
+            icon = { Icon(Icons.Filled.Home, contentDescription = null) },
             label = { Text("Biblioteca") },
           )
           NavigationBarItem(
             selected = currentRoute == Routes.STORE,
             onClick = { nav.navigate(Routes.STORE) { launchSingleTop = true; restoreState = true } },
-            icon = { Icon(Icons.Filled.Storefront, contentDescription = null) },
+            icon = { Icon(Icons.Filled.Search, contentDescription = null) },
             label = { Text("Loja") },
           )
           NavigationBarItem(
             selected = currentRoute == Routes.DOWNLOADS,
             onClick = { nav.navigate(Routes.DOWNLOADS) { launchSingleTop = true; restoreState = true } },
-            icon = { Icon(Icons.Filled.Download, contentDescription = null) },
+            icon = { Icon(Icons.Filled.Refresh, contentDescription = null) },
             label = { Text("Downloads") },
           )
         }
