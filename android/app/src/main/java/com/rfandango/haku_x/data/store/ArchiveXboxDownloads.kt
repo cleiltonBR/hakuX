@@ -61,6 +61,70 @@ object ArchiveXboxDownloads {
   private val requests = linkedMapOf<String, ArchiveDownloadOption>()
   private var queueWorker: Job? = null
   private var activeTransfer: Job? = null
+  private var appContext: Context? = null
+
+  /** Restore interrupted transfers after process recreation; partial files stay in the selected SAF folder. */
+  @Synchronized
+  fun restore(context: Context) {
+    appContext = context.applicationContext
+    if (mutableDownloads.value.isNotEmpty()) return
+    val saved = context.getSharedPreferences("hakux_store_downloads", Context.MODE_PRIVATE)
+      .getString("items", null) ?: return
+    try {
+      val array = JSONArray(saved)
+      val restored = buildList {
+        for (index in 0 until array.length()) {
+          val row = array.optJSONObject(index) ?: continue
+          val statusName = row.optString("status", "FAILED")
+          val priorStatus = runCatching { ArchiveDownload.Status.valueOf(statusName) }.getOrDefault(ArchiveDownload.Status.FAILED)
+          val url = row.optString("url").takeIf { it.startsWith("https://archive.org/") }
+          val identifier = row.optString("identifier")
+          val fileName = row.optString("fileName")
+          if (identifier.isBlank() || fileName.isBlank() || url == null) continue
+          val item = ArchiveDownload(
+            identifier = identifier,
+            title = row.optString("title", fileName),
+            fileName = fileName,
+            done = row.optLong("done", 0L),
+            total = row.optLong("total", 0L),
+            status = if (priorStatus == ArchiveDownload.Status.COMPLETED) priorStatus else ArchiveDownload.Status.FAILED,
+            error = if (priorStatus == ArchiveDownload.Status.COMPLETED) null else "Download interrompido. Toque em Continuar download para retomar do ponto salvo.",
+            outputName = row.optString("outputName").takeIf { it.isNotBlank() },
+            downloadUrl = url,
+          )
+          if (item.status != ArchiveDownload.Status.COMPLETED) {
+            val folder = AppPrefs(context).downloadFolderUri?.let { DocumentFile.fromTreeUri(context, it) }
+            val partial = folder?.findFile(".${fileName}.partial")
+            val actualBytes = partial?.length()?.coerceAtLeast(0L) ?: 0L
+            add(item.copy(done = actualBytes))
+          } else add(item)
+          requests[downloadKey(identifier, fileName)] = ArchiveDownloadOption(fileName, item.total, url)
+        }
+      }
+      mutableDownloads.value = restored
+    } catch (_: Exception) {
+      mutableDownloads.value = emptyList()
+    }
+  }
+
+  private fun persist() {
+    val context = appContext ?: return
+    val array = JSONArray()
+    mutableDownloads.value.takeLast(40).forEach { item ->
+      array.put(JSONObject().apply {
+        put("identifier", item.identifier)
+        put("title", item.title)
+        put("fileName", item.fileName)
+        put("done", item.done)
+        put("total", item.total)
+        put("status", item.status.name)
+        put("outputName", item.outputName)
+        put("url", item.downloadUrl)
+      })
+    }
+    context.getSharedPreferences("hakux_store_downloads", Context.MODE_PRIVATE)
+      .edit().putString("items", array.toString()).apply()
+  }
 
   suspend fun options(identifier: String): List<ArchiveDownloadOption> = withContext(Dispatchers.IO) {
     require(identifier.matches(Regex("[A-Za-z0-9._-]{1,120}"))) { "Identificador inválido do Internet Archive." }
@@ -107,6 +171,7 @@ object ArchiveXboxDownloads {
   /** Adds a download to the in-memory FIFO queue. Only one transfer writes at a time. */
   @Synchronized
   fun enqueue(context: Context, identifier: String, title: String, option: ArchiveDownloadOption) {
+    appContext = context.applicationContext
     val key = downloadKey(identifier, option.name)
     val existing = mutableDownloads.value.firstOrNull { downloadKey(it.identifier, it.fileName) == key }
     if (existing?.status in setOf(ArchiveDownload.Status.QUEUED, ArchiveDownload.Status.DOWNLOADING, ArchiveDownload.Status.COMPLETED)) return
@@ -116,6 +181,7 @@ object ArchiveXboxDownloads {
     mutableDownloads.value = mutableDownloads.value.filterNot {
       downloadKey(it.identifier, it.fileName) == key
     } + entry
+    persist()
 
     if (queueWorker?.isActive != true) {
       queueWorker = scope.launch { processQueue(context.applicationContext) }
@@ -307,6 +373,7 @@ object ArchiveXboxDownloads {
     mutableDownloads.value = mutableDownloads.value.map {
       if (it.identifier == item.identifier && it.fileName == item.fileName) item else it
     }
+    persist()
   }
 
   private fun uniqueName(root: DocumentFile, requested: String): String {
