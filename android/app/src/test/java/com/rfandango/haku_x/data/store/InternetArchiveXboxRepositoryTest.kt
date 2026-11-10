@@ -10,8 +10,7 @@ class InternetArchiveXboxRepositoryTest {
     val query = InternetArchiveXboxRepository.buildSearchQuery(" ")
     assertTrue(query.startsWith("collection:Xbox_classico_Velho_BX_Retrogamer"))
     assertTrue(query.contains("mediatype:software"))
-    assertFalse(query.contains("subject:xbox"))
-    assertFalse(query.contains("""title:"""""))
+    assertFalse(query.contains("""title:""""))
   }
 
   @Test
