@@ -6,19 +6,17 @@ import org.junit.Test
 
 class InternetArchiveXboxRepositoryTest {
   @Test
-  fun queryRequiresAnActualSearchTerm() {
-    try {
-      InternetArchiveXboxRepository.buildSearchQuery(" ")
-      throw AssertionError("A pesquisa vazia deveria ser rejeitada")
-    } catch (_: IllegalArgumentException) {
-      // expected
-    }
-    try {
-      InternetArchiveXboxRepository.buildSearchQuery("A")
-      throw AssertionError("Termos com um caractere deveriam ser rejeitados")
-    } catch (_: IllegalArgumentException) {
-      // expected
-    }
+  fun blankSearchReturnsTheFullOriginalXboxCatalogQuery() {
+    val query = InternetArchiveXboxRepository.buildSearchQuery(" ")
+    assertTrue(query.startsWith("mediatype:software"))
+    assertTrue(query.contains("subject:xbox"))
+    assertFalse(query.contains("title:\\\"\\\""))
+  }
+
+  @Test
+  fun shortSearchTermsCanStillBeScopedToTheXboxCatalog() {
+    val query = InternetArchiveXboxRepository.buildSearchQuery("A")
+    assertTrue(query.contains("title:\\\"A\\\""))
   }
 
   @Test
