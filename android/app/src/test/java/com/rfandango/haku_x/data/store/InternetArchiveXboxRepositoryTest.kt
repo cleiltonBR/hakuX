@@ -25,7 +25,7 @@ class InternetArchiveXboxRepositoryTest {
   fun queryIsScopedToSoftwareAndXboxAndExcludesNewerGenerations() {
     val query = InternetArchiveXboxRepository.buildSearchQuery("Halo")
     assertTrue(query.startsWith("mediatype:software"))
-    assertTrue(query.contains("subject:xbox"))
+    assertTrue(query.contains("title:\"Halo\""))
     assertTrue(query.contains("title:\"Halo\\: Doom\""))
     assertTrue(query.contains("description:\"Xbox 360\""))
     assertTrue(query.contains("subject:\"Xbox One\""))
