@@ -172,3 +172,58 @@ object StoreCatalogRepository {
       .replace(Regex("\\p{Mn}+"), "")
       .lowercase(Locale.ROOT)
 }
+
+
+/** Public Internet Archive search results, limited to Xbox software records. */
+data class ArchiveXboxItem(
+  val identifier: String,
+  val title: String,
+  val description: String,
+  val year: String?,
+) {
+  val detailsUrl: String get() = "https://archive.org/details/$identifier"
+  val coverUrl: String get() = "https://archive.org/services/img/$identifier"
+}
+
+object InternetArchiveXboxRepository {
+  private const val SEARCH_ENDPOINT = "https://archive.org/advancedsearch.php"
+
+  fun search(rawQuery: String, rows: Int = 40): List<ArchiveXboxItem> {
+    val query = rawQuery.trim()
+    require(query.length >= 2) { "Digite pelo menos 2 caracteres para pesquisar." }
+    val safe = query.replace(Regex("""([+\-&|!(){}\[\]^"~*?:\\/])"""), "\\$1")
+    val lucene = """mediatype:software AND (subject:xbox OR title:xbox OR description:xbox) AND (title:"$safe" OR description:"$safe" OR subject:"$safe")"""
+    val encoded = java.net.URLEncoder.encode(lucene, Charsets.UTF_8.name())
+    val url = URL("$SEARCH_ENDPOINT?q=$encoded&fl[]=identifier&fl[]=title&fl[]=description&fl[]=year&rows=$rows&page=1&output=json")
+    val connection = (url.openConnection() as HttpURLConnection).apply {
+      requestMethod = "GET"
+      connectTimeout = 12_000
+      readTimeout = 20_000
+      instanceFollowRedirects = true
+      setRequestProperty("Accept", "application/json")
+      setRequestProperty("User-Agent", "HakuX-Store/1.0")
+    }
+    try {
+      val status = connection.responseCode
+      require(status in 200..299) { "Internet Archive respondeu HTTP $status" }
+      val root = JSONObject(connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() })
+      val docs = root.optJSONObject("response")?.optJSONArray("docs") ?: JSONArray()
+      return buildList {
+        for (index in 0 until docs.length()) {
+          val item = docs.optJSONObject(index) ?: continue
+          val identifier = item.optString("identifier").trim()
+          val title = item.optString("title").trim()
+          if (identifier.isBlank() || title.isBlank()) continue
+          val descriptionValue = item.opt("description")
+          val description = when (descriptionValue) {
+            is JSONArray -> (0 until descriptionValue.length()).joinToString(" ") { descriptionValue.optString(it) }
+            else -> descriptionValue?.toString().orEmpty()
+          }.take(500)
+          add(ArchiveXboxItem(identifier, title, description, item.optString("year").takeIf { it.isNotBlank() }))
+        }
+      }
+    } finally {
+      connection.disconnect()
+    }
+  }
+}
