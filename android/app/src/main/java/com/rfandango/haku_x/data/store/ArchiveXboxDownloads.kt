@@ -133,7 +133,6 @@ object ArchiveXboxDownloads {
       activeTransfer = scope.launch { downloadOne(context, next, option) }
       activeTransfer?.join()
       activeTransfer = null
-      requests.remove(key)
     }
   }
 
@@ -155,22 +154,38 @@ object ArchiveXboxDownloads {
       check(root.canWrite()) { "A pasta de destino não permite gravação." }
 
       val finalName = uniqueName(root, option.name)
-      partial = root.createFile("application/octet-stream", ".$finalName.partial")
+      val partialName = ".$finalName.partial"
+      partial = root.findFile(partialName)
+        ?: root.createFile("application/octet-stream", partialName)
         ?: error("Não foi possível criar o arquivo temporário na pasta de destino.")
+      val offset = partial!!.length().coerceAtLeast(0L)
+      check(offset <= option.bytes) { "O arquivo parcial é maior que o tamanho informado pelo Internet Archive." }
       val connection = (URL(option.downloadUrl).openConnection() as HttpURLConnection).apply {
-        connectTimeout = 15_000
-        readTimeout = 30_000
+        connectTimeout = 20_000
+        readTimeout = 60_000
         instanceFollowRedirects = true
         setRequestProperty("User-Agent", "HakuX-Store/1.0")
+        if (offset > 0L) setRequestProperty("Range", "bytes=$offset-")
       }
       try {
         val status = connection.responseCode
-        check(status in 200..299) { "Falha ao baixar o arquivo (HTTP $status)." }
+        if (offset > 0L) {
+          check(status == HttpURLConnection.HTTP_PARTIAL) {
+            if (status == HttpURLConnection.HTTP_OK) "O servidor não aceitou a retomada HTTP. O arquivo parcial foi preservado; tente novamente mais tarde."
+            else "Não foi possível retomar o download (HTTP $status). O progresso parcial foi preservado."
+          }
+          val contentRange = connection.getHeaderField("Content-Range") ?: ""
+          check(contentRange.startsWith("bytes $offset-", ignoreCase = true)) {
+            "O servidor retornou um intervalo diferente do solicitado. O arquivo parcial foi preservado."
+          }
+        } else {
+          check(status in 200..299) { "Falha ao baixar o arquivo (HTTP $status)." }
+        }
         val reportedLength = connection.contentLengthLong
-        app.contentResolver.openOutputStream(partial!!.uri, "w")?.use { output ->
+        app.contentResolver.openOutputStream(partial!!.uri, if (offset > 0L) "wa" else "w")?.use { output ->
           connection.inputStream.use { input ->
             val buffer = ByteArray(128 * 1024)
-            var done = 0L
+            var done = offset
             var lastUpdate = 0L
             while (true) {
               currentCoroutineContext().ensureActive()
@@ -186,7 +201,7 @@ object ArchiveXboxDownloads {
             }
             output.flush()
             check(done > 0L) { "O Internet Archive retornou um arquivo vazio." }
-            check(done == option.bytes) { "Download incompleto: esperado ${option.bytes} bytes, recebido $done." }
+            check(done == option.bytes) { "Download incompleto: esperado ${option.bytes} bytes, recebido $done. O progresso foi preservado para continuar." }
             update(entry.copy(done = done, total = done, status = ArchiveDownload.Status.DOWNLOADING))
           }
         } ?: error("Não foi possível gravar na pasta de destino.")
@@ -221,13 +236,18 @@ object ArchiveXboxDownloads {
         mutableLibraryRefresh.tryEmit(Unit)
       }
     } catch (cancelled: CancellationException) {
-      partial?.delete()
       extractedFolder?.let { deleteTree(it) }
-      update(entry.copy(status = ArchiveDownload.Status.CANCELLED))
+      val saved = partial?.length()?.coerceAtLeast(0L) ?: entry.done
+      update(entry.copy(done = saved, status = ArchiveDownload.Status.CANCELLED, error = if (saved > 0L) "Download interrompido. É possível continuar do ponto salvo." else "Download cancelado."))
     } catch (error: Exception) {
-      partial?.delete()
       extractedFolder?.let { deleteTree(it) }
-      update(entry.copy(status = ArchiveDownload.Status.FAILED, error = error.message ?: "Falha no download ou na extração."))
+      val saved = partial?.length()?.coerceAtLeast(0L) ?: entry.done
+      val reason = when (error) {
+        is java.net.UnknownHostException -> "Sem resolução DNS para archive.org. Verifique a conexão e tente continuar."
+        is java.net.SocketException -> "A conexão foi interrompida. O progresso foi preservado para continuar."
+        else -> error.message ?: "Falha no download ou na extração. O progresso parcial foi preservado."
+      }
+      update(entry.copy(done = saved, status = ArchiveDownload.Status.FAILED, error = reason))
     } finally {
       stagingArchive.delete()
       stagingDirectory.deleteRecursively()
