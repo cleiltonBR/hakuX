@@ -201,7 +201,7 @@ fun StoreScreen() {
         onLoad = { raw ->
           val candidate = raw.trim().let { if (it.startsWith("http://", true) || it.startsWith("https://", true)) it else "https://$it" }
           val parsed = runCatching { Uri.parse(candidate) }.getOrNull()
-          if (parsed?.scheme in listOf("http", "https") && !parsed.host.isNullOrBlank()) {
+          if (parsed != null && parsed.scheme in listOf("http", "https") && !parsed.host.isNullOrBlank()) {
             activeCustomUrl = candidate
             customUrl = candidate
             customPageError = null
