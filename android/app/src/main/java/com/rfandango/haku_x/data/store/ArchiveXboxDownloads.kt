@@ -234,13 +234,15 @@ object ArchiveXboxDownloads {
     }
   }
 
-  private suspend fun copyExtractedTree(app: Context, source: File, target: DocumentFile) {
+  private suspend fun copyExtractedTree(app: Context, source: File, target: DocumentFile, stagingRoot: File = source) {
+    val safeRoot = stagingRoot.canonicalFile.path + File.separator
     source.listFiles()?.forEach { child ->
       currentCoroutineContext().ensureActive()
+      check(child.canonicalFile.path.startsWith(safeRoot)) { "O arquivo extraído aponta para fora da pasta temporária." }
       if (child.isDirectory) {
         val directory = target.createDirectory(child.name)
           ?: error("Não foi possível criar a subpasta ${child.name}.")
-        copyExtractedTree(app, child, directory)
+        copyExtractedTree(app, child, directory, stagingRoot)
       } else if (child.isFile) {
         val outputFile = target.createFile("application/octet-stream", child.name)
           ?: error("Não foi possível criar o arquivo extraído ${child.name}.")
