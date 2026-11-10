@@ -157,6 +157,24 @@ object StoreCatalogRepository {
   }
 
   /**
+   * Local store search: matches game title, description, category and platform.
+   * Accent-insensitive and case-insensitive so searches work naturally in Portuguese.
+   */
+  fun search(games: List<StoreGame>, query: String): List<StoreGame> {
+    val needle = normalizeSearchText(query)
+    if (needle.isBlank()) return games
+    return games.filter { game ->
+      listOf(game.title, game.description, game.category, game.platform)
+        .any { normalizeSearchText(it).contains(needle) }
+    }
+  }
+
+  private fun normalizeSearchText(value: String): String =
+    java.text.Normalizer.normalize(value.trim(), java.text.Normalizer.Form.NFD)
+      .replace(Regex("\\p{Mn}+"), "")
+      .lowercase(java.util.Locale.ROOT)
+
+  /**
    * Quick server check. This measures response latency and verifies HTTP Range support;
    * it does not label a mirror "fast" based on a HEAD request alone.
    */
