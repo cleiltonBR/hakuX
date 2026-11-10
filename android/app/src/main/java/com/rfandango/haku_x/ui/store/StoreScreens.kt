@@ -155,7 +155,7 @@ fun StoreScreen() {
                   try {
                     val available = withContext(Dispatchers.IO) { ArchiveXboxDownloads.options(game.identifier) }
                     if (available.isEmpty()) {
-                      message = "Este item não oferece arquivos ISO/XISO/CSO/CCI com licença aberta reconhecida."
+                      message = "Este item não oferece imagens de jogo nem arquivos ZIP/RAR/7z com licença aberta reconhecida."
                     } else {
                       selectedGame = game
                       options = available
@@ -277,7 +277,7 @@ fun DownloadsScreen() {
       Icon(Icons.Filled.Refresh, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(32.dp))
       Column {
         Text("Downloads", style = MaterialTheme.typography.headlineSmall)
-        Text("Arquivos salvos na pasta de jogos", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Jogos baixados e extraídos para a Biblioteca", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
       }
     }
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
