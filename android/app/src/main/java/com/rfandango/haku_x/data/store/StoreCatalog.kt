@@ -131,7 +131,7 @@ object StoreCatalogRepository {
                 id = mirrorId,
                 name = value.optString("name").ifBlank { "Servidor ${mirrorIndex + 1}" },
                 url = url,
-                provider = value.optString("provider").ifBlank { "Externo" },
+                provider = value.optString("provider").ifBlank { StoreProviderRegistry.findForUrl(url)?.displayName ?: "Externo" },
                 expectedBytes = value.optLong("size").takeIf { it > 0 },
                 sha256 = value.optString("sha256").takeIf { it.matches(Regex("(?i)[a-f0-9]{64}")) },
                 supportsRanges = value.optBoolean("supportsRanges", false),
