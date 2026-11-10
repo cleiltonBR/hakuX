@@ -19,6 +19,7 @@ import com.rfandango.haku_x.data.GameSetting
 import com.rfandango.haku_x.data.Storage
 import com.rfandango.haku_x.data.XisoConverter
 import com.rfandango.haku_x.data.XboxCoverCache
+import com.rfandango.haku_x.data.store.ArchiveXboxDownloads
 import com.rfandango.haku_x.data.hdd.Dashboard
 import com.rfandango.haku_x.data.hdd.HddStore
 import kotlinx.coroutines.Dispatchers
@@ -138,6 +139,9 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
 
   init {
     refresh()
+    viewModelScope.launch {
+      ArchiveXboxDownloads.libraryRefresh.collect { refresh() }
+    }
   }
 
   /** Back on screen: the games folders may have changed in the settings, the dashboard come or gone (Hard disk). */
