@@ -181,6 +181,7 @@ data class ArchiveXboxItem(
   val description: String,
   val year: String?,
   val region: String = "Região não identificada",
+  val archiveFileName: String? = null,
 ) {
   val genre: String get() = classifyGenre("$title $description")
   val detailsUrl: String get() = "https://archive.org/details/$identifier"
@@ -223,65 +224,70 @@ private fun classifyGenre(raw: String): String {
 }
 
 object InternetArchiveXboxRepository {
-  private const val SEARCH_ENDPOINT = "https://archive.org/advancedsearch.php"
+  internal const val ARCHIVE_ITEM_ID = "Xbox_classico_Velho_BX_Retrogamer"
+  private const val METADATA_ENDPOINT = "https://archive.org/metadata/$ARCHIVE_ITEM_ID"
 
-  internal fun buildSearchQuery(rawQuery: String): String {
-    val query = rawQuery.trim()
-    val safe = buildString {
-      query.forEach { character ->
-        if (character in "+-&|!(){}[]^\"~*?:\\") append('\\')
-        append(character)
+  internal fun parseArchiveFiles(
+    json: String,
+    rawQuery: String = "",
+    page: Int = 1,
+    rows: Int = 40,
+  ): ArchiveXboxSearchPage {
+    val root = JSONObject(json)
+    val files = root.optJSONArray("files") ?: JSONArray()
+    val needle = Normalizer.normalize(rawQuery.trim(), Normalizer.Form.NFD)
+      .replace(Regex("\\p{Mn}+"), "").lowercase(Locale.ROOT)
+    val games = buildList {
+      for (index in 0 until files.length()) {
+        val file = files.optJSONObject(index) ?: continue
+        val fullName = file.optString("name").trim()
+        val name = fullName.substringAfterLast('/')
+        if (name.isBlank() || name.startsWith("_") || name.startsWith(".")) continue
+        val extension = name.substringAfterLast('.', "").lowercase(Locale.ROOT)
+        if (extension !in setOf("iso", "xiso", "cci", "cso")) continue
+        val title = name.substringBeforeLast('.').replace(Regex("[_.]+"), " ").trim()
+        if (title.isBlank()) continue
+        val normalizedTitle = Normalizer.normalize(title, Normalizer.Form.NFD)
+          .replace(Regex("\\p{Mn}+"), "").lowercase(Locale.ROOT)
+        if (needle.isNotBlank() && !normalizedTitle.contains(needle)) continue
+        val year = Regex("\\b(?:19|20)\\d{2}\\b").find(title)?.value
+        add(ArchiveXboxItem(
+          identifier = ARCHIVE_ITEM_ID,
+          title = title,
+          description = "Jogo Xbox Clássico · arquivo .$extension",
+          year = year,
+          region = classifyRegion(title),
+          archiveFileName = fullName,
+        ))
       }
-    }
-    // The primary store catalog is scoped to the exact Xbox Classic collection supplied by the user.
-    val xboxOnly = """collection:Xbox_classico_Velho_BX_Retrogamer AND mediatype:software AND NOT (title:"Xbox 360" OR description:"Xbox 360" OR title:"Xbox One" OR description:"Xbox One" OR title:"Xbox Series" OR description:"Xbox Series" OR title:homebrew OR description:homebrew OR subject:homebrew)"""
-    return if (query.isBlank()) xboxOnly else "$xboxOnly AND (title:\"$safe\" OR description:\"$safe\")"
+    }.sortedBy { it.title.lowercase(Locale.ROOT) }
+    val limit = rows.coerceIn(1, 100)
+    val pageNumber = page.coerceAtLeast(1)
+    val offset = (pageNumber - 1) * limit
+    return ArchiveXboxSearchPage(games.drop(offset).take(limit), games.size, pageNumber, limit)
   }
 
   fun search(rawQuery: String, rows: Int = 40): List<ArchiveXboxItem> =
     searchPage(rawQuery, page = 1, rows = rows).items
 
   fun searchPage(rawQuery: String, page: Int = 1, rows: Int = 40): ArchiveXboxSearchPage {
-    val lucene = buildSearchQuery(rawQuery)
-    val limit = rows.coerceIn(1, 100)
-    val pageNumber = page.coerceAtLeast(1)
-    val encoded = java.net.URLEncoder.encode(lucene, Charsets.UTF_8.name())
-    val url = URL("$SEARCH_ENDPOINT?q=$encoded&fl[]=identifier&fl[]=title&fl[]=description&fl[]=year&fl[]=subject&rows=$limit&page=$pageNumber&output=json")
-    val connection = (url.openConnection() as HttpURLConnection).apply {
+    val connection = (URL(METADATA_ENDPOINT).openConnection() as HttpURLConnection).apply {
       requestMethod = "GET"
-      connectTimeout = 12_000
-      readTimeout = 20_000
+      connectTimeout = 15_000
+      readTimeout = 30_000
       instanceFollowRedirects = true
       setRequestProperty("Accept", "application/json")
       setRequestProperty("User-Agent", "HakuX-Store/1.0")
     }
     try {
       val status = connection.responseCode
-      require(status in 200..299) { "Internet Archive respondeu HTTP $status" }
-      val root = JSONObject(connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() })
-      val response = root.optJSONObject("response")
-      val docs = response?.optJSONArray("docs") ?: JSONArray()
-      val items = buildList {
-        for (index in 0 until docs.length()) {
-          val item = docs.optJSONObject(index) ?: continue
-          val identifier = item.optString("identifier").trim()
-          val title = item.optString("title").trim()
-          if (identifier.isBlank() || title.isBlank()) continue
-          val descriptionValue = item.opt("description")
-          val description = when (descriptionValue) {
-            is JSONArray -> (0 until descriptionValue.length()).joinToString(" ") { descriptionValue.optString(it) }
-            else -> descriptionValue?.toString().orEmpty()
-          }.take(500)
-          val subjectValue = item.opt("subject")
-          val subjects = when (subjectValue) {
-            is JSONArray -> (0 until subjectValue.length()).joinToString(" ") { subjectValue.optString(it) }
-            else -> subjectValue?.toString().orEmpty()
-          }
-          val region = classifyRegion("$title $description $subjects")
-          add(ArchiveXboxItem(identifier, title, description, item.optString("year").takeIf { it.isNotBlank() }, region))
-        }
+      require(status in 200..299) { "Internet Archive respondeu HTTP $status ao abrir a biblioteca Xbox." }
+      val json = connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+      val result = parseArchiveFiles(json, rawQuery, page, rows)
+      require(result.total > 0 || rawQuery.isNotBlank()) {
+        "O item Xbox foi aberto, mas não contém arquivos ISO/XISO/CCI/CSO reconhecidos."
       }
-      return ArchiveXboxSearchPage(items, response?.optInt("numFound", items.size) ?: items.size, pageNumber, limit)
+      return result
     } finally {
       connection.disconnect()
     }
