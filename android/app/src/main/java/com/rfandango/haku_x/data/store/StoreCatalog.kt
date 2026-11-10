@@ -188,13 +188,19 @@ data class ArchiveXboxItem(
 object InternetArchiveXboxRepository {
   private const val SEARCH_ENDPOINT = "https://archive.org/advancedsearch.php"
 
-  fun search(rawQuery: String, rows: Int = 40): List<ArchiveXboxItem> {
+  internal fun buildSearchQuery(rawQuery: String): String {
     val query = rawQuery.trim()
     require(query.length >= 2) { "Digite pelo menos 2 caracteres para pesquisar." }
-    val safe = query.replace(Regex("""([+\-&|!(){}\[\]^"~*?:\\/])"""), "\\$1")
-    val lucene = """mediatype:software AND (subject:xbox OR title:xbox OR description:xbox) AND (title:"$safe" OR description:"$safe" OR subject:"$safe")"""
+    val safe = query.replace(Regex("""([+\\-&|!(){}\\[\\]^"~*?:\\\\/])"""), "\\$1")
+    // Exclude later Xbox generations explicitly: this Store is for original Xbox games.
+    return """mediatype:software AND (subject:xbox OR title:xbox OR description:xbox) AND (title:"$safe" OR description:"$safe" OR subject:"$safe") AND NOT (title:"Xbox 360" OR description:"Xbox 360" OR subject:"Xbox 360" OR title:"Xbox One" OR description:"Xbox One" OR subject:"Xbox One" OR title:"Xbox Series" OR description:"Xbox Series" OR subject:"Xbox Series")"""
+  }
+
+  fun search(rawQuery: String, rows: Int = 40): List<ArchiveXboxItem> {
+    val lucene = buildSearchQuery(rawQuery)
+    val limit = rows.coerceIn(1, 100)
     val encoded = java.net.URLEncoder.encode(lucene, Charsets.UTF_8.name())
-    val url = URL("$SEARCH_ENDPOINT?q=$encoded&fl[]=identifier&fl[]=title&fl[]=description&fl[]=year&rows=$rows&page=1&output=json")
+    val url = URL("$SEARCH_ENDPOINT?q=$encoded&fl[]=identifier&fl[]=title&fl[]=description&fl[]=year&rows=$limit&page=1&output=json")
     val connection = (url.openConnection() as HttpURLConnection).apply {
       requestMethod = "GET"
       connectTimeout = 12_000
