@@ -266,28 +266,39 @@ object InternetArchiveXboxRepository {
     return ArchiveXboxSearchPage(games.drop(offset).take(limit), games.size, pageNumber, limit)
   }
 
-  /** Resolve an individual game cover through Wikipedia page thumbnails. */
+  /** Resolve a real game cover using Wikimedia's summary endpoint, then search API fallback. */
   fun resolveCoverUrl(title: String): String? {
-    val query = java.net.URLEncoder.encode("$title video game", Charsets.UTF_8.name())
-    val endpoint = "https://en.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch=$query&gsrnamespace=0&gsrlimit=5&prop=pageimages&piprop=thumbnail&pithumbsize=600&format=json&redirects=1"
-    val connection = (URL(endpoint).openConnection() as HttpURLConnection).apply {
-      requestMethod = "GET"
-      connectTimeout = 8_000
-      readTimeout = 8_000
-      instanceFollowRedirects = true
-      setRequestProperty("User-Agent", "HakuX-Store/1.0 (Xbox game cover lookup)")
+    fun requestJson(url: String): JSONObject? {
+      val connection = (URL(url).openConnection() as HttpURLConnection).apply {
+        requestMethod = "GET"
+        connectTimeout = 12_000
+        readTimeout = 12_000
+        instanceFollowRedirects = true
+        setRequestProperty("Accept", "application/json")
+        setRequestProperty("Api-User-Agent", "HakuX/1.0 (Android Xbox emulator)")
+        setRequestProperty("User-Agent", "HakuX/1.0 (Android Xbox emulator; game cover lookup)")
+      }
+      return try {
+        if (connection.responseCode !in 200..299) null
+        else JSONObject(connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() })
+      } catch (_: Exception) {
+        null
+      } finally {
+        connection.disconnect()
+      }
     }
-    return try {
-      if (connection.responseCode !in 200..299) return null
-      val json = connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
-      val pages = JSONObject(json).optJSONObject("query")?.optJSONObject("pages") ?: return null
-      val candidates = pages.keys().asSequence().mapNotNull { pages.optJSONObject(it)?.optJSONObject("thumbnail")?.optString("source") }
-      candidates.firstOrNull { it.startsWith("https://") }
-    } catch (_: Exception) {
-      null
-    } finally {
-      connection.disconnect()
-    }
+
+    val pageTitle = java.net.URLEncoder.encode(title.trim().replace(' ', '_'), Charsets.UTF_8.name())
+    val summary = requestJson("https://en.wikipedia.org/api/rest_v1/page/summary/$pageTitle")
+    val directThumbnail = summary?.optJSONObject("thumbnail")?.optString("source")
+    if (!directThumbnail.isNullOrBlank() && directThumbnail.startsWith("https://")) return directThumbnail
+
+    val query = java.net.URLEncoder.encode("\\\"$title\\\" video game", Charsets.UTF_8.name())
+    val search = requestJson("https://en.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch=$query&gsrnamespace=0&gsrlimit=8&prop=pageimages&piprop=thumbnail&pithumbsize=600&format=json&redirects=1")
+    val pages = search?.optJSONObject("query")?.optJSONObject("pages") ?: return null
+    return pages.keys().asSequence()
+      .mapNotNull { pages.optJSONObject(it)?.optJSONObject("thumbnail")?.optString("source") }
+      .firstOrNull { it.startsWith("https://") }
   }
 
   fun search(rawQuery: String, rows: Int = 40): List<ArchiveXboxItem> =
