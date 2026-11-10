@@ -77,7 +77,7 @@ object ArchiveXboxDownloads {
           val row = array.optJSONObject(index) ?: continue
           val statusName = row.optString("status", "FAILED")
           val priorStatus = runCatching { ArchiveDownload.Status.valueOf(statusName) }.getOrDefault(ArchiveDownload.Status.FAILED)
-          val url = row.optString("url").takeIf { it.startsWith("https://archive.org/") }
+          val url = row.optString("url").takeIf { isAllowedDownloadUrl(it) }
           val identifier = row.optString("identifier")
           val fileName = row.optString("fileName")
           if (identifier.isBlank() || fileName.isBlank() || url == null) continue
@@ -168,6 +168,44 @@ object ArchiveXboxDownloads {
     }
   }
 
+  /** Enqueue a direct file URL detected by the in-app browser. */
+  fun enqueueDirect(context: Context, title: String, rawUrl: String, suggestedFileName: String?, totalBytes: Long = 0L) {
+    require(isAllowedDownloadUrl(rawUrl)) { "Por segurança, só são aceitos downloads HTTP ou HTTPS de hosts públicos." }
+    val parsed = URL(rawUrl)
+    val candidate = suggestedFileName?.substringAfterLast('/')?.substringAfterLast('\\')
+      ?: parsed.path.substringAfterLast('/').takeIf { it.isNotBlank() }
+      ?: ""
+    val safeName = candidate.substringBefore('?').replace(Regex("[\\\\/:*?\"<>|]"), "_").trim().trim('.')
+    require(safeName.isNotBlank() && safeName.contains('.')) {
+      "O site não informou um nome de arquivo com extensão reconhecível."
+    }
+    val extension = safeName.substringAfterLast('.', "").lowercase(Locale.ROOT)
+    require(extension in GAME_EXTENSIONS) {
+      "Tipo não suportado. São aceitos ISO, XISO, CSO, CCI, ZIP, RAR e 7z."
+    }
+    val identifier = "link-" + java.security.MessageDigest.getInstance("SHA-256")
+      .digest(rawUrl.toByteArray(Charsets.UTF_8))
+      .take(12).joinToString("") { "%02x".format(it) }
+    enqueue(context, identifier, title.ifBlank { safeName.substringBeforeLast('.') },
+      ArchiveDownloadOption(safeName, totalBytes.coerceAtLeast(0L), rawUrl))
+  }
+
+  private fun isAllowedDownloadUrl(value: String): Boolean {
+    val uri = runCatching { android.net.Uri.parse(value) }.getOrNull() ?: return false
+    val scheme = uri.scheme?.lowercase(Locale.ROOT)
+    val host = uri.host?.lowercase(Locale.ROOT) ?: return false
+    if (scheme !in setOf("http", "https")) return false
+    if (host == "localhost" || host.endsWith(".localhost") || host.endsWith(".local")) return false
+    if (host.matches(Regex("\\d{1,3}(\\.\\d{1,3}){3}"))) {
+      val parts = host.split(".").mapNotNull { it.toIntOrNull() }
+      if (parts.size != 4 || parts.any { it !in 0..255 }) return false
+      val (a, b) = parts
+      if (a == 10 || a == 127 || a == 0 || (a == 169 && b == 254) ||
+        (a == 172 && b in 16..31) || (a == 192 && b == 168) || a >= 224) return false
+    }
+    return true
+  }
+
   /** Adds a download to the in-memory FIFO queue. Only one transfer writes at a time. */
   @Synchronized
   fun enqueue(context: Context, identifier: String, title: String, option: ArchiveDownloadOption) {
@@ -231,7 +269,7 @@ object ArchiveXboxDownloads {
         ?: root.createFile("application/octet-stream", partialName)
         ?: error("Não foi possível criar o arquivo temporário na pasta de destino.")
       val offset = partial!!.length().coerceAtLeast(0L)
-      check(offset <= option.bytes) { "O arquivo parcial é maior que o tamanho informado pelo Internet Archive." }
+      check(option.bytes <= 0L || offset <= option.bytes) { "O arquivo parcial é maior que o tamanho informado pelo servidor." }
       val connection = (URL(option.downloadUrl).openConnection() as HttpURLConnection).apply {
         connectTimeout = 20_000
         readTimeout = 60_000
@@ -254,6 +292,8 @@ object ArchiveXboxDownloads {
           check(status in 200..299) { "Falha ao baixar o arquivo (HTTP $status)." }
         }
         val reportedLength = connection.contentLengthLong
+        val expectedTotal = option.bytes.takeIf { it > 0L } ?: reportedLength.takeIf { it > 0L }?.let { it + offset } ?: 0L
+        var completedBytes = offset
         app.contentResolver.openOutputStream(partial!!.uri, if (offset > 0L) "wa" else "w")?.use { output ->
           connection.inputStream.use { input ->
             val buffer = ByteArray(128 * 1024)
@@ -267,14 +307,16 @@ object ArchiveXboxDownloads {
               done += count
               val now = System.currentTimeMillis()
               if (now - lastUpdate >= 300) {
-                update(entry.copy(done = done, total = option.bytes.takeIf { it > 0 } ?: reportedLength, status = ArchiveDownload.Status.DOWNLOADING))
+                completedBytes = done
+                update(entry.copy(done = done, total = expectedTotal, status = ArchiveDownload.Status.DOWNLOADING))
                 lastUpdate = now
               }
             }
             output.flush()
             check(done > 0L) { "O Internet Archive retornou um arquivo vazio." }
-            check(done == option.bytes) { "Download incompleto: esperado ${option.bytes} bytes, recebido $done. O progresso foi preservado para continuar." }
-            update(entry.copy(done = done, total = done, status = ArchiveDownload.Status.DOWNLOADING))
+            check(option.bytes <= 0L || done == option.bytes) { "Download incompleto: esperado ${option.bytes} bytes, recebido $done. O progresso foi preservado para continuar." }
+            completedBytes = done
+            update(entry.copy(done = done, total = expectedTotal.takeIf { it > 0L } ?: done, status = ArchiveDownload.Status.DOWNLOADING))
           }
         } ?: error("Não foi possível gravar na pasta de destino.")
       } finally {
@@ -288,7 +330,7 @@ object ArchiveXboxDownloads {
 
       val extension = finalName.substringAfterLast('.', "").lowercase(Locale.ROOT)
       if (extension in ARCHIVE_EXTENSIONS) {
-        update(entry.copy(done = option.bytes, total = option.bytes, status = ArchiveDownload.Status.EXTRACTING))
+        update(entry.copy(done = completedBytes, total = completedBytes, status = ArchiveDownload.Status.EXTRACTING))
         app.contentResolver.openInputStream(downloaded.uri)?.use { input ->
           FileOutputStream(stagingArchive).use { output -> input.copyTo(output, 128 * 1024) }
         } ?: error("Não foi possível abrir o arquivo compactado para extração.")
