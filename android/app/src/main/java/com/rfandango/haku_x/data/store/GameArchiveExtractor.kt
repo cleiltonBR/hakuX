@@ -74,7 +74,7 @@ internal object GameArchiveExtractor {
   }
 
   private fun safeOutput(root: File, entryName: String): File {
-    val normalized = entryName.replace('\\\\', '/').trim()
+    val normalized = entryName.replace('\\', '/').trim()
     require(normalized.isNotBlank() && !normalized.startsWith('/')) { "O arquivo compactado contém um caminho inválido." }
     val target = File(root, normalized).canonicalFile
     val rootPath = root.canonicalFile.path + File.separator
