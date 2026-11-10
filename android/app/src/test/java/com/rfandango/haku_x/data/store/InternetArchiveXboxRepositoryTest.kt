@@ -16,7 +16,7 @@ class InternetArchiveXboxRepositoryTest {
   @Test
   fun shortSearchTermsCanStillBeScopedToTheXboxCatalog() {
     val query = InternetArchiveXboxRepository.buildSearchQuery("A")
-    assertTrue(query.contains("title:\\\"A\\\""))
+    assertTrue(query.contains("title:\"A\""))
   }
 
   @Test
