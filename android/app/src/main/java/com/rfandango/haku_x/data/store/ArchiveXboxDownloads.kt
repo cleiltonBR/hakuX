@@ -18,10 +18,13 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.File
+import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
 import java.util.Locale
+import java.util.UUID
 
 data class ArchiveDownloadOption(
   val name: String,
@@ -38,7 +41,7 @@ data class ArchiveDownload(
   val status: Status = Status.QUEUED,
   val error: String? = null,
 ) {
-  enum class Status { QUEUED, DOWNLOADING, COMPLETED, CANCELLED, FAILED }
+  enum class Status { QUEUED, DOWNLOADING, EXTRACTING, COMPLETED, CANCELLED, FAILED }
 }
 
 /**
@@ -133,19 +136,23 @@ object ArchiveXboxDownloads {
   private suspend fun downloadOne(app: Context, entry: ArchiveDownload, option: ArchiveDownloadOption) {
     update(entry.copy(status = ArchiveDownload.Status.DOWNLOADING))
     var partial: DocumentFile? = null
+    var extractedFolder: DocumentFile? = null
+    val stagingArchive = File(app.cacheDir, "hakux-${UUID.randomUUID()}.archive")
+    val stagingDirectory = File(app.cacheDir, "hakux-extract-${UUID.randomUUID()}")
     try {
       val prefs = AppPrefs(app)
-      val folderUri = prefs.gamesFolders.firstOrNull()
-        ?: error("Configure uma pasta de jogos na Biblioteca antes de baixar.")
-      check(Storage.isFolderReady(app, folderUri)) { "A pasta de jogos não está disponível." }
+      val folderUri = prefs.downloadFolderUri
+        ?: error("Escolha uma pasta de destino na tela Downloads antes de baixar.")
+      check(Storage.isFolderReady(app, folderUri)) { "A pasta de destino não está disponível." }
       val hasWrite = app.contentResolver.persistedUriPermissions.any { it.uri == folderUri && it.isWritePermission }
-      check(hasWrite) { "O HakuX não tem permissão de gravação na pasta de jogos. Selecione-a novamente nas configurações." }
+      check(hasWrite) { "O HakuX não tem permissão de gravação na pasta de destino. Selecione-a novamente." }
       val root = DocumentFile.fromTreeUri(app, folderUri)
-        ?: error("Não foi possível abrir a pasta de jogos.")
-      check(root.canWrite()) { "A pasta de jogos não permite gravação." }
+        ?: error("Não foi possível abrir a pasta de destino.")
+      check(root.canWrite()) { "A pasta de destino não permite gravação." }
+
       val finalName = uniqueName(root, option.name)
       partial = root.createFile("application/octet-stream", ".$finalName.partial")
-        ?: error("Não foi possível criar o arquivo temporário na pasta de jogos.")
+        ?: error("Não foi possível criar o arquivo temporário na pasta de destino.")
       val connection = (URL(option.downloadUrl).openConnection() as HttpURLConnection).apply {
         connectTimeout = 15_000
         readTimeout = 30_000
@@ -178,20 +185,82 @@ object ArchiveXboxDownloads {
             check(done == option.bytes) { "Download incompleto: esperado ${option.bytes} bytes, recebido $done." }
             update(entry.copy(done = done, total = done, status = ArchiveDownload.Status.DOWNLOADING))
           }
-        } ?: error("Não foi possível gravar na pasta de jogos.")
+        } ?: error("Não foi possível gravar na pasta de destino.")
       } finally {
         connection.disconnect()
       }
-      check(partial!!.renameTo(finalName)) { "O arquivo foi baixado, mas não foi possível finalizar o nome. Verifique a pasta de jogos." }
-      update(entry.copy(done = option.bytes, total = option.bytes, status = ArchiveDownload.Status.COMPLETED, fileName = finalName))
+
+      check(partial!!.renameTo(finalName)) { "O download terminou, mas não foi possível finalizar o arquivo." }
+      val downloaded = root.findFile(finalName)
+        ?: error("O arquivo baixado não foi localizado após a gravação.")
+      partial = null
+
+      val extension = finalName.substringAfterLast('.', "").lowercase(Locale.ROOT)
+      if (extension in ARCHIVE_EXTENSIONS) {
+        update(entry.copy(done = option.bytes, total = option.bytes, status = ArchiveDownload.Status.EXTRACTING))
+        app.contentResolver.openInputStream(downloaded.uri)?.use { input ->
+          FileOutputStream(stagingArchive).use { output -> input.copyTo(output, 128 * 1024) }
+        } ?: error("Não foi possível abrir o arquivo compactado para extração.")
+
+        GameArchiveExtractor.extract(stagingArchive, stagingDirectory)
+        currentCoroutineContext().ensureActive()
+        val folderName = uniqueName(root, safeFolderName(entry.title))
+        extractedFolder = root.createDirectory(folderName)
+          ?: error("Não foi possível criar a pasta do jogo extraído.")
+        copyExtractedTree(app, stagingDirectory, extractedFolder!!)
+        currentCoroutineContext().ensureActive()
+        downloaded.delete()
+        update(entry.copy(done = option.bytes, total = option.bytes, status = ArchiveDownload.Status.COMPLETED, fileName = folderName))
+      } else {
+        update(entry.copy(done = option.bytes, total = option.bytes, status = ArchiveDownload.Status.COMPLETED, fileName = finalName))
+      }
     } catch (cancelled: CancellationException) {
       partial?.delete()
+      extractedFolder?.let { deleteTree(it) }
       update(entry.copy(status = ArchiveDownload.Status.CANCELLED))
     } catch (error: Exception) {
       partial?.delete()
-      update(entry.copy(status = ArchiveDownload.Status.FAILED, error = error.message ?: "Falha no download."))
+      extractedFolder?.let { deleteTree(it) }
+      update(entry.copy(status = ArchiveDownload.Status.FAILED, error = error.message ?: "Falha no download ou na extração."))
+    } finally {
+      stagingArchive.delete()
+      stagingDirectory.deleteRecursively()
     }
   }
+
+  private suspend fun copyExtractedTree(app: Context, source: File, target: DocumentFile) {
+    source.listFiles()?.forEach { child ->
+      currentCoroutineContext().ensureActive()
+      if (child.isDirectory) {
+        val directory = target.createDirectory(child.name)
+          ?: error("Não foi possível criar a subpasta ${child.name}.")
+        copyExtractedTree(app, child, directory)
+      } else if (child.isFile) {
+        val outputFile = target.createFile("application/octet-stream", child.name)
+          ?: error("Não foi possível criar o arquivo extraído ${child.name}.")
+        app.contentResolver.openOutputStream(outputFile.uri, "w")?.use { output ->
+          child.inputStream().use { input ->
+            val buffer = ByteArray(128 * 1024)
+            while (true) {
+              currentCoroutineContext().ensureActive()
+              val count = input.read(buffer)
+              if (count < 0) break
+              output.write(buffer, 0, count)
+            }
+            output.flush()
+          }
+        } ?: error("Não foi possível gravar o arquivo extraído ${child.name}.")
+      }
+    }
+  }
+
+  private fun deleteTree(file: DocumentFile) {
+    if (file.isDirectory) file.listFiles().forEach(::deleteTree)
+    file.delete()
+  }
+
+  private fun safeFolderName(value: String): String =
+    value.replace(Regex("[\\\\/:*?\"<>|]"), "_").trim().trim('.').take(80).ifBlank { "Jogo Xbox" }
 
   fun cancel() {
     activeTransfer?.cancel()
@@ -229,5 +298,6 @@ object ArchiveXboxDownloads {
   private fun encodePathSegment(value: String): String =
     URLEncoder.encode(value, Charsets.UTF_8.name()).replace("+", "%20")
 
-  private val GAME_EXTENSIONS = setOf("iso", "xiso", "cso", "cci")
+  private val ARCHIVE_EXTENSIONS = setOf("zip", "rar", "7z")
+  private val GAME_EXTENSIONS = setOf("iso", "xiso", "cso", "cci") + ARCHIVE_EXTENSIONS
 }
