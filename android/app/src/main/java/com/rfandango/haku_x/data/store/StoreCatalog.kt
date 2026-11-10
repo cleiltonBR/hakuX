@@ -181,6 +181,7 @@ data class ArchiveXboxItem(
   val description: String,
   val year: String?,
 ) {
+  val genre: String get() = classifyGenre("$title $description")
   val detailsUrl: String get() = "https://archive.org/details/$identifier"
   val coverUrl: String get() = "https://archive.org/services/img/$identifier"
 }
@@ -194,12 +195,26 @@ data class ArchiveXboxSearchPage(
   val hasMore: Boolean get() = page * rows < total
 }
 
+private fun classifyGenre(raw: String): String {
+  val value = Normalizer.normalize(raw, Normalizer.Form.NFD)
+    .replace(Regex("\\p{Mn}+"), "").lowercase(Locale.ROOT)
+  return when {
+    listOf("first person shooter", "fps", "call of duty", "halo", "doom", "quake", "medal of honor", "counter strike", "rainbow six").any(value::contains) -> "FPS"
+    listOf("fighting", "fight", "tekken", "mortal kombat", "dead or alive", "soulcalibur", "street fighter", "virtua fighter", "wwe", "wrestling").any(value::contains) -> "Luta"
+    listOf("racing", "race", "corrida", "forza", "need for speed", "midnight club", "burnout", "ralli", "nascar", "motogp").any(value::contains) -> "Corrida"
+    listOf("football", "soccer", "fifa", "pes ", "pro evolution", "nba", "nfl", "nhl", "tennis", "golf", "sports").any(value::contains) -> "Esportes"
+    listOf("role-playing", "role playing", " rpg", "final fantasy", "kingdom hearts", "star wars knights", "fable", "elder scrolls").any(value::contains) -> "RPG"
+    listOf("platform", "platformer", "crash bandicoot", "sonic", "rayman", "spongebob", "jak and daxter", "ratchet").any(value::contains) -> "Plataforma"
+    listOf("action", "adventure", "ação", "adventure").any(value::contains) -> "Ação"
+    else -> "Outros"
+  }
+}
+
 object InternetArchiveXboxRepository {
   private const val SEARCH_ENDPOINT = "https://archive.org/advancedsearch.php"
 
   internal fun buildSearchQuery(rawQuery: String): String {
     val query = rawQuery.trim()
-    require(query.length >= 2) { "Digite pelo menos 2 caracteres para pesquisar." }
     val safe = buildString {
       query.forEach { character ->
         if (character in "+-&|!(){}[]^\"~*?:\\") append('\\')
@@ -207,7 +222,8 @@ object InternetArchiveXboxRepository {
       }
     }
     // Xbox software only. Explicitly exclude newer generations and homebrew-labelled records.
-    return """mediatype:software AND subject:xbox AND (title:"$safe" OR description:"$safe") AND NOT (title:"Xbox 360" OR description:"Xbox 360" OR subject:"Xbox 360" OR title:"Xbox One" OR description:"Xbox One" OR subject:"Xbox One" OR title:"Xbox Series" OR description:"Xbox Series" OR subject:"Xbox Series" OR title:homebrew OR description:homebrew OR subject:homebrew)"""
+    val xboxOnly = """mediatype:software AND subject:xbox AND NOT (title:"Xbox 360" OR description:"Xbox 360" OR subject:"Xbox 360" OR title:"Xbox One" OR description:"Xbox One" OR subject:"Xbox One" OR title:"Xbox Series" OR description:"Xbox Series" OR subject:"Xbox Series" OR title:homebrew OR description:homebrew OR subject:homebrew)"""
+    return if (query.isBlank()) xboxOnly else "$xboxOnly AND (title:\"$safe\" OR description:\"$safe\")"
   }
 
   fun search(rawQuery: String, rows: Int = 40): List<ArchiveXboxItem> =
