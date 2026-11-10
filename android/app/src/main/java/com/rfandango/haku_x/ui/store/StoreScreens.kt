@@ -1,27 +1,28 @@
 package com.rfandango.haku_x.ui.store
-
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.documentfile.provider.DocumentFile
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Home
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
@@ -52,156 +53,121 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** Internet Archive search, constrained to Xbox software metadata. */
+/** Xbox Classic online library. The catalog loads automatically and is paginated. */
 @Composable
 fun StoreScreen() {
+  val context = LocalContext.current
+  val scope = rememberCoroutineScope()
+  val uriHandler = LocalUriHandler.current
   var query by remember { mutableStateOf("") }
   var results by remember { mutableStateOf<List<ArchiveXboxItem>>(emptyList()) }
-  var message by remember { mutableStateOf("Pesquise jogos do Xbox clássico no Internet Archive.") }
+  var message by remember { mutableStateOf("Carregando biblioteca online do Xbox Clássico…") }
   var loading by remember { mutableStateOf(false) }
-  var checkingFiles by remember { mutableStateOf(false) }
-  var currentPage by remember { mutableStateOf(1) }
-  var hasMore by remember { mutableStateOf(false) }
-  var searchedQuery by remember { mutableStateOf("") }
+  var checkingId by remember { mutableStateOf<String?>(null) }
+  var currentPage by remember { mutableStateOf(0) }
+  var hasMore by remember { mutableStateOf(true) }
+  var loadedQuery by remember { mutableStateOf("") }
+  var selectedGenre by remember { mutableStateOf("Todos") }
+  var favoritesOnly by remember { mutableStateOf(false) }
+  var alphabetical by remember { mutableStateOf(false) }
+  var favorites by remember { mutableStateOf(context.getSharedPreferences("hakux_store_favorites", android.content.Context.MODE_PRIVATE).getStringSet("ids", emptySet())?.toSet() ?: emptySet()) }
   var selectedGame by remember { mutableStateOf<ArchiveXboxItem?>(null) }
   var options by remember { mutableStateOf<List<ArchiveDownloadOption>>(emptyList()) }
   var selectedOption by remember { mutableStateOf<ArchiveDownloadOption?>(null) }
-  var dialogMessage by remember { mutableStateOf<String?>(null) }
-  val scope = rememberCoroutineScope()
-  val uriHandler = LocalUriHandler.current
-  val context = LocalContext.current
 
-  Column(
-    modifier = Modifier.fillMaxSize().padding(20.dp),
-    verticalArrangement = Arrangement.spacedBy(14.dp),
-  ) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-      Icon(Icons.Filled.Home, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(32.dp))
-      Column {
-        Text("Loja HakuX", style = MaterialTheme.typography.headlineSmall)
-        Text("Jogos do Xbox clássico · Internet Archive", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+  fun toggleFavorite(id: String) {
+    favorites = if (id in favorites) favorites - id else favorites + id
+    context.getSharedPreferences("hakux_store_favorites", android.content.Context.MODE_PRIVATE).edit().putStringSet("ids", favorites.toSet()).apply()
+  }
+
+  fun loadCatalog(reset: Boolean, term: String) {
+    if (loading) return
+    scope.launch {
+      loading = true
+      message = if (reset) "Carregando catálogo do Xbox Clássico…" else "Carregando mais jogos…"
+      try {
+        val nextPage = if (reset) 1 else currentPage + 1
+        val page = withContext(Dispatchers.IO) { InternetArchiveXboxRepository.searchPage(term, page = nextPage, rows = 100) }
+        results = if (reset) page.items else results + page.items.filterNot { new -> results.any { it.identifier == new.identifier } }
+        currentPage = page.page
+        hasMore = page.hasMore
+        loadedQuery = term
+        message = "${page.total} registros encontrados · ${results.size} carregados"
+      } catch (error: Exception) {
+        message = error.message ?: "Não foi possível carregar a biblioteca online."
+        if (reset) results = emptyList()
+      } finally {
+        loading = false
       }
     }
-    OutlinedTextField(
-      value = query,
-      onValueChange = { query = it },
-      modifier = Modifier.fillMaxWidth(),
-      singleLine = true,
-      label = { Text("Pesquisar jogos de Xbox") },
-      placeholder = { Text("Digite o nome do jogo") },
-    )
-    Button(
-      onClick = {
-        scope.launch {
-          loading = true
-          message = "Pesquisando no Internet Archive…"
-          try {
-            val page = withContext(Dispatchers.IO) { InternetArchiveXboxRepository.searchPage(query, page = 1) }
-            results = page.items
-            currentPage = page.page
-            hasMore = page.hasMore
-            searchedQuery = query.trim()
-            message = if (results.isEmpty()) "Nenhum resultado encontrado para essa pesquisa." else "${page.total} jogo(s) encontrado(s). Mostrando ${results.size}."
-          } catch (error: Exception) {
-            results = emptyList()
-            hasMore = false
-            searchedQuery = ""
-            message = error.message ?: "Não foi possível consultar o Internet Archive."
-          } finally {
-            loading = false
-          }
-        }
-      },
-      enabled = query.trim().length >= 2 && !loading,
-      modifier = Modifier.fillMaxWidth(),
-    ) {
-      Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
-      Text(if (loading) " Pesquisando…" else " Pesquisar no Internet Archive")
+  }
+
+  LaunchedEffect(Unit) { loadCatalog(reset = true, term = "") }
+  val genres = listOf("Todos", "FPS", "Luta", "Corrida", "Ação", "Esportes", "RPG", "Plataforma", "Outros")
+  val visibleGames = remember(results, selectedGenre, favoritesOnly, favorites, alphabetical) {
+    val filtered = results.filter { game -> (selectedGenre == "Todos" || game.genre == selectedGenre) && (!favoritesOnly || game.identifier in favorites) }
+    if (alphabetical) filtered.sortedBy { it.title.lowercase(java.util.Locale.ROOT) } else filtered
+  }
+
+  Column(modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+      Text("Biblioteca Xbox Clássico", style = MaterialTheme.typography.headlineSmall)
+      Text("Catálogo online · ${results.size} jogos carregados", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
-    Text(message, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    LazyColumn(
-      modifier = Modifier.fillMaxWidth().weight(1f),
-      verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-      items(results, key = { it.identifier }) { game ->
-        Row(
-          modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
-          horizontalArrangement = Arrangement.spacedBy(12.dp),
-          verticalAlignment = Alignment.Top,
-        ) {
-          AsyncImage(
-            model = game.coverUrl,
-            contentDescription = "Capa de ${game.title}",
-            modifier = Modifier.size(width = 104.dp, height = 136.dp),
-            contentScale = ContentScale.Crop,
-          )
-          Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-          ) {
-            Text(game.title, style = MaterialTheme.typography.titleMedium)
-            game.year?.let { Text("Ano: $it", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-            if (game.description.isNotBlank()) {
-              Text(game.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 3)
-            }
-            TextButton(onClick = { uriHandler.openUri(game.detailsUrl) }) {
-              Text("Abrir no Internet Archive")
-            }
-            TextButton(
-              enabled = !checkingFiles && !loading,
-              onClick = {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+      OutlinedTextField(value = query, onValueChange = { query = it }, modifier = Modifier.weight(1f), singleLine = true, label = { Text("Pesquisar no catálogo") }, placeholder = { Text("Nome do jogo") })
+      Button(onClick = { loadCatalog(reset = true, term = query.trim()) }, enabled = !loading && (query.isBlank() || query.trim().length >= 2)) { Text("Buscar") }
+    }
+    Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+      genres.forEach { genre -> FilterChip(selected = selectedGenre == genre, onClick = { selectedGenre = genre }, label = { Text(genre) }) }
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+      FilterChip(selected = favoritesOnly, onClick = { favoritesOnly = !favoritesOnly }, label = { Text("♥ Favoritos") })
+      FilterChip(selected = alphabetical, onClick = { alphabetical = !alphabetical }, label = { Text(if (alphabetical) "A–Z" else "Ordem do catálogo") })
+      TextButton(onClick = { selectedGenre = "Todos"; favoritesOnly = false; alphabetical = false; query = ""; if (loadedQuery.isNotEmpty()) loadCatalog(true, "") }) { Text("Limpar filtros") }
+    }
+    Text(message, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    if (loading && results.isEmpty()) {
+      Column(modifier = Modifier.fillMaxWidth().weight(1f), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+        CircularProgressIndicator()
+        Text("Buscando jogos do Xbox Clássico…", modifier = Modifier.padding(top = 12.dp))
+      }
+    } else {
+      LazyVerticalGrid(columns = GridCells.Adaptive(minSize = 148.dp), modifier = Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        items(visibleGames, key = { it.identifier }) { game ->
+          Card(modifier = Modifier.fillMaxWidth()) {
+            Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+              AsyncImage(model = game.coverUrl, contentDescription = "Capa de ${game.title}", modifier = Modifier.fillMaxWidth().aspectRatio(0.72f), contentScale = ContentScale.Crop)
+              Text(game.title, modifier = Modifier.padding(horizontal = 8.dp), style = MaterialTheme.typography.titleSmall, maxLines = 2, minLines = 2)
+              Text(game.genre + (game.year?.let { " · $it" } ?: ""), modifier = Modifier.padding(horizontal = 8.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+              Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = { toggleFavorite(game.identifier) }) { Text(if (game.identifier in favorites) "♥" else "♡") }
+                TextButton(onClick = { uriHandler.openUri(game.detailsUrl) }) { Text("Detalhes") }
+              }
+              Button(modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 4.dp), enabled = checkingId == null && !loading, onClick = {
                 scope.launch {
-                  checkingFiles = true
-                  dialogMessage = null
+                  checkingId = game.identifier
                   try {
                     val available = withContext(Dispatchers.IO) { ArchiveXboxDownloads.options(game.identifier) }
-                    if (available.isEmpty()) {
-                      message = "Este item não oferece imagens de jogo nem arquivos ZIP/RAR/7z com licença aberta reconhecida."
-                    } else {
-                      selectedGame = game
-                      options = available
-                      selectedOption = available.first()
-                    }
+                    if (available.isEmpty()) message = "Nenhum arquivo de jogo com licença aberta reconhecida foi encontrado para ${game.title}."
+                    else { selectedGame = game; options = available; selectedOption = available.first() }
                   } catch (error: Exception) {
-                    message = error.message ?: "Não foi possível verificar a licença e os arquivos deste item."
-                  } finally {
-                    checkingFiles = false
-                  }
+                    message = error.message ?: "Não foi possível verificar os arquivos deste item."
+                  } finally { checkingId = null }
                 }
-              },
-            ) {
-              Text(if (checkingFiles) "Verificando licença…" else "Verificar download permitido")
+              }) { Text(if (checkingId == game.identifier) "Verificando…" else "↓ Download") }
             }
           }
         }
+        if (visibleGames.isEmpty() && !loading) {
+          item { Text(if (favoritesOnly) "Você ainda não adicionou jogos aos favoritos." else "Nenhum jogo encontrado nesta categoria.", modifier = Modifier.padding(18.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        }
       }
     }
-    if (hasMore && query.trim() == searchedQuery) {
-      Button(
-        onClick = {
-          scope.launch {
-            loading = true
-            message = "Carregando mais resultados…"
-            try {
-              val next = withContext(Dispatchers.IO) {
-                InternetArchiveXboxRepository.searchPage(query, page = currentPage + 1)
-              }
-              results = results + next.items.filterNot { item -> results.any { it.identifier == item.identifier } }
-              currentPage = next.page
-              hasMore = next.hasMore
-              message = "${results.size} resultado(s) carregados de ${next.total}."
-            } catch (error: Exception) {
-              message = error.message ?: "Não foi possível carregar mais resultados."
-            } finally {
-              loading = false
-            }
-          }
-        },
-        enabled = !loading,
-        modifier = Modifier.fillMaxWidth(),
-      ) {
+    if (hasMore && loadedQuery == query.trim()) {
+      Button(onClick = { loadCatalog(reset = false, term = loadedQuery) }, enabled = !loading, modifier = Modifier.fillMaxWidth()) {
         if (loading) CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-        Text(if (loading) " Carregando…" else " Carregar mais jogos")
+        Text(if (loading) " Carregando…" else "Carregar mais jogos")
       }
     }
   }
@@ -209,10 +175,10 @@ fun StoreScreen() {
   selectedGame?.let { game ->
     AlertDialog(
       onDismissRequest = { selectedGame = null; options = emptyList(); selectedOption = null },
-      title = { Text("Download autorizado") },
+      title = { Text("Download · ${game.title}") },
       text = {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-          Text("O Internet Archive informa uma licença aberta compatível para este item. Escolha um arquivo de jogo:")
+          Text("Escolha um arquivo disponível com licença aberta reconhecida:")
           options.forEach { option ->
             Row(verticalAlignment = Alignment.CenterVertically) {
               RadioButton(selected = selectedOption == option, onClick = { selectedOption = option })
@@ -222,28 +188,17 @@ fun StoreScreen() {
               }
             }
           }
-          Text("Arquivos ZIP, RAR e 7z serão extraídos automaticamente. O jogo extraído será salvo na pasta escolhida em Downloads e ficará disponível na Biblioteca.", style = MaterialTheme.typography.bodySmall)
-          dialogMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+          Text("ZIP, RAR e 7z são extraídos automaticamente para a pasta escolhida em Downloads.", style = MaterialTheme.typography.bodySmall)
         }
       },
       confirmButton = {
-        TextButton(
-          enabled = selectedOption != null,
-          onClick = {
-            val option = selectedOption
-            if (option != null) {
-              ArchiveXboxDownloads.enqueue(context, game.identifier, game.title, option)
-              message = "Download adicionado. Acompanhe o progresso na aba Downloads."
-              selectedGame = null
-              options = emptyList()
-              selectedOption = null
-            }
-          },
-        ) { Text("Baixar para a Biblioteca") }
+        TextButton(enabled = selectedOption != null, onClick = {
+          selectedOption?.let { ArchiveXboxDownloads.enqueue(context, game.identifier, game.title, it) }
+          message = "Download adicionado à fila. Acompanhe na aba Downloads."
+          selectedGame = null; options = emptyList(); selectedOption = null
+        }) { Text("Baixar para a Biblioteca") }
       },
-      dismissButton = {
-        TextButton(onClick = { selectedGame = null; options = emptyList(); selectedOption = null }) { Text("Cancelar") }
-      },
+      dismissButton = { TextButton(onClick = { selectedGame = null; options = emptyList(); selectedOption = null }) { Text("Cancelar") } },
     )
   }
 }
