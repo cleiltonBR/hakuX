@@ -22,16 +22,17 @@ class InternetArchiveXboxRepositoryTest {
   }
 
   @Test
-  fun queryIsScopedToSoftwareAndXboxAndExcludesNewerGenerations() {
+  fun queryIsScopedToOriginalXboxSoftwareAndExcludesOtherPlatformsAndHomebrew() {
     val query = InternetArchiveXboxRepository.buildSearchQuery("Halo")
     assertTrue(query.startsWith("mediatype:software"))
     assertTrue(query.contains("subject:xbox"))
-    assertTrue(query.contains("title:homebrew"))
-    assertTrue(query.contains("subject:\\\"Xbox 360\\\""))
     assertTrue(query.contains("title:\"Halo\""))
     assertTrue(query.contains("description:\"Xbox 360\""))
     assertTrue(query.contains("subject:\"Xbox One\""))
     assertTrue(query.contains("title:\"Xbox Series\""))
+    assertTrue(query.contains("title:homebrew"))
+    assertTrue(query.contains("description:homebrew"))
+    assertTrue(query.contains("subject:homebrew"))
   }
 
   @Test
@@ -41,8 +42,8 @@ class InternetArchiveXboxRepositoryTest {
     val finalPage = ArchiveXboxSearchPage(emptyList(), total = 75, page = 3, rows = 40)
 
     assertTrue(firstPage.hasMore)
-    assertTrue(!secondPage.hasMore)
-    assertTrue(!finalPage.hasMore)
+    assertFalse(secondPage.hasMore)
+    assertFalse(finalPage.hasMore)
   }
 
   @Test
@@ -52,4 +53,3 @@ class InternetArchiveXboxRepositoryTest {
     assertFalse(query.contains("title:\"Halo: Doom\""))
   }
 }
-
