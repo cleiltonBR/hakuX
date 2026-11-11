@@ -63,7 +63,7 @@ jobs:
       - name: Ferramentas (CMake, Ninja)
         run: |
           sudo apt-get update
-          sudo apt-get install -y ninja-build cmake python3 glslang-tools
+          sudo apt-get install -y ninja-build cmake python3 glslang-tools spirv-tools
           cmake --version
 
       - name: Validar shader compute NIS (SPIR-V Vulkan 1.1)
@@ -74,6 +74,7 @@ jobs:
             "$GITHUB_WORKSPACE/third_party/NVIDIAImageScaling/NIS_Main.glsl" \
             -o "$RUNNER_TEMP/nis_scaler.spv"
           test -s "$RUNNER_TEMP/nis_scaler.spv"
+          spirv-val --target-env vulkan1.1 "$RUNNER_TEMP/nis_scaler.spv"
 
       - name: Android SDK 36 + NDK 29
         run: |
