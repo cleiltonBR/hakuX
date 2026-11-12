@@ -58,6 +58,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.rfandango.haku_x.data.CustomCoverSource
 import com.rfandango.haku_x.data.AppPrefs
@@ -146,7 +147,7 @@ fun StoreScreen() {
       }
   }
 
-  Column(modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+  Column(modifier = Modifier.fillMaxSize().padding(horizontal = 5.dp, vertical = 3.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
       FilterChip(modifier = Modifier.height(32.dp), selected = selectedStoreTab == "catalog", onClick = { selectedStoreTab = "catalog" }, label = { Text("Catálogo Xbox", style = MaterialTheme.typography.labelMedium) })
       FilterChip(modifier = Modifier.height(32.dp), selected = selectedStoreTab == "link", onClick = { selectedStoreTab = "link" }, label = { Text("Importar por link", style = MaterialTheme.typography.labelMedium) })
@@ -157,32 +158,32 @@ fun StoreScreen() {
       Text("Catálogo online · ${results.size} jogos carregados", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
     Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
-      OutlinedTextField(value = query, onValueChange = { query = it }, modifier = Modifier.weight(1f).height(48.dp), singleLine = true, textStyle = MaterialTheme.typography.bodySmall, label = { Text("Pesquisar", style = MaterialTheme.typography.labelSmall) }, placeholder = { Text("Nome do jogo", style = MaterialTheme.typography.bodySmall) })
-      Button(modifier = Modifier.height(40.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 0.dp), onClick = { loadCatalog(reset = true, term = query.trim()) }, enabled = !loading && (query.isBlank() || query.trim().length >= 2)) { Text("Buscar", style = MaterialTheme.typography.labelMedium) }
+      OutlinedTextField(value = query, onValueChange = { query = it }, modifier = Modifier.weight(1f).height(56.dp), singleLine = true, textStyle = MaterialTheme.typography.bodySmall, label = { Text("Pesquisar", style = MaterialTheme.typography.labelSmall) }, placeholder = { Text("Nome do jogo", style = MaterialTheme.typography.bodySmall) })
+      Button(modifier = Modifier.height(36.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 0.dp), onClick = { loadCatalog(reset = true, term = query.trim()) }, enabled = !loading && (query.isBlank() || query.trim().length >= 2)) { Text("Buscar", style = MaterialTheme.typography.labelMedium) }
     }
     Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-      genres.forEach { genre -> FilterChip(modifier = Modifier.height(30.dp), selected = selectedGenre == genre, onClick = { selectedGenre = genre }, label = { Text(genre, style = MaterialTheme.typography.labelSmall) }) }
+      genres.forEach { genre -> FilterChip(modifier = Modifier.height(28.dp), selected = selectedGenre == genre, onClick = { selectedGenre = genre }, label = { Text(genre, style = MaterialTheme.typography.labelSmall) }) }
     }
     Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-      FilterChip(modifier = Modifier.height(30.dp), selected = favoritesOnly, onClick = { favoritesOnly = !favoritesOnly }, label = { Text("♥ Favoritos", style = MaterialTheme.typography.labelSmall) })
-      FilterChip(modifier = Modifier.height(30.dp), selected = alphabetical, onClick = { alphabetical = !alphabetical }, label = { Text(if (alphabetical) "A–Z" else "Ordem", style = MaterialTheme.typography.labelSmall) })
+      FilterChip(modifier = Modifier.height(28.dp), selected = favoritesOnly, onClick = { favoritesOnly = !favoritesOnly }, label = { Text("♥ Favoritos", style = MaterialTheme.typography.labelSmall) })
+      FilterChip(modifier = Modifier.height(28.dp), selected = alphabetical, onClick = { alphabetical = !alphabetical }, label = { Text(if (alphabetical) "A–Z" else "Ordem", style = MaterialTheme.typography.labelSmall) })
       TextButton(onClick = { selectedGenre = "Todos"; favoritesOnly = false; alphabetical = false; query = ""; if (loadedQuery.isNotEmpty()) loadCatalog(true, "") }, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp, vertical = 0.dp)) { Text("Limpar", style = MaterialTheme.typography.labelSmall) }
     }
-    Text(message, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+    Text(message, style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp), color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
     if (loading && results.isEmpty()) {
       Column(modifier = Modifier.fillMaxWidth().weight(1f), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
         CircularProgressIndicator()
         Text("Buscando jogos do Xbox Clássico…", modifier = Modifier.padding(top = 12.dp))
       }
     } else {
-      LazyVerticalGrid(state = gridState, columns = GridCells.Adaptive(minSize = 104.dp), modifier = Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(5.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+      LazyVerticalGrid(state = gridState, columns = GridCells.Adaptive(minSize = 92.dp), modifier = Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         items(visibleGames, key = { game -> game.archiveFileName?.let { "${game.identifier}:$it" } ?: "${game.identifier}:${game.title}" }) { game ->
           Card(modifier = Modifier.fillMaxWidth()) {
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
               ArchiveGameCover(game = game, onClick = { detailsGame = game })
               Text(game.title, modifier = Modifier.padding(horizontal = 4.dp), style = MaterialTheme.typography.labelMedium, maxLines = 2, minLines = 2)
               Text(game.genre + (game.year?.let { " · $it" } ?: ""), modifier = Modifier.padding(horizontal = 4.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
-              Text(game.region, modifier = Modifier.padding(horizontal = 4.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, maxLines = 1)
+              Text(game.region, modifier = Modifier.padding(horizontal = 4.dp), style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp), color = MaterialTheme.colorScheme.primary, maxLines = 1)
               Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 1.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 TextButton(contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 3.dp, vertical = 0.dp), onClick = {
                   val favoriteKey = game.archiveFileName?.let { "${game.identifier}:$it" } ?: game.identifier
@@ -193,7 +194,7 @@ fun StoreScreen() {
                 }
                 TextButton(contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 3.dp, vertical = 0.dp), onClick = { uriHandler.openUri(game.detailsUrl) }) { Text("Info", style = MaterialTheme.typography.labelSmall) }
               }
-              Button(modifier = Modifier.fillMaxWidth().padding(horizontal = 3.dp, vertical = 2.dp).height(32.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 3.dp, vertical = 0.dp), enabled = checkingId == null && !loading, onClick = {
+              Button(modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp, vertical = 1.dp).height(28.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 3.dp, vertical = 0.dp), enabled = checkingId == null && !loading, onClick = {
                 scope.launch {
                   checkingId = game.identifier
                   try {
@@ -294,7 +295,7 @@ private fun ArchiveGameCover(game: ArchiveXboxItem, onClick: () -> Unit) {
   AsyncImage(
     model = coverUrl,
     contentDescription = "Capa de ${game.title}",
-    modifier = Modifier.fillMaxWidth().aspectRatio(0.72f).clickable(onClick = onClick),
+    modifier = Modifier.fillMaxWidth().aspectRatio(0.78f).clickable(onClick = onClick),
     contentScale = ContentScale.Fit,
   )
 }
