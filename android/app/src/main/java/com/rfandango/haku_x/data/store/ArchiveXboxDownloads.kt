@@ -145,7 +145,6 @@ object ArchiveXboxDownloads {
         .map { metadata.optString(it).trim() }
         .firstOrNull { it.isNotBlank() }
         .orEmpty()
-      require(isRecognizedOpenLicense(license)) {
         val reason = if (license.isBlank()) {
           "O Internet Archive não informou a licença deste item."
         } else {
