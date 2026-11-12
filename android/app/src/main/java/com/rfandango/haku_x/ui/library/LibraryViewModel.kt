@@ -289,7 +289,7 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
         val covers = HashMap<Uri, ImageBitmap>(selectedCovers)
         for ((uri, disc) in info) {
           if (!currentCoroutineContext().isActive) break
-          if (disc.titleId == 0L || uri in selectedCovers) continue
+          if (uri in selectedCovers) continue
           val bitmap = withContext(Dispatchers.IO) { XboxCoverCache.load(app, disc.titleId, (info[uri]?.title ?: games.firstOrNull { it.uri == uri }?.title).orEmpty()) } ?: continue
           bitmap.prepareToDraw()
           covers[uri] = bitmap.asImageBitmap()
