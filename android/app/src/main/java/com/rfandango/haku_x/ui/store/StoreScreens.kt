@@ -145,54 +145,54 @@ fun StoreScreen() {
       }
   }
 
-  Column(modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-      FilterChip(selected = selectedStoreTab == "catalog", onClick = { selectedStoreTab = "catalog" }, label = { Text("Catálogo Xbox") })
-      FilterChip(selected = selectedStoreTab == "link", onClick = { selectedStoreTab = "link" }, label = { Text("Importar por link") })
+  Column(modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+      FilterChip(modifier = Modifier.height(32.dp), selected = selectedStoreTab == "catalog", onClick = { selectedStoreTab = "catalog" }, label = { Text("Catálogo Xbox", style = MaterialTheme.typography.labelMedium) })
+      FilterChip(modifier = Modifier.height(32.dp), selected = selectedStoreTab == "link", onClick = { selectedStoreTab = "link" }, label = { Text("Importar por link", style = MaterialTheme.typography.labelMedium) })
     }
     if (selectedStoreTab == "catalog") {
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-      Text("Biblioteca Xbox Clássico", style = MaterialTheme.typography.headlineSmall)
-      Text("Catálogo online · ${results.size} jogos carregados", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
+      Text("Biblioteca Xbox Clássico", style = MaterialTheme.typography.titleLarge)
+      Text("Catálogo online · ${results.size} jogos carregados", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-      OutlinedTextField(value = query, onValueChange = { query = it }, modifier = Modifier.weight(1f), singleLine = true, label = { Text("Pesquisar no catálogo") }, placeholder = { Text("Nome do jogo") })
-      Button(onClick = { loadCatalog(reset = true, term = query.trim()) }, enabled = !loading && (query.isBlank() || query.trim().length >= 2)) { Text("Buscar") }
+    Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
+      OutlinedTextField(value = query, onValueChange = { query = it }, modifier = Modifier.weight(1f).height(48.dp), singleLine = true, textStyle = MaterialTheme.typography.bodySmall, label = { Text("Pesquisar", style = MaterialTheme.typography.labelSmall) }, placeholder = { Text("Nome do jogo", style = MaterialTheme.typography.bodySmall) })
+      Button(modifier = Modifier.height(40.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 0.dp), onClick = { loadCatalog(reset = true, term = query.trim()) }, enabled = !loading && (query.isBlank() || query.trim().length >= 2)) { Text("Buscar", style = MaterialTheme.typography.labelMedium) }
     }
-    Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-      genres.forEach { genre -> FilterChip(selected = selectedGenre == genre, onClick = { selectedGenre = genre }, label = { Text(genre) }) }
+    Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+      genres.forEach { genre -> FilterChip(modifier = Modifier.height(30.dp), selected = selectedGenre == genre, onClick = { selectedGenre = genre }, label = { Text(genre, style = MaterialTheme.typography.labelSmall) }) }
     }
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-      FilterChip(selected = favoritesOnly, onClick = { favoritesOnly = !favoritesOnly }, label = { Text("♥ Favoritos") })
-      FilterChip(selected = alphabetical, onClick = { alphabetical = !alphabetical }, label = { Text(if (alphabetical) "A–Z" else "Ordem do catálogo") })
-      TextButton(onClick = { selectedGenre = "Todos"; favoritesOnly = false; alphabetical = false; query = ""; if (loadedQuery.isNotEmpty()) loadCatalog(true, "") }) { Text("Limpar filtros") }
+    Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+      FilterChip(modifier = Modifier.height(30.dp), selected = favoritesOnly, onClick = { favoritesOnly = !favoritesOnly }, label = { Text("♥ Favoritos", style = MaterialTheme.typography.labelSmall) })
+      FilterChip(modifier = Modifier.height(30.dp), selected = alphabetical, onClick = { alphabetical = !alphabetical }, label = { Text(if (alphabetical) "A–Z" else "Ordem", style = MaterialTheme.typography.labelSmall) })
+      TextButton(onClick = { selectedGenre = "Todos"; favoritesOnly = false; alphabetical = false; query = ""; if (loadedQuery.isNotEmpty()) loadCatalog(true, "") }, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp, vertical = 0.dp)) { Text("Limpar", style = MaterialTheme.typography.labelSmall) }
     }
-    Text(message, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Text(message, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
     if (loading && results.isEmpty()) {
       Column(modifier = Modifier.fillMaxWidth().weight(1f), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
         CircularProgressIndicator()
         Text("Buscando jogos do Xbox Clássico…", modifier = Modifier.padding(top = 12.dp))
       }
     } else {
-      LazyVerticalGrid(state = gridState, columns = GridCells.Adaptive(minSize = 148.dp), modifier = Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+      LazyVerticalGrid(state = gridState, columns = GridCells.Adaptive(minSize = 104.dp), modifier = Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(5.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         items(visibleGames, key = { game -> game.archiveFileName?.let { "${game.identifier}:$it" } ?: "${game.identifier}:${game.title}" }) { game ->
           Card(modifier = Modifier.fillMaxWidth()) {
-            Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
               ArchiveGameCover(game = game, onClick = { detailsGame = game })
-              Text(game.title, modifier = Modifier.padding(horizontal = 8.dp), style = MaterialTheme.typography.titleSmall, maxLines = 2, minLines = 2)
-              Text(game.genre + (game.year?.let { " · $it" } ?: ""), modifier = Modifier.padding(horizontal = 8.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
-              Text(game.region, modifier = Modifier.padding(horizontal = 8.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, maxLines = 1)
-              Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = {
+              Text(game.title, modifier = Modifier.padding(horizontal = 4.dp), style = MaterialTheme.typography.labelMedium, maxLines = 2, minLines = 2)
+              Text(game.genre + (game.year?.let { " · $it" } ?: ""), modifier = Modifier.padding(horizontal = 4.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+              Text(game.region, modifier = Modifier.padding(horizontal = 4.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, maxLines = 1)
+              Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 1.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                TextButton(contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 3.dp, vertical = 0.dp), onClick = {
                   val favoriteKey = game.archiveFileName?.let { "${game.identifier}:$it" } ?: game.identifier
                   toggleFavorite(favoriteKey)
                 }) {
                   val favoriteKey = game.archiveFileName?.let { "${game.identifier}:$it" } ?: game.identifier
                   Text(if (favoriteKey in favorites) "♥" else "♡")
                 }
-                TextButton(onClick = { uriHandler.openUri(game.detailsUrl) }) { Text("Detalhes") }
+                TextButton(contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 3.dp, vertical = 0.dp), onClick = { uriHandler.openUri(game.detailsUrl) }) { Text("Info", style = MaterialTheme.typography.labelSmall) }
               }
-              Button(modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 4.dp), enabled = checkingId == null && !loading, onClick = {
+              Button(modifier = Modifier.fillMaxWidth().padding(horizontal = 3.dp, vertical = 2.dp).height(32.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 3.dp, vertical = 0.dp), enabled = checkingId == null && !loading, onClick = {
                 scope.launch {
                   checkingId = game.identifier
                   try {
@@ -203,7 +203,7 @@ fun StoreScreen() {
                     message = error.message ?: "Não foi possível verificar os arquivos deste item."
                   } finally { checkingId = null }
                 }
-              }) { Text(if (checkingId == game.identifier) "Verificando…" else "↓ Download") }
+              }) { Text(if (checkingId == game.identifier) "Verificando…" else "↓ Baixar", style = MaterialTheme.typography.labelSmall) }
             }
           }
         }
