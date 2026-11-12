@@ -267,7 +267,7 @@ object InternetArchiveXboxRepository {
   }
 
   /** Resolves the best matching Wikipedia page thumbnail for an Xbox game. */
-  private val coverCache = java.util.concurrent.ConcurrentHashMap<String, String?>()
+  private val coverCache = java.util.concurrent.ConcurrentHashMap<String, String>()
 
   fun resolveCoverUrl(title: String): String? {
     val key = title.trim().lowercase(Locale.ROOT)
@@ -324,7 +324,7 @@ object InternetArchiveXboxRepository {
         }
       }
     }
-    coverCache[key] = null
+    // ConcurrentHashMap rejects null values; leave misses uncached so lookup can retry later.
     return null
   }
 
