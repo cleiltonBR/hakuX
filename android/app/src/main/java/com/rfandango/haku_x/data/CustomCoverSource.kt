@@ -21,16 +21,75 @@ object CustomCoverSource {
   private const val MAX_TOTAL_IMAGE_BYTES = 1536L * 1024L * 1024L
   private const val MAX_IMAGE_BYTES = 20L * 1024L * 1024L
   private const val MAX_IMAGES = 5000
+  private const val MANIFEST_URL = "https://raw.githubusercontent.com/cleiltonBR/HakuX-X1-Covers-3D/main/manifest.json"
+  private const val MANIFEST_TTL_MS = 24L * 60 * 60 * 1000
 
+  /** Resolves one game against the shared manifest; the manifest itself is cached for 24 hours. */
+  fun resolveUrl(context: Context, gameTitle: String): String? {
+    val wanted = matchKey(gameTitle)
+    if (wanted.isBlank()) return null
+    val manifest = loadManifest(context) ?: return null
+    val covers = manifest.optJSONObject("covers") ?: return null
+    val keys = covers.keys()
+    var regionlessMatch: String? = null
+    while (keys.hasNext()) {
+      val title = keys.next()
+      val key = matchKey(title)
+      val value = covers.optString(title).takeIf { it.startsWith("https://raw.githubusercontent.com/") } ?: continue
+      if (key == wanted) return value
+      if (regionlessMatch == null && key.removeRegion() == wanted.removeRegion()) regionlessMatch = value
+    }
+    return regionlessMatch
+  }
+
+  /** Returns a cached local bitmap or downloads only this game's matching cover. */
   fun load(context: Context, gameTitle: String): Bitmap? {
     val key = normalize(gameTitle)
     if (key.isBlank()) return null
     val dir = File(context.applicationContext.filesDir, "custom_xbox_covers")
-    val candidates = listOf(key, key.replace(Regex("_(usa|europe|world|japan|japanese|korea|france|germany|italy|spain)$"), ""))
-    val file = candidates.asSequence().flatMap { candidate ->
+    if (!dir.exists() && !dir.mkdirs()) return null
+    val candidates = listOf(key, matchKey(gameTitle))
+    val existing = candidates.asSequence().distinct().flatMap { candidate ->
       listOf("png", "jpg", "jpeg", "webp").asSequence().map { File(dir, "$candidate.$it") }
-    }.firstOrNull { it.isFile } ?: return null
-    return BitmapFactory.decodeFile(file.absolutePath)
+    }.firstOrNull { it.isFile }
+    if (existing != null) return BitmapFactory.decodeFile(existing.absolutePath)
+
+    val imageUrl = resolveUrl(context, gameTitle) ?: return null
+    return runCatching {
+      val (resolved, connection) = request(URL(imageUrl))
+      try {
+        val filename = URLDecoder.decode(resolved.path.substringAfterLast('/'), "UTF-8")
+        val ext = extension(resolved.path, connection.contentType.orEmpty())
+        val target = File(dir, "$key.$ext")
+        connection.inputStream.use { copyImage(it, target) }
+        BitmapFactory.decodeFile(target.absolutePath)
+      } finally {
+        connection.disconnect()
+      }
+    }.getOrNull()
+  }
+
+  private fun loadManifest(context: Context): JSONObject? {
+    val file = File(context.applicationContext.filesDir, "custom_xbox_covers_manifest.json")
+    if (file.isFile && System.currentTimeMillis() - file.lastModified() < MANIFEST_TTL_MS) {
+      runCatching { JSONObject(file.readText()) }.getOrNull()?.let { return it }
+    }
+    return runCatching {
+      val connection = (URL(MANIFEST_URL).openConnection() as HttpURLConnection).apply {
+        connectTimeout = 15000
+        readTimeout = 30000
+        instanceFollowRedirects = true
+        setRequestProperty("Accept", "application/json")
+        setRequestProperty("User-Agent", "HakuX-Android/1.0")
+      }
+      try {
+        require(connection.responseCode in 200..299) { "Manifesto de capas indisponível (HTTP ${connection.responseCode})." }
+        val json = JSONObject(connection.inputStream.bufferedReader().use { it.readText() })
+        if (json.optInt("version") != 1 || json.optJSONObject("covers") == null) return@runCatching null
+        file.writeText(json.toString())
+        json
+      } finally { connection.disconnect() }
+    }.getOrNull()
   }
 
   /** Blocking; callers must use Dispatchers.IO. Returns the number of imported images. */
@@ -195,7 +254,7 @@ object CustomCoverSource {
   }
 
   private fun matchKey(value: String): String = normalize(value)
-    .replace(Regex("_(usa|europe|world|japan|japanese|korea|france|germany|italy|spain)$"), "")
+  private fun String.removeRegion(): String = replace(Regex("_(usa|europe|world|japan|japanese|korea|france|germany|italy|spain)$"), "")
 
   private fun normalize(value: String): String = value.substringBeforeLast('.', value)
     .lowercase(Locale.ROOT)
