@@ -90,6 +90,11 @@ class AppPrefs(context: Context) {
     get() = sp.getString(KEY_LIBRARY_VIEW_MODE, "grid")?.takeIf { it in setOf("grid", "list", "carousel") } ?: "grid"
     set(value) = sp.edit { putString(KEY_LIBRARY_VIEW_MODE, value.takeIf { it in setOf("grid", "list", "carousel") } ?: "grid") }
 
+  /** User-selected size multiplier for game covers across grid, list and carousel. */
+  var libraryCoverScale: Float
+    get() = sp.getFloat(KEY_LIBRARY_COVER_SCALE, 1.0f).coerceIn(0.5f, 2.0f)
+    set(value) = sp.edit { putFloat(KEY_LIBRARY_COVER_SCALE, value.coerceIn(0.5f, 2.0f)) }
+
   /** Public user-selected source for custom Xbox cover artwork. */
   var custom3dCoverSource: String
     get() = sp.getString(KEY_CUSTOM_3D_COVER_SOURCE, "") ?: ""
@@ -312,6 +317,7 @@ class AppPrefs(context: Context) {
     private const val KEY_AUTOMATIC_3D_COVERS = "automatic_3d_covers"
     private const val KEY_CUSTOM_3D_COVER_SOURCE = "custom_3d_cover_source"
     private const val KEY_LIBRARY_VIEW_MODE = "library_view_mode"
+    private const val KEY_LIBRARY_COVER_SCALE = "library_cover_scale"
     private const val KEY_RENDER_SCALE_HALF = "render_scale_half"
     private const val KEY_CONSOLE_TIMING = "console_timing"
     private const val KEY_THEME = "app_theme"
