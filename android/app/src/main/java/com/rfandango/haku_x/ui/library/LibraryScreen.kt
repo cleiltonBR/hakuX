@@ -146,7 +146,8 @@ fun LibraryScreen(
   vm: LibraryViewModel = viewModel(),
 ) {
   val state by vm.state.collectAsStateWithLifecycle()
-  val prefs = remember { com.rfandango.haku_x.data.AppPrefs(LocalContext.current) }
+  val context = LocalContext.current
+  val prefs = remember { com.rfandango.haku_x.data.AppPrefs(context) }
   var coverScale by remember { mutableStateOf(prefs.libraryCoverScale) }
   val update by Updates.available.collectAsStateWithLifecycle()
   var updateDialog by remember { mutableStateOf(false) }
