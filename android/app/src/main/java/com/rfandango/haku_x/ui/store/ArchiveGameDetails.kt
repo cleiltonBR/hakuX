@@ -1,8 +1,8 @@
 package com.rfandango.haku_x.ui.store
 
-import android.webkit.WebResourceRequest
-import android.webkit.WebView
-import android.webkit.WebViewClient
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -95,22 +95,50 @@ private object ArchiveGameInfoRepository {
   }
 
   private fun commonsScreenshots(title: String): List<String> {
-    val query = URLEncoder.encode("\"" + title + "\" video game screenshot", "UTF-8")
-    val url = "https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrsearch=" + query + "&gsrnamespace=6&gsrlimit=12&prop=imageinfo&iiprop=url&iiurlwidth=1200&format=json&origin=*"
-    val json = getJson(url) ?: return emptyList()
-    val pages = json.optJSONObject("query")?.optJSONObject("pages") ?: return emptyList()
-    val iterator = pages.keys()
-    val found = mutableListOf<String>()
-    while (iterator.hasNext()) {
-      val page = pages.optJSONObject(iterator.next()) ?: continue
-      val name = page.optString("title").lowercase(Locale.ROOT)
-      if (!(name.contains("screenshot") || name.contains("gameplay") || name.contains("video game"))) continue
-      val info = page.optJSONArray("imageinfo")?.optJSONObject(0) ?: continue
-      val imageUrl = info.optString("thumburl").ifBlank { info.optString("url") }
-      if (imageUrl.startsWith("https://") && imageUrl !in found) found += imageUrl
+    val normalizedTitle = normalize(title)
+    if (normalizedTitle.isBlank()) return emptyList()
+    val queries = listOf(
+      "\"$title\"",
+      "$title Xbox",
+      "$title game",
+    ).distinct()
+    val ranked = linkedMapOf<String, Int>()
+    for (term in queries) {
+      val query = URLEncoder.encode(term, "UTF-8")
+      val url = "https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrsearch=$query&gsrnamespace=6&gsrlimit=30&prop=imageinfo&iiprop=url|size&iiurlwidth=1400&format=json&origin=*"
+      val json = getJson(url) ?: continue
+      val pages = json.optJSONObject("query")?.optJSONObject("pages") ?: continue
+      val iterator = pages.keys()
+      while (iterator.hasNext()) {
+        val page = pages.optJSONObject(iterator.next()) ?: continue
+        val fileName = page.optString("title").substringAfter("File:", "").substringBeforeLast('.')
+        val key = normalize(fileName)
+        val score = when {
+          key.contains(normalizedTitle) -> 100
+          normalizedTitle.contains(key) && key.length >= 8 -> 85
+          normalizedTitle.split(" ").filter { it.length >= 3 }.count { key.contains(it) } >= 2 -> 65
+          else -> 0
+        }
+        if (score < 65) continue
+        val info = page.optJSONArray("imageinfo")?.optJSONObject(0) ?: continue
+        val width = info.optInt("width")
+        val height = info.optInt("height")
+        if (width < 300 || height < 160) continue
+        val imageUrl = info.optString("thumburl").ifBlank { info.optString("url") }
+        if (imageUrl.startsWith("https://")) {
+          val previous = ranked[imageUrl] ?: 0
+          if (score > previous) ranked[imageUrl] = score
+        }
+      }
     }
-    return found.take(8)
+    return ranked.entries.sortedByDescending { it.value }.take(12).map { it.key }
   }
+
+  private fun normalize(value: String): String = java.text.Normalizer.normalize(value, java.text.Normalizer.Form.NFD)
+    .replace(Regex("\\p{Mn}+"), "")
+    .lowercase(Locale.ROOT)
+    .replace(Regex("[^a-z0-9]+"), " ")
+    .trim()
 
   private fun getJson(rawUrl: String): JSONObject? {
     val connection = (URL(rawUrl).openConnection() as HttpURLConnection).apply {
@@ -222,35 +250,25 @@ internal fun ArchiveGameDetailsScreen(game: ArchiveXboxItem, onBack: () -> Unit)
 
 @Composable
 private fun YouTubeGameplaySearch(gameTitle: String) {
+  val context = LocalContext.current
   val encoded = remember(gameTitle) { URLEncoder.encode(gameTitle + " Xbox gameplay", "UTF-8") }
-  var loaded by remember(gameTitle) { mutableStateOf(false) }
-  Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-    AndroidView(
-      modifier = Modifier.fillMaxWidth().height(520.dp),
-      factory = { context ->
-        WebView(context).apply {
-          settings.javaScriptEnabled = true
-          settings.domStorageEnabled = true
-          settings.mediaPlaybackRequiresUserGesture = true
-          settings.loadWithOverviewMode = true
-          settings.useWideViewPort = true
-          settings.setSupportZoom(true)
-          webViewClient = object : WebViewClient() {
-            override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
-              val host = request.url.host?.lowercase(Locale.ROOT).orEmpty()
-              return !(host == "youtube.com" || host.endsWith(".youtube.com") || host == "googlevideo.com" || host.endsWith(".googlevideo.com"))
-            }
-            override fun onPageFinished(view: WebView, url: String) { loaded = true }
-          }
-          loadUrl("https://www.youtube.com/results?search_query=" + encoded)
-        }
-      },
-      update = { view ->
-        val target = "https://www.youtube.com/results?search_query=" + encoded
-        if (view.tag != target) { view.tag = target; view.loadUrl(target) }
-      },
+  val searchUrl = "https://www.youtube.com/results?search_query=" + encoded
+  Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Text(
+      "Pesquise gameplays de " + gameTitle + " diretamente no YouTube. A reprodução será aberta no aplicativo oficial ou no navegador, evitando a verificação antirrobô do WebView interno.",
+      style = MaterialTheme.typography.bodyMedium,
     )
-    if (!loaded) CircularProgressIndicator()
-    Text("Os vídeos são carregados diretamente do YouTube. A reprodução depende da disponibilidade do vídeo e das regras da plataforma.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    OutlinedButton(
+      onClick = {
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(searchUrl))
+        context.startActivity(intent)
+      },
+      modifier = Modifier.fillMaxWidth(),
+    ) { Text("Abrir gameplays no YouTube") }
+    Text(
+      "Se o YouTube estiver instalado, o Android poderá abrir o aplicativo oficial. Caso contrário, abrirá o navegador. O HakuX não solicita sua senha nem tenta contornar verificações da plataforma.",
+      style = MaterialTheme.typography.bodySmall,
+      color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
   }
 }
