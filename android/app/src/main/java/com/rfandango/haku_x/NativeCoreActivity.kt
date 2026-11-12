@@ -3,6 +3,7 @@ package com.rfandango.haku_x
 import android.app.ActivityManager
 import android.app.AlertDialog
 import android.content.Context
+import android.content.res.ColorStateList
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -37,6 +38,7 @@ import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.RelativeLayout
 import android.widget.ScrollView
+import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
 import android.window.OnBackInvokedDispatcher
@@ -973,6 +975,52 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     (if (i == selected) "✓  " else "") + label to if (i == selected) "SELECIONADO" else ""
   }) { onSelect(it) }
 
+  /** HakuX-styled continuous slider used by the in-game graphics quick menu. */
+  private fun showSeriesXSlider(
+    title: String,
+    initial: Int,
+    max: Int,
+    valueLabel: (Int) -> String,
+    onConfirm: (Int) -> Unit,
+  ) {
+    val panel = LinearLayout(this).apply {
+      orientation = LinearLayout.VERTICAL
+      setPadding(dp(20), dp(18), dp(20), dp(12))
+      setBackgroundColor(Color.rgb(15, 24, 17))
+    }
+    val value = TextView(this).apply {
+      text = valueLabel(initial.coerceIn(0, max))
+      setTextColor(Color.rgb(155, 230, 154))
+      textSize = 22f
+      typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+      gravity = Gravity.CENTER
+      setPadding(0, dp(8), 0, dp(8))
+    }
+    panel.addView(value)
+    val seek = SeekBar(this).apply {
+      this.max = max.coerceAtLeast(1)
+      progress = initial.coerceIn(0, this.max)
+      progressTintList = ColorStateList.valueOf(Color.rgb(57, 255, 20))
+      thumbTintList = ColorStateList.valueOf(Color.rgb(155, 230, 154))
+      progressBackgroundTintList = ColorStateList.valueOf(Color.rgb(48, 80, 54))
+    }
+    seek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+      override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+        value.text = valueLabel(progress)
+      }
+      override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+      override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
+    })
+    panel.addView(seek, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)))
+    val dialog = showMenuDialog(
+      AlertDialog.Builder(this).setTitle(title).setView(panel)
+        .setNegativeButton("CANCELAR", null)
+        .setPositiveButton("APLICAR") { _, _ -> onConfirm(seek.progress) }
+    )
+    dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+    dialog.window?.setLayout(minOf(resources.displayMetrics.widthPixels - dp(40), dp(520)), ViewGroup.LayoutParams.WRAP_CONTENT)
+  }
+
   /** The menu's cheats: toggled immediately and persisted per game. */
   private fun showCheats() {
     val cheats = runCheats
@@ -1218,10 +1266,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
       nativeSetCas(prefs.cas, prefs.casSharpness)
       nativeSetNis(prefs.nis, prefs.nisSharpness)
     }
-    val scaleValues = (1..8).map { it * 2 }
-    val scaleLabels = scaleValues.map { value ->
-      "${value / 2}x  •  ${640 * (value / 2)}×${480 * (value / 2)} em 480p"
-    }
+    val scaleValues = (1..16).toList()
     val currentMode = modes.indexOf(prefs.upscaleFilter).coerceAtLeast(0)
     val entries = listOf(
       "Escala de resolução" to "${prefs.renderScale}x • ${640 * prefs.renderScale}×${480 * prefs.renderScale} em 480p • reinicie o jogo",
@@ -1235,8 +1280,17 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     )
     showSeriesXMenu("Imagem e gráficos", entries) { which ->
       when (which) {
-        0 -> showSeriesXChoices("Escala de resolução", scaleLabels, (prefs.renderScale - 1).coerceIn(0, 7)) {
-          prefs.renderScale = scaleValues[it] / 2
+        0 -> showSeriesXSlider(
+          "Escala de resolução",
+          prefs.renderScaleHalfSteps - 1,
+          15,
+          { progress ->
+            val halfSteps = progress + 1
+            String.format(java.util.Locale.getDefault(), "%.1fx · %d×%d", halfSteps / 2f,
+              320 * halfSteps, 240 * halfSteps)
+          },
+        ) { progress ->
+          prefs.renderScaleHalfSteps = scaleValues[progress]
           showRuntimeGraphics()
         }
         1 -> showSeriesXChoices("Filtro de imagem", modeNames, currentMode) {
@@ -1245,25 +1299,40 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
         2 -> { prefs.anisotropyEnabled = !prefs.anisotropyEnabled; showRuntimeGraphics() }
         3 -> {
           val levels = listOf(1, 2, 4, 8, 16)
-          showSeriesXChoices("Nível anisotrópico", levels.map { "${it}x" },
-            levels.indexOf(prefs.anisotropyLevel).coerceAtLeast(0)) {
-            prefs.anisotropyLevel = levels[it]; showRuntimeGraphics()
+          showSeriesXSlider(
+            "Nível anisotrópico",
+            levels.indexOf(prefs.anisotropyLevel).coerceAtLeast(0),
+            levels.lastIndex,
+            { "${levels[it.coerceIn(0, levels.lastIndex)]}x" },
+          ) {
+            prefs.anisotropyLevel = levels[it.coerceIn(0, levels.lastIndex)]
+            showRuntimeGraphics()
           }
         }
         4 -> { prefs.cas = !prefs.cas; refresh(); showRuntimeGraphics() }
         5 -> {
-          val values = (0..10).map { it * 0.2f }
-          showSeriesXChoices("Intensidade CAS", values.map { "%.1f".format(java.util.Locale.US, it) },
-            values.indexOfFirst { kotlin.math.abs(it - prefs.casSharpness) < 0.001f }.coerceAtLeast(0)) {
-            prefs.casSharpness = values[it]; refresh(); showRuntimeGraphics()
+          showSeriesXSlider(
+            "Intensidade CAS",
+            (prefs.casSharpness * 10f).toInt().coerceIn(0, 20),
+            20,
+            { "%.1f".format(java.util.Locale.US, it / 10f) },
+          ) {
+            prefs.casSharpness = it / 10f
+            refresh()
+            showRuntimeGraphics()
           }
         }
         6 -> { prefs.nis = !prefs.nis; refresh(); showRuntimeGraphics() }
         7 -> {
-          val values = (0..10).map { it / 10f }
-          showSeriesXChoices("Nitidez NIS", values.map { "${(it * 100).toInt()}%" },
-            values.indexOfFirst { kotlin.math.abs(it - prefs.nisSharpness) < 0.001f }.coerceAtLeast(0)) {
-            prefs.nisSharpness = values[it]; refresh(); showRuntimeGraphics()
+          showSeriesXSlider(
+            "Nitidez NIS",
+            (prefs.nisSharpness * 100f).toInt().coerceIn(0, 100),
+            100,
+            { "$it%" },
+          ) {
+            prefs.nisSharpness = it / 100f
+            refresh()
+            showRuntimeGraphics()
           }
         }
       }
