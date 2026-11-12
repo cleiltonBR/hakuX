@@ -100,6 +100,7 @@ fun StoreScreen() {
   var detailsGame by remember { mutableStateOf<ArchiveXboxItem?>(null) }
   var options by remember { mutableStateOf<List<ArchiveDownloadOption>>(emptyList()) }
   var selectedOption by remember { mutableStateOf<ArchiveDownloadOption?>(null) }
+  val gridState = rememberLazyGridState()
 
   fun toggleFavorite(id: String) {
     favorites = if (id in favorites) favorites - id else favorites + id
@@ -112,25 +113,35 @@ fun StoreScreen() {
       loading = true
       message = if (reset) "Carregando catálogo do Xbox Clássico…" else "Carregando mais jogos…"
       try {
+        if (reset) gridState.scrollToItem(0)
         val nextPage = if (reset) 1 else currentPage + 1
-        val page = withContext(Dispatchers.IO) { InternetArchiveXboxRepository.searchPage(term, page = nextPage, rows = 100) }
-        results = if (reset) page.items else results + page.items.filterNot { new ->
-          results.any { old -> old.identifier == new.identifier && old.archiveFileName == new.archiveFileName }
+        val page = withContext(Dispatchers.IO) {
+          InternetArchiveXboxRepository.searchPage(term, page = nextPage, rows = 100)
         }
+        val merged = if (reset) {
+          page.items
+        } else {
+          (results + page.items).distinctBy { game ->
+            game.archiveFileName?.let { "${game.identifier}:$it" } ?: "${game.identifier}:${game.title.lowercase(java.util.Locale.ROOT)}"
+          }
+        }
+        results = merged
         currentPage = page.page
-        hasMore = page.hasMore
+        hasMore = page.hasMore && page.items.isNotEmpty()
         loadedQuery = term
-        message = "${page.total} registros encontrados · ${results.size} carregados"
+        message = "${page.total} registros encontrados · ${merged.size} carregados"
       } catch (error: Exception) {
         message = error.message ?: "Não foi possível carregar a biblioteca online."
-        if (reset) results = emptyList()
+        if (reset) {
+          results = emptyList()
+          currentPage = 0
+          hasMore = false
+        }
       } finally {
         loading = false
       }
     }
   }
-
-  val gridState = rememberLazyGridState()
   val genres = listOf("Todos", "FPS", "Luta", "Corrida", "Ação", "Esportes", "RPG", "Plataforma", "Outros")
   val visibleGames = remember(results, selectedGenre, favoritesOnly, favorites, alphabetical) {
     val filtered = results.filter { game ->
@@ -213,9 +224,19 @@ fun StoreScreen() {
           }
         }
         if (visibleGames.isEmpty() && !loading) {
-          item { Text(if (favoritesOnly) "Você ainda não adicionou jogos aos favoritos." else "Nenhum jogo encontrado nesta categoria.", modifier = Modifier.padding(18.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
+          item { Text(if (favoritesOnly) "Você ainda não adicionou jogos aos favoritos nesta parte do catálogo." else "Nenhum jogo encontrado nesta categoria.", modifier = Modifier.padding(18.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
-      }
+        if (hasMore) {
+          item {
+            TextButton(
+              modifier = Modifier.fillMaxWidth(),
+              enabled = !loading,
+              onClick = { loadCatalog(reset = false, term = loadedQuery) },
+            ) {
+              Text(if (loading) "Carregando…" else "Carregar mais jogos")
+            }
+          }
+        }
     }
     if (loading && results.isNotEmpty()) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
     } else {
