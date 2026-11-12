@@ -145,13 +145,6 @@ object ArchiveXboxDownloads {
         .map { metadata.optString(it).trim() }
         .firstOrNull { it.isNotBlank() }
         .orEmpty()
-        val reason = if (license.isBlank()) {
-          "O Internet Archive não informou a licença deste item."
-        } else {
-          "A licença informada pelo Internet Archive não está entre as licenças abertas reconhecidas pelo HakuX."
-        }
-        "$reason O download foi bloqueado; verifique os metadados do item."
-      }
       val files = root.optJSONArray("files") ?: JSONArray()
       buildList {
         for (index in 0 until files.length()) {
