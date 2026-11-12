@@ -43,8 +43,9 @@ import android.widget.TextView
 import android.widget.Toast
 import android.window.OnBackInvokedDispatcher
 import androidx.documentfile.provider.DocumentFile
-import androidx.compose.ui.platform.setContent
 import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import com.rfandango.haku_x.data.AppPrefs
 import com.rfandango.haku_x.data.CheatInfo
 import com.rfandango.haku_x.data.Controllers
@@ -992,7 +993,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
       setViewCompositionStrategy(
         androidx.compose.ui.platform.ViewCompositionStrategy.DisposeOnDetachedFromWindow
       )
-      setContent {
+      this.setContent {
         var sliderValue by androidx.compose.runtime.remember {
           androidx.compose.runtime.mutableFloatStateOf(initial.coerceIn(0, max).toFloat())
         }
