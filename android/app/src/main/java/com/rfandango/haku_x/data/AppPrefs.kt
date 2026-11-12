@@ -118,7 +118,7 @@ class AppPrefs(context: Context) {
   /** The HLE GPU's render scale, 1-8x the title's resolution (read at game start). */
   var renderScale: Int
     get() = sp.getInt(NativeCoreActivity.PREF_SCALE, NativeCoreActivity.DEFAULT_SCALE).coerceIn(1, 8)
-    set(value) { renderScaleHalfSteps = value.coerceIn(1, 8); sp.edit { putInt(NativeCoreActivity.PREF_SCALE, value.coerceIn(1, 8)) } }
+    set(value) { renderScaleHalfSteps = value.coerceIn(1, 8) * 2; sp.edit { putInt(NativeCoreActivity.PREF_SCALE, value.coerceIn(1, 8)) } }
 
   /**
    * Fixed-point render scale: 1 = 0.5x, 2 = 1x, ... 16 = 8x.
