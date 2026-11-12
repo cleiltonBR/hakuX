@@ -133,7 +133,6 @@ fun SettingsScreen(
   var cableDialog by remember { mutableStateOf(false) }
   var aspectDialog by remember { mutableStateOf(false) }
   val driver = remember { driverLabel(context) }       /* read again when back from its screen */
-  var scaleDialog by remember { mutableStateOf(false) }
   val theme by AppTheme.mode.collectAsState()
   var themeDialog by remember { mutableStateOf(false) }
   val dark = appInDarkTheme()
@@ -621,15 +620,6 @@ fun SettingsScreen(
       current = upscale,
       onPick = { upscale = it; prefs.upscaleFilter = it; upscaleDialog = false },
       onDismiss = { upscaleDialog = false },
-    )
-  }
-  if (scaleDialog) {
-    ChoiceDialog(
-      title = stringResource(R.string.settings_scale),
-      options = SCALES.map { it to scaleLabel(it) },
-      current = scale,
-      onPick = { scale = it; prefs.renderScale = it; scaleDialog = false },
-      onDismiss = { scaleDialog = false },
     )
   }
   if (themeDialog) {
