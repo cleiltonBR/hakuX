@@ -48,8 +48,8 @@ data class ArchiveDownload(
 }
 
 /**
- * Downloads only files exposed by Archive.org items with an explicit,
- * recognized open licence. Files are written into the configured Xbox games
+ * Lists downloadable game files from an Archive.org item after checking its
+ * declared licence metadata. Files are written into the configured Xbox games
  * folder so GameScanner can discover them after a library refresh.
  */
 object ArchiveXboxDownloads {
@@ -141,9 +141,14 @@ object ArchiveXboxDownloads {
       require(status in 200..299) { "Internet Archive respondeu HTTP $status." }
       val root = JSONObject(connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() })
       val metadata = root.optJSONObject("metadata") ?: JSONObject()
-      val license = metadata.optString("licenseurl").lowercase(Locale.ROOT)
+      val license = metadata.optString("licenseurl").trim()
       require(isRecognizedOpenLicense(license)) {
-        "Este item não informa uma licença aberta compatível. O HakuX não libera o download deste conteúdo."
+        val reason = if (license.isBlank()) {
+          "O Internet Archive não informou a licença deste item."
+        } else {
+          "A licença informada pelo Internet Archive não está entre as licenças abertas reconhecidas pelo HakuX."
+        }
+        "$reason O download foi bloqueado; verifique os metadados do item."
       }
       val files = root.optJSONArray("files") ?: JSONArray()
       buildList {
@@ -450,13 +455,19 @@ object ArchiveXboxDownloads {
     }
   }
 
-  private fun isRecognizedOpenLicense(value: String): Boolean =
-    value.contains("creativecommons.org/licenses/by/4.0") ||
-      value.contains("creativecommons.org/licenses/by-sa/4.0") ||
-      value.contains("creativecommons.org/licenses/by/3.0") ||
-      value.contains("creativecommons.org/licenses/by-sa/3.0") ||
-      value.contains("creativecommons.org/publicdomain/zero/1.0") ||
-      value.contains("creativecommons.org/publicdomain/mark/1.0")
+  private fun isRecognizedOpenLicense(value: String): Boolean {
+    if (value.isBlank()) return false
+    val normalized = value
+      .lowercase(Locale.ROOT)
+      .substringBefore('#')
+      .substringBefore('?')
+      .trimEnd('/')
+    // Accept canonical HTTP/HTTPS Creative Commons URLs and common version
+    // variants, while deliberately excluding NC/ND licences.
+    return Regex(
+      """https?://(?:www\.)?creativecommons\.org/(?:licenses/(?:by|by-sa)/(?:2\.0|2\.5|3\.0|4\.0)|publicdomain/(?:zero/1\.0|mark/1\.0))"""
+    ).matches(normalized)
+  }
 
   private fun encodePathSegment(value: String): String =
     URLEncoder.encode(value, Charsets.UTF_8.name()).replace("+", "%20")
