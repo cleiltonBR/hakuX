@@ -54,13 +54,14 @@ private object ArchiveGameInfoRepository {
     val thumb = summary?.optJSONObject("thumbnail")?.optString("source")
       ?.takeIf { it.startsWith("https://") }
     val screenshots = commonsScreenshots(title)
+    val wikidata = summary?.optString("wikibase_item")?.takeIf { it.matches(Regex("Q[0-9]+")) }?.let(::wikidataDetails)
     return ArchiveGameInfo(
       description = description,
       thumbnail = thumb,
       screenshots = screenshots,
-      developer = null,
-      publisher = null,
-      releaseDate = game.year,
+      developer = wikidata?.first,
+      publisher = wikidata?.second,
+      releaseDate = wikidata?.third ?: game.year,
       sourceLabel = if (pt != null) "Wikipedia em português" else if (en != null) "Wikipedia (tradução não disponível)" else "Catálogo HakuX",
     )
   }
@@ -68,6 +69,26 @@ private object ArchiveGameInfoRepository {
   private fun wikipediaSummary(language: String, title: String): JSONObject? {
     val slug = URLEncoder.encode(title.replace(' ', '_'), "UTF-8").replace("+", "%20")
     return getJson("https://$language.wikipedia.org/api/rest_v1/page/summary/$slug")
+  }
+
+  private fun wikidataDetails(id: String): Triple<String?, String?, String?>? {
+    val json = getJson("https://www.wikidata.org/w/api.php?action=wbgetentities&ids=$id&props=claims%7Clabels&languages=pt%7Cen&format=json")
+      ?: return null
+    val entity = json.optJSONObject("entities")?.optJSONObject(id) ?: return null
+    val claims = entity.optJSONObject("claims") ?: return null
+    fun linkedLabel(property: String): String? {
+      val claim = claims.optJSONArray(property)?.optJSONObject(0)
+      val entityId = claim?.optJSONObject("mainsnak")?.optJSONObject("datavalue")
+        ?.optJSONObject("value")?.optString("id") ?: return null
+      val linked = getJson("https://www.wikidata.org/w/api.php?action=wbgetentities&ids=$entityId&props=labels&languages=pt%7Cen&format=json")
+      val labels = linked?.optJSONObject("entities")?.optJSONObject(entityId)?.optJSONObject("labels")
+      return labels?.optJSONObject("pt")?.optString("value")?.takeIf { it.isNotBlank() }
+        ?: labels?.optJSONObject("en")?.optString("value")?.takeIf { it.isNotBlank() }
+    }
+    val date = claims.optJSONArray("P577")?.optJSONObject(0)?.optJSONObject("mainsnak")
+      ?.optJSONObject("datavalue")?.optJSONObject("value")?.optString("time")
+      ?.removePrefix("+")?.take(10)?.takeIf { it.length == 10 }
+    return Triple(linkedLabel("P178"), linkedLabel("P123"), date)
   }
 
   private fun commonsScreenshots(title: String): List<String> {
@@ -128,7 +149,7 @@ internal fun ArchiveGameDetailsDialog(game: ArchiveXboxItem, onDismiss: () -> Un
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
           Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text("Gênero: ${game.genre}")
-            Text("Lançamento: ${game.year ?: "Não identificado"}")
+            Text("Lançamento: ${info?.releaseDate ?: "Não identificado"}")
             Text("Região: ${game.region}")
             Text("Desenvolvedora: ${info?.developer ?: "Não informado"}")
             Text("Publicadora: ${info?.publisher ?: "Não informado"}")
