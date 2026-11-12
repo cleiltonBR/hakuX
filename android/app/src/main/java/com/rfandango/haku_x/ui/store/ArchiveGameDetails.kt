@@ -74,7 +74,7 @@ private object ArchiveGameInfoRepository {
   private fun wikipediaSummary(language: String, title: String): JSONObject? {
     // Resolve the title through Wikipedia search rather than assuming an exact
     // article slug. Prefer a matching game entry to avoid unrelated same-name pages.
-    val query = URLEncoder.encode("\\"$title\\" video game", "UTF-8")
+    val query = URLEncoder.encode("\"$title\" video game", "UTF-8")
     val searchUrl = "https://" + language +
       ".wikipedia.org/w/api.php?action=query&list=search&srnamespace=0&srlimit=5&srsearch=" +
       query + "&format=json"
