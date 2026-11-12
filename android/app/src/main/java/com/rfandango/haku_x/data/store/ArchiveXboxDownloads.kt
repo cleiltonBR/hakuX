@@ -141,7 +141,10 @@ object ArchiveXboxDownloads {
       require(status in 200..299) { "Internet Archive respondeu HTTP $status." }
       val root = JSONObject(connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() })
       val metadata = root.optJSONObject("metadata") ?: JSONObject()
-      val license = metadata.optString("licenseurl").trim()
+      val license = sequenceOf("licenseurl", "license_url", "license")
+        .map { metadata.optString(it).trim() }
+        .firstOrNull { it.isNotBlank() }
+        .orEmpty()
       require(isRecognizedOpenLicense(license)) {
         val reason = if (license.isBlank()) {
           "O Internet Archive não informou a licença deste item."
@@ -476,16 +479,20 @@ object ArchiveXboxDownloads {
 
   private fun isRecognizedOpenLicense(value: String): Boolean {
     if (value.isBlank()) return false
-    val normalized = value
-      .lowercase(Locale.ROOT)
-      .substringBefore('#')
-      .substringBefore('?')
-      .trimEnd('/')
-    // Accept canonical HTTP/HTTPS Creative Commons URLs and common version
-    // variants, while deliberately excluding NC/ND licences.
-    return Regex(
-      """https?://(?:www\.)?creativecommons\.org/(?:licenses/(?:by|by-sa)/(?:2\.0|2\.5|3\.0|4\.0)|publicdomain/(?:zero/1\.0|mark/1\.0))"""
-    ).matches(normalized)
+    val uri = runCatching { android.net.Uri.parse(value.trim()) }.getOrNull() ?: return false
+    val scheme = uri.scheme?.lowercase(Locale.ROOT)
+    val host = uri.host?.lowercase(Locale.ROOT)?.removePrefix("www.")
+    if (scheme !in setOf("http", "https") || host != "creativecommons.org") return false
+
+    val path = uri.path.orEmpty().trim('/').lowercase(Locale.ROOT)
+    // Recognize standard Creative Commons families and versions, including
+    // NC/ND variants whose terms may still permit the user's intended use.
+    val licencePattern = Regex(
+      """licenses/(?:by|by-sa|by-nc|by-nc-sa|by-nd|by-nc-nd)/(?:2\\.0|2\\.5|3\\.0|4\\.0)"""
+    )
+    return licencePattern.matches(path) ||
+      path == "publicdomain/zero/1.0" ||
+      path == "publicdomain/mark/1.0"
   }
 
   private fun encodePathSegment(value: String): String =
