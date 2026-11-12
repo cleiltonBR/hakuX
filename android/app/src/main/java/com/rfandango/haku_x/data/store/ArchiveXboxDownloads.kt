@@ -358,6 +358,8 @@ object ArchiveXboxDownloads {
         downloaded.delete()
         update(entry.copy(done = completedBytes, total = completedBytes, status = ArchiveDownload.Status.COMPLETED, outputName = folderName))
         mutableLibraryRefresh.tryEmit(Unit)
+        // Extracted archives no longer need a queue entry; the game is now in the library.
+        remove(entry.identifier, entry.fileName)
       } else {
         update(entry.copy(done = completedBytes, total = completedBytes, status = ArchiveDownload.Status.COMPLETED, outputName = finalName))
         mutableLibraryRefresh.tryEmit(Unit)
@@ -425,6 +427,23 @@ object ArchiveXboxDownloads {
     else if (item.status == ArchiveDownload.Status.QUEUED) {
       update(item.copy(status = ArchiveDownload.Status.CANCELLED, error = "Download cancelado antes de iniciar."))
     }
+  }
+
+  /** Remove a terminal queue item without touching downloaded or extracted game files. */
+  @Synchronized
+  fun remove(identifier: String, fileName: String) {
+    val key = downloadKey(identifier, fileName)
+    val item = mutableDownloads.value.firstOrNull { downloadKey(it.identifier, it.fileName) == key } ?: return
+    require(item.status in setOf(
+      ArchiveDownload.Status.COMPLETED,
+      ArchiveDownload.Status.CANCELLED,
+      ArchiveDownload.Status.FAILED,
+    )) { "Só é possível remover downloads concluídos, cancelados ou com falha." }
+    mutableDownloads.value = mutableDownloads.value.filterNot {
+      downloadKey(it.identifier, it.fileName) == key
+    }
+    requests.remove(key)
+    persist()
   }
 
   @Deprecated("Use cancel(identifier, fileName) to cancel a specific queue item.")
