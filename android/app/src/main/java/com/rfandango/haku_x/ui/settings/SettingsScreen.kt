@@ -23,6 +23,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.Slider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -103,7 +104,9 @@ fun SettingsScreen(
   var showFps by remember { mutableStateOf(prefs.showFps) }
   var automatic3dCovers by remember { mutableStateOf(prefs.automatic3dCovers) }
   var showHitches by remember { mutableStateOf(prefs.showHitches) }
-  var scale by remember { mutableIntStateOf(prefs.renderScale) }
+  var scaleHalfSteps by remember { mutableIntStateOf(prefs.renderScaleHalfSteps) }
+  var anisotropyEnabled by remember { mutableStateOf(prefs.anisotropyEnabled) }
+  var anisotropyLevel by remember { mutableIntStateOf(prefs.anisotropyLevel) }
   var aspect by remember { mutableStateOf(prefs.aspectRatio) }
   var fxaa by remember { mutableStateOf(prefs.fxaa) }
   var cas by remember { mutableStateOf(prefs.cas) }
@@ -385,16 +388,16 @@ fun SettingsScreen(
 
       if (selectedSettingsCategory == "graphics") {
       Section(stringResource(R.string.settings_section_graphics))
-      ListItem(
-        headlineContent = { Text(stringResource(R.string.settings_scale)) },
-        supportingContent = {
-          Text(
-            scaleHalfLabel(scale) + " (480p example). " +
-              stringResource(R.string.settings_scale_desc) + " " +
-              stringResource(R.string.settings_applies_next_start)
-          )
-        },
-        modifier = Modifier.clickable { scaleDialog = true },
+      GraphicsSlider(
+        title = stringResource(R.string.settings_scale),
+        valueLabel = String.format(Locale.getDefault(), "%.1fx · %d×%d", scaleHalfSteps / 2f,
+          320 * scaleHalfSteps, 240 * scaleHalfSteps),
+        value = scaleHalfSteps.toFloat(),
+        valueRange = 1f..16f,
+        steps = 14,
+        startLabel = "0,5x",
+        endLabel = "8,0x",
+        onValueChange = { scaleHalfSteps = it.toInt().coerceIn(1, 16); prefs.renderScaleHalfSteps = scaleHalfSteps },
       )
       SwitchItem(
         title = stringResource(R.string.settings_fxaa),
@@ -409,10 +412,15 @@ fun SettingsScreen(
         checked = nis,
         onChange = { nis = it; prefs.nis = it },
       )
-      ListItem(
-        headlineContent = { Text(stringResource(R.string.settings_nis_sharpness)) },
-        supportingContent = { Text(stringResource(R.string.settings_nis_sharpness_value, (nisSharpness * 100).toInt())) },
-        modifier = Modifier.clickable { nisSharpnessDialog = true },
+      GraphicsSlider(
+        title = stringResource(R.string.settings_nis_sharpness),
+        valueLabel = "${(nisSharpness * 100).toInt()}%",
+        value = nisSharpness * 100f,
+        valueRange = 0f..100f,
+        steps = 9,
+        startLabel = "0%",
+        endLabel = "100%",
+        onValueChange = { nisSharpness = it / 100f; prefs.nisSharpness = nisSharpness },
       )
       SwitchItem(
         title = stringResource(R.string.settings_cas),
@@ -420,10 +428,32 @@ fun SettingsScreen(
         checked = cas,
         onChange = { cas = it; prefs.cas = it },
       )
-      ListItem(
-        headlineContent = { Text(stringResource(R.string.settings_cas_sharpness)) },
-        supportingContent = { Text(stringResource(R.string.settings_cas_sharpness_value, casSharpness)) },
-        modifier = Modifier.clickable { casSharpnessDialog = true },
+      GraphicsSlider(
+        title = stringResource(R.string.settings_cas_sharpness),
+        valueLabel = String.format(Locale.getDefault(), "%.1f", casSharpness),
+        value = casSharpness * 10f,
+        valueRange = 0f..20f,
+        steps = 19,
+        startLabel = "0,0",
+        endLabel = "2,0",
+        onValueChange = { casSharpness = it / 10f; prefs.casSharpness = casSharpness },
+      )
+      SwitchItem(
+        title = "Filtro anisotrópico",
+        summary = if (anisotropyEnabled) "Ativado · aplicado ao iniciar o jogo" else "Desativado · aplicado ao iniciar o jogo",
+        checked = anisotropyEnabled,
+        onChange = { anisotropyEnabled = it; prefs.anisotropyEnabled = it },
+      )
+      val anisotropyLevels = listOf(1, 2, 4, 8, 16)
+      GraphicsSlider(
+        title = "Nível anisotrópico",
+        valueLabel = "${anisotropyLevel}x",
+        value = anisotropyLevels.indexOf(anisotropyLevel).coerceAtLeast(0).toFloat(),
+        valueRange = 0f..4f,
+        steps = 3,
+        startLabel = "1x",
+        endLabel = "16x",
+        onValueChange = { anisotropyLevel = anisotropyLevels[it.toInt().coerceIn(0, 4)]; prefs.anisotropyLevel = anisotropyLevel },
       )
       ListItem(
         headlineContent = { Text(stringResource(R.string.settings_upscale)) },
@@ -755,4 +785,34 @@ private fun driverLabel(context: android.content.Context): String {
   val d = GpuDriverHelper.getActiveDriver() ?: return context.getString(R.string.settings_gpu_driver_system)
   val name = d.name ?: context.getString(R.string.settings_gpu_driver_custom)
   return d.driverVersion?.let { context.getString(R.string.settings_gpu_driver_active_version, name, it) } ?: name
+}
+
+@Composable
+private fun GraphicsSlider(
+  title: String,
+  valueLabel: String,
+  value: Float,
+  valueRange: ClosedFloatingPointRange<Float>,
+  steps: Int,
+  startLabel: String,
+  endLabel: String,
+  onValueChange: (Float) -> Unit,
+) {
+  Column(
+    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 7.dp)
+      .clip(RoundedCornerShape(12.dp))
+      .background(Color(0xFF101B12))
+      .border(1.dp, Color(0xFF397A40), RoundedCornerShape(12.dp))
+      .padding(horizontal = 14.dp, vertical = 8.dp),
+  ) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween) {
+      Text(title, style = MaterialTheme.typography.labelMedium, color = Color(0xFFB8E8B8))
+      Text(valueLabel, style = MaterialTheme.typography.labelLarge, color = Color(0xFF9BE69A))
+    }
+    Slider(value = value.coerceIn(valueRange), onValueChange = onValueChange, valueRange = valueRange, steps = steps)
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween) {
+      Text(startLabel, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+      Text(endLabel, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+  }
 }
