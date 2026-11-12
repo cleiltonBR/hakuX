@@ -25,8 +25,7 @@ object XboxCoverCache {
   /** Blocking; callers must use Dispatchers.IO. */
   fun load(context: Context, titleId: Long, gameTitle: String = ""): Bitmap? {
     if (gameTitle.isNotBlank()) CustomCoverSource.load(context, gameTitle)?.let { return it }
-    if (titleId == 0L) return null
-    val id = String.format(Locale.ROOT, "%08X", titleId)
+    val id = if (titleId != 0L) String.format(Locale.ROOT, "%08X", titleId) else "name_${coverKey(gameTitle).hashCode().toUInt().toString(16)}"
     val dir = File(context.applicationContext.filesDir, "xbox_cover_cache")
     if (!dir.exists() && !dir.mkdirs()) return null
     val cached = File(dir, "$id.jpg")
@@ -39,6 +38,10 @@ object XboxCoverCache {
       BitmapFactory.decodeFile(x1Cached.absolutePath)?.let { return it }
       x1Cached.delete()
     }
+
+    // A title-only lookup is still useful for imported discs whose XBE metadata
+    // does not expose a valid Xbox Title ID.
+    if (titleId == 0L) return loadX1Cover(context, gameTitle, dir, id)
 
     // Do not permanently cache misses: the previous implementation used an
     // unsupported API response shape and could poison this cache forever.
@@ -113,17 +116,15 @@ object XboxCoverCache {
       Log.w(TAG, "Could not load X1_Covers index", e)
       return null
     }
-    fun key(value: String) = value.lowercase(Locale.ROOT)
-      .replace(Regex("\\s*\\([^)]*\\)\\s*$"), "")
-      .replace(Regex("[^a-z0-9]+"), "")
-    val wanted = key(gameTitle)
+    val wanted = coverKey(gameTitle)
     if (wanted.isBlank()) return null
     val candidates = (0 until entries.length()).mapNotNull { i ->
       val row = entries.optJSONObject(i) ?: return@mapNotNull null
       val name = row.optString("name")
       if (!name.lowercase(Locale.ROOT).endsWith(".png")) return@mapNotNull null
-      val actual = key(name.substringBeforeLast('.'))
-      if (actual == wanted || actual.startsWith(wanted) || wanted.startsWith(actual)) row.optString("download_url").takeIf { it.startsWith("https://") } else null
+      val actual = coverKey(name.substringBeforeLast('.'))
+      val regionless = coverKey(name.substringBeforeLast('.').replace(Regex("\\s*\\([^)]*\\)\\s*$"), ""))
+      if (actual == wanted || regionless == wanted) row.optString("download_url").takeIf { it.startsWith("https://") } else null
     }.distinct()
     for (imageUrl in candidates) {
       val file = File(cacheDir, "$titleId.x1.png")
@@ -133,6 +134,13 @@ object XboxCoverCache {
     }
     return null
   }
+
+  private fun coverKey(value: String): String = java.text.Normalizer.normalize(value, java.text.Normalizer.Form.NFD)
+    .replace(Regex("\\p{Mn}+"), "")
+    .lowercase(Locale.ROOT)
+    .replace(Regex("^(microsoft\\s+)?xbox(\\s+classic)?\\s*[-:]+\\s*"), "")
+    .replace(Regex("\\s*\\((usa|us|europe|european|eu|world|japan|japanese|pal|ntsc[-_ ]?[uj])\\)\\s*$"), "")
+    .replace(Regex("[^a-z0-9]+"), "")
 
   private fun resolveXmids(id: String): List<String> {
     val connection = (URL("$API?id=$id").openConnection() as HttpURLConnection).apply {
