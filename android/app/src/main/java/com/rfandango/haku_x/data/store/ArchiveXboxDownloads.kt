@@ -488,7 +488,7 @@ object ArchiveXboxDownloads {
     // Recognize standard Creative Commons families and versions, including
     // NC/ND variants whose terms may still permit the user's intended use.
     val licencePattern = Regex(
-      """licenses/(?:by|by-sa|by-nc|by-nc-sa|by-nd|by-nc-nd)/(?:2\\.0|2\\.5|3\\.0|4\\.0)"""
+      """licenses/(?:by|by-sa|by-nc|by-nc-sa|by-nd|by-nc-nd)/(?:2\.0|2\.5|3\.0|4\.0)"""
     )
     return licencePattern.matches(path) ||
       path == "publicdomain/zero/1.0" ||
