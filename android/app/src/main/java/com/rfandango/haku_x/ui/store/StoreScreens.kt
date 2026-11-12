@@ -147,6 +147,7 @@ fun StoreScreen() {
       }
   }
 
+  if (detailsGame == null) {
   Column(modifier = Modifier.fillMaxSize().padding(horizontal = 5.dp, vertical = 3.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
       FilterChip(modifier = Modifier.height(32.dp), selected = selectedStoreTab == "catalog", onClick = { selectedStoreTab = "catalog" }, label = { Text("Catálogo Xbox", style = MaterialTheme.typography.labelMedium) })
@@ -249,8 +250,8 @@ fun StoreScreen() {
     }
   }
 
-  detailsGame?.let { game ->
-    ArchiveGameDetailsDialog(game = game, onDismiss = { detailsGame = null })
+  } else {
+    detailsGame?.let { game -> ArchiveGameDetailsScreen(game = game, onBack = { detailsGame = null }) }
   }
 
   selectedGame?.let { game ->
