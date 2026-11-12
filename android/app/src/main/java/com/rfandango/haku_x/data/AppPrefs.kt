@@ -127,15 +127,14 @@ class AppPrefs(context: Context) {
   var renderScaleHalfSteps: Int
     get() {
       if (sp.contains(KEY_RENDER_SCALE_HALF)) {
-        val stored = sp.getInt(KEY_RENDER_SCALE_HALF, 2).coerceIn(2, 16)
-        return ((stored + 1) / 2) * 2
+        return sp.getInt(KEY_RENDER_SCALE_HALF, 2).coerceIn(1, 16)
       }
       val migrated = sp.getInt(NativeCoreActivity.PREF_SCALE, NativeCoreActivity.DEFAULT_SCALE)
         .coerceIn(1, 8) * 2
       sp.edit { putInt(KEY_RENDER_SCALE_HALF, migrated) }
       return migrated
     }
-    set(value) = sp.edit { putInt(KEY_RENDER_SCALE_HALF, value.coerceIn(1, 8) * 2) }
+    set(value) = sp.edit { putInt(KEY_RENDER_SCALE_HALF, value.coerceIn(1, 16)) }
 
   /** The picture's shape: auto, 4:3, 16:9 or stretch (read at game start). */
   var aspectRatio: String
