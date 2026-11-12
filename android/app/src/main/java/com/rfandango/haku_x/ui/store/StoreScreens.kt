@@ -57,6 +57,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.rfandango.haku_x.data.CustomCoverSource
 import com.rfandango.haku_x.data.AppPrefs
 import com.rfandango.haku_x.data.Storage
 import com.rfandango.haku_x.data.store.ArchiveDownload
@@ -275,18 +276,19 @@ fun StoreScreen() {
   }
 }
 
-/** Loads a title-specific cover only for cards that are composed on screen. */
+/** Resolves the shared 3D-cover manifest only for visible store cards. Coil downloads/caches only the requested image. */
 @Composable
 private fun ArchiveGameCover(game: ArchiveXboxItem) {
+  val context = LocalContext.current
   var coverUrl by remember(game.title) { mutableStateOf<String?>(null) }
   LaunchedEffect(game.title) {
-    coverUrl = withContext(Dispatchers.IO) { InternetArchiveXboxRepository.resolveCoverUrl(game.title) }
+    coverUrl = withContext(Dispatchers.IO) { CustomCoverSource.resolveUrl(context, game.title) }
   }
   AsyncImage(
     model = coverUrl,
     contentDescription = "Capa de ${game.title}",
     modifier = Modifier.fillMaxWidth().aspectRatio(0.72f),
-    contentScale = ContentScale.Crop,
+    contentScale = ContentScale.Fit,
   )
 }
 
