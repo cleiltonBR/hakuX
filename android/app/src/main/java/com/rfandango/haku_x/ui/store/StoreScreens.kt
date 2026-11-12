@@ -389,17 +389,24 @@ fun DownloadsScreen() {
               ArchiveDownload.Status.COMPLETED -> {
                 Text("Concluído", color = MaterialTheme.colorScheme.primary)
                 item.outputName?.let { Text("Salvo em: $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                TextButton(onClick = { ArchiveXboxDownloads.remove(item.identifier, item.fileName) }) { Text("Remover da lista") }
               }
               ArchiveDownload.Status.CANCELLED -> {
                 Text(item.error ?: "Download interrompido.", color = MaterialTheme.colorScheme.error)
-                if (item.downloadUrl != null) {
-                  TextButton(onClick = { ArchiveXboxDownloads.resume(context, item) }) { Text("Continuar download") }
+                Row {
+                  if (item.downloadUrl != null) {
+                    TextButton(onClick = { ArchiveXboxDownloads.resume(context, item) }) { Text("Continuar download") }
+                  }
+                  TextButton(onClick = { ArchiveXboxDownloads.remove(item.identifier, item.fileName) }) { Text("Remover") }
                 }
               }
               ArchiveDownload.Status.FAILED -> {
                 Text(item.error ?: "Falha no download.", color = MaterialTheme.colorScheme.error)
-                if (item.downloadUrl != null) {
-                  TextButton(onClick = { ArchiveXboxDownloads.resume(context, item) }) { Text("Continuar download") }
+                Row {
+                  if (item.downloadUrl != null) {
+                    TextButton(onClick = { ArchiveXboxDownloads.resume(context, item) }) { Text("Continuar download") }
+                  }
+                  TextButton(onClick = { ArchiveXboxDownloads.remove(item.identifier, item.fileName) }) { Text("Remover") }
                 }
               }
             }
