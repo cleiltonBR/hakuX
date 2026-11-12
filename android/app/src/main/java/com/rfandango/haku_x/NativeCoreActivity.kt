@@ -43,13 +43,6 @@ import android.widget.TextView
 import android.widget.Toast
 import android.window.OnBackInvokedDispatcher
 import androidx.documentfile.provider.DocumentFile
-import androidx.compose.ui.platform.ViewCompositionStrategy
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleOwner
-import androidx.lifecycle.LifecycleRegistry
-import androidx.lifecycle.setViewTreeLifecycleOwner
 import com.rfandango.haku_x.data.AppPrefs
 import com.rfandango.haku_x.data.CheatInfo
 import com.rfandango.haku_x.data.Controllers
@@ -989,21 +982,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     (if (i == selected) "✓  " else "") + label to if (i == selected) "SELECIONADO" else ""
   }) { onSelect(it) }
 
-  /** A lifecycle for a ComposeView hosted by the platform AlertDialog window. */
-  private class SliderDialogLifecycleOwner : LifecycleOwner {
-    private val registry = LifecycleRegistry(this)
-    override val lifecycle: Lifecycle get() = registry
-
-    init {
-      registry.currentState = Lifecycle.State.RESUMED
-    }
-
-    fun destroy() {
-      registry.currentState = Lifecycle.State.DESTROYED
-    }
-  }
-
-  /** Uses the exact shared Material 3 slider composable from the initial settings screen. */
+  /** Native Android slider styled to match the Material 3 graphics card without embedding Compose in SDL dialogs. */
   private fun showSeriesXSlider(
     title: String,
     initial: Int,
@@ -1013,58 +992,76 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     endLabel: String = "",
     onConfirm: (Int) -> Unit,
   ) {
-    var selectedProgress = initial.coerceIn(0, max)
-    val sliderLifecycleOwner = SliderDialogLifecycleOwner()
-    val sliderView = androidx.compose.ui.platform.ComposeView(this).apply {
-      // SDLActivity is a plain Activity, and a platform AlertDialog does not
-      // provide ViewTreeLifecycleOwner. Install one on the ComposeView itself
-      // before the dialog attaches it and Compose creates its WindowRecomposer.
-      setViewTreeLifecycleOwner(sliderLifecycleOwner)
-      addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
-        override fun onViewAttachedToWindow(view: View) = Unit
-        override fun onViewDetachedFromWindow(view: View) {
-          sliderLifecycleOwner.destroy()
-          removeOnAttachStateChangeListener(this)
-        }
-      })
-      setViewCompositionStrategy(
-        androidx.compose.ui.platform.ViewCompositionStrategy.DisposeOnDetachedFromWindow
-      )
-      this.setContent {
-        var sliderValue by androidx.compose.runtime.remember {
-          androidx.compose.runtime.mutableFloatStateOf(initial.coerceIn(0, max).toFloat())
-        }
-        com.rfandango.haku_x.ui.theme.HakuXTheme {
-          com.rfandango.haku_x.ui.common.GraphicsSlider(
-            title = title,
-            valueLabel = valueLabel(sliderValue.toInt()),
-            value = sliderValue,
-            valueRange = 0f..max.coerceAtLeast(1).toFloat(),
-            steps = (max - 1).coerceAtLeast(0),
-            startLabel = startLabel,
-            endLabel = endLabel,
-            onValueChange = {
-              sliderValue = it
-              selectedProgress = it.toInt().coerceIn(0, max)
-            },
-          )
-        }
+    val panel = LinearLayout(this).apply {
+      orientation = LinearLayout.VERTICAL
+      setPadding(dp(14), dp(8), dp(14), dp(8))
+      background = GradientDrawable().apply {
+        setColor(Color.rgb(16, 27, 18))
+        cornerRadius = dp(12).toFloat()
+        setStroke(dp(1), Color.rgb(57, 122, 64))
       }
     }
+    val header = LinearLayout(this).apply {
+      orientation = LinearLayout.HORIZONTAL
+      gravity = Gravity.CENTER_VERTICAL
+    }
+    val titleView = TextView(this).apply {
+      text = title
+      setTextColor(Color.rgb(184, 232, 184))
+      textSize = 14f
+      typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+      layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+    }
+    val value = TextView(this).apply {
+      text = valueLabel(initial.coerceIn(0, max))
+      setTextColor(Color.rgb(155, 230, 154))
+      textSize = 14f
+      typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+      gravity = Gravity.END or Gravity.CENTER_VERTICAL
+    }
+    header.addView(titleView)
+    header.addView(value)
+    panel.addView(header)
+
+    val seek = SeekBar(this).apply {
+      this.max = max.coerceAtLeast(1)
+      progress = initial.coerceIn(0, this.max)
+      progressTintList = ColorStateList.valueOf(Color.rgb(57, 255, 20))
+      thumbTintList = ColorStateList.valueOf(Color.rgb(155, 230, 154))
+      progressBackgroundTintList = ColorStateList.valueOf(Color.rgb(48, 80, 54))
+    }
+    seek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+      override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+        value.text = valueLabel(progress)
+      }
+      override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+      override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
+    })
+    panel.addView(seek, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44)))
+
+    val labels = LinearLayout(this).apply {
+      orientation = LinearLayout.HORIZONTAL
+      gravity = Gravity.CENTER_VERTICAL
+    }
+    labels.addView(TextView(this).apply {
+      text = startLabel
+      setTextColor(Color.rgb(170, 190, 170))
+      textSize = 11f
+      layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+    })
+    labels.addView(TextView(this).apply {
+      text = endLabel
+      setTextColor(Color.rgb(170, 190, 170))
+      textSize = 11f
+      gravity = Gravity.END
+    })
+    panel.addView(labels)
+
     val dialog = showMenuDialog(
-      AlertDialog.Builder(this).setView(sliderView)
+      AlertDialog.Builder(this).setView(panel)
         .setNegativeButton("CANCELAR", null)
-        .setPositiveButton("APLICAR") { _, _ ->
-          onConfirm(selectedProgress)
-        },
-    ) { alertDialog ->
-      // The ComposeView is attached below AlertDialogLayout. Installing the
-      // owner only on ComposeView is too late: WindowRecomposer resolves it
-      // from the dialog window's decor root during attachment.
-      alertDialog.window?.decorView?.let {
-        it.setViewTreeLifecycleOwner(sliderLifecycleOwner)
-      }
-    }
+        .setPositiveButton("APLICAR") { _, _ -> onConfirm(seek.progress) }
+    )
     dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
     dialog.window?.setLayout(minOf(resources.displayMetrics.widthPixels - dp(40), dp(520)), ViewGroup.LayoutParams.WRAP_CONTENT)
   }
