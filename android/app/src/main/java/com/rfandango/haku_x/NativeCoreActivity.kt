@@ -986,6 +986,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     endLabel: String = "",
     onConfirm: (Int) -> Unit,
   ) {
+    var selectedProgress = initial.coerceIn(0, max)
     val sliderView = androidx.compose.ui.platform.ComposeView(this).apply {
       setViewCompositionStrategy(
         androidx.compose.ui.platform.ViewCompositionStrategy.DisposeOnDetachedFromWindow
@@ -1003,7 +1004,10 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
             steps = (max - 1).coerceAtLeast(0),
             startLabel = startLabel,
             endLabel = endLabel,
-            onValueChange = { sliderValue = it },
+            onValueChange = {
+              sliderValue = it
+              selectedProgress = it.toInt().coerceIn(0, max)
+            },
           )
         }
       }
@@ -1012,8 +1016,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
       AlertDialog.Builder(this).setView(sliderView)
         .setNegativeButton("CANCELAR", null)
         .setPositiveButton("APLICAR") { _, _ ->
-          val progress = sliderView.getTag(android.R.id.custom) as? Int
-          onConfirm(progress ?: initial.coerceIn(0, max))
+          onConfirm(selectedProgress)
         }
     )
     dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
