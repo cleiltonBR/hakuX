@@ -1269,7 +1269,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     val scaleValues = (1..16).toList()
     val currentMode = modes.indexOf(prefs.upscaleFilter).coerceAtLeast(0)
     val entries = listOf(
-      "Escala de resolução" to "${prefs.renderScale}x • ${640 * prefs.renderScale}×${480 * prefs.renderScale} em 480p • reinicie o jogo",
+      "Escala de resolução" to String.format(java.util.Locale.getDefault(), "%.1fx • %d×%d em 480p • reinicie o jogo", prefs.renderScaleHalfSteps / 2f, 320 * prefs.renderScaleHalfSteps, 240 * prefs.renderScaleHalfSteps),
       "Filtro de imagem" to modeNames[currentMode],
       "Filtro anisotrópico" to if (prefs.anisotropyEnabled) "Ativado • reinicie o jogo" else "Desativado • reinicie o jogo",
       "Nível anisotrópico" to "${prefs.anisotropyLevel}x • reinicie o jogo",
