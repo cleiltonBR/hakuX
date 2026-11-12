@@ -455,7 +455,7 @@ private fun GameList(
         // dedicated footer below the cover, including on the side cards.
         Column(Modifier.fillMaxSize().background(Color(0xFF080D09))) {
           Box(Modifier.fillMaxWidth().weight(1f).padding(horizontal = 8.dp, vertical = 6.dp), contentAlignment = Alignment.Center) {
-            SeriesXGameCover(game, covers[game.uri], icons[game.uri], Modifier.fillMaxWidth(0.5f).fillMaxHeight(0.5f))
+            SeriesXGameCover(game, covers[game.uri], icons[game.uri], Modifier.fillMaxWidth(0.5f).aspectRatio(0.78f))
           }
           Column(
             Modifier.fillMaxWidth()
