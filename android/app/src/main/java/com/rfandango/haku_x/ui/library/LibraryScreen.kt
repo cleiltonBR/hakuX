@@ -422,8 +422,8 @@ private fun GameList(
     val disc = info[game.uri]
     var focused by remember { mutableStateOf(false) }
     val cardWidth = if (landscape) 270.dp else 176.dp
-    val coverWidth = if (landscape) 104.dp else 82.dp
-    val coverHeight = if (landscape) 90.dp else 116.dp
+    val coverWidth = if (landscape) 52.dp else 41.dp
+    val coverHeight = if (landscape) 45.dp else 58.dp
     val carouselOffset = gameIndex - carouselIndex
     val cardModifier = Modifier
       .then(if (viewMode == "carousel") Modifier.width(cardWidth).height(if (landscape) 245.dp else 300.dp).graphicsLayer {
@@ -455,7 +455,7 @@ private fun GameList(
         // dedicated footer below the cover, including on the side cards.
         Column(Modifier.fillMaxSize().background(Color(0xFF080D09))) {
           Box(Modifier.fillMaxWidth().weight(1f).padding(horizontal = 8.dp, vertical = 6.dp), contentAlignment = Alignment.Center) {
-            SeriesXGameCover(game, covers[game.uri], icons[game.uri], Modifier.fillMaxSize())
+            SeriesXGameCover(game, covers[game.uri], icons[game.uri], Modifier.fillMaxWidth(0.5f).fillMaxHeight(0.5f))
           }
           Column(
             Modifier.fillMaxWidth()
@@ -491,7 +491,7 @@ private fun GameList(
         }
       } else {
         Row(Modifier.padding(horizontal = 12.dp, vertical = if (landscape) 6.dp else 7.dp), verticalAlignment = Alignment.CenterVertically) {
-          SeriesXGameCover(game, covers[game.uri], icons[game.uri], Modifier.width(72.dp).height(72.dp))
+          SeriesXGameCover(game, covers[game.uri], icons[game.uri], Modifier.width(36.dp).height(36.dp))
           Column(Modifier.weight(1f).padding(start = 12.dp, end = 8.dp)) {
             Text(game.title, style = titleStyle, maxLines = 2, overflow = TextOverflow.Ellipsis)
             if (disc != null && disc.titleId != 0L) IdLine(disc, idStyle)
