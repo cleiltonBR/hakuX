@@ -283,7 +283,7 @@ private fun YouTubeGameplaySearch(gameTitle: String) {
   val context = LocalContext.current
   // Platform-agnostic search: videos from other versions are acceptable
   // when they depict the same game.
-  val encoded = remember(gameTitle) { URLEncoder.encode("\\"$gameTitle\\" gameplay", "UTF-8") }
+  val encoded = remember(gameTitle) { URLEncoder.encode("\"$gameTitle\" gameplay", "UTF-8") }
   val searchUrl = "https://www.youtube.com/results?search_query=" + encoded
   Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
     Text(
