@@ -21,6 +21,10 @@ object XboxCoverCache {
   private const val TAG = "hakuX-covers"
   private const val API = "https://mobcat.zip/XboxIDs/api.php"
   private const val RAW = "https://raw.githubusercontent.com/MobCat/MobCats-original-xbox-game-list/main"
+  private const val MAX_COVER_WIDTH = 512
+  private const val MAX_COVER_HEIGHT = 640
+  private const val MAX_COVER_DOWNLOAD_BYTES = 20L * 1024L * 1024L
+  private const val MAX_INDEX_BYTES = 8L * 1024L * 1024L
 
   /** Blocking; callers must use Dispatchers.IO. */
   fun load(context: Context, titleId: Long, gameTitle: String = ""): Bitmap? {
@@ -30,12 +34,12 @@ object XboxCoverCache {
     if (!dir.exists() && !dir.mkdirs()) return null
     val cached = File(dir, "$id.jpg")
     if (cached.isFile) {
-      BitmapFactory.decodeFile(cached.absolutePath)?.let { return it }
+      decodeCover(cached.absolutePath)?.let { return it }
       cached.delete()
     }
     val x1Cached = File(dir, "$id.x1.png")
     if (x1Cached.isFile) {
-      BitmapFactory.decodeFile(x1Cached.absolutePath)?.let { return it }
+      decodeCover(x1Cached.absolutePath)?.let { return it }
       x1Cached.delete()
     }
 
@@ -82,7 +86,7 @@ object XboxCoverCache {
    * "Game Title (Region).png"; the directory listing is cached locally so
    * the GitHub API is not queried once per game on every library refresh.
    */
-  private fun loadX1Cover(context: Context, gameTitle: String, cacheDir: File, titleId: String): Bitmap? {
+  @Synchronized\n  private fun loadX1Cover(context: Context, gameTitle: String, cacheDir: File, titleId: String): Bitmap? {
     if (gameTitle.isBlank()) return null
     // GitHub caps contents listings at 100 entries per page; per_page=1000
     // silently returns only the first 100 covers. Walk every page and cache
@@ -91,7 +95,7 @@ object XboxCoverCache {
     val entries = try {
       val cached = index.isFile && System.currentTimeMillis() - index.lastModified() < 24L * 60 * 60 * 1000
       if (cached) {
-        JSONArray(index.readText())
+        JSONArray(readLimited(index, MAX_INDEX_BYTES))
       } else {
         val all = JSONArray()
         for (page in 1..20) {
@@ -104,12 +108,12 @@ object XboxCoverCache {
           }
           val rows = try {
             if (connection.responseCode !in 200..299) throw IllegalStateException("GitHub X1_Covers HTTP ${connection.responseCode}")
-            JSONArray(connection.inputStream.bufferedReader().use { it.readText() })
+            JSONArray(connection.inputStream.use { input -> readLimited(input, MAX_INDEX_BYTES) })
           } finally { connection.disconnect() }
           for (i in 0 until rows.length()) all.put(rows.getJSONObject(i))
           if (rows.length() < 100) break
         }
-        index.writeText(all.toString())
+        val serialized = all.toString()\n        require(serialized.toByteArray(Charsets.UTF_8).size <= MAX_INDEX_BYTES) { "X1_Covers index exceeds the safe cache limit" }\n        index.writeText(serialized)
         all
       }
     } catch (e: Exception) {
@@ -167,7 +171,7 @@ object XboxCoverCache {
     }
   }
 
-  private fun downloadBitmap(url: String, temp: File): Bitmap? {
+  private fun decodeCover(path: String): Bitmap? {\n    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }\n    BitmapFactory.decodeFile(path, bounds)\n    if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null\n    var sample = 1\n    while (bounds.outWidth / sample > MAX_COVER_WIDTH * 2 || bounds.outHeight / sample > MAX_COVER_HEIGHT * 2) {\n      sample *= 2\n    }\n    val options = BitmapFactory.Options().apply {\n      inSampleSize = sample\n      inPreferredConfig = Bitmap.Config.RGB_565\n    }\n    return BitmapFactory.decodeFile(path, options)\n  }\n\n  private fun readLimited(file: File, maxBytes: Long): String {\n    require(file.length() <= maxBytes) { "Cached cover index exceeds the safe size limit" }\n    return file.inputStream().use { readLimited(it, maxBytes) }\n  }\n\n  private fun readLimited(input: java.io.InputStream, maxBytes: Long): String {\n    val output = java.io.ByteArrayOutputStream()\n    val buffer = ByteArray(16 * 1024)\n    var total = 0L\n    while (true) {\n      val count = input.read(buffer)\n      if (count < 0) break\n      total += count\n      require(total <= maxBytes) { "X1_Covers index exceeds the safe size limit" }\n      output.write(buffer, 0, count)\n    }\n    return output.toString(Charsets.UTF_8.name())\n  }\n\n  private fun downloadBitmap(url: String, temp: File): Bitmap? {
     val connection = try {
       (URL(url).openConnection() as HttpURLConnection).apply {
         connectTimeout = 10000
@@ -184,7 +188,7 @@ object XboxCoverCache {
       connection.inputStream.use { input ->
         temp.outputStream().use { output -> input.copyTo(output) }
       }
-      BitmapFactory.decodeFile(temp.absolutePath)
+      decodeCover(temp.absolutePath)
     } catch (e: Exception) {
       Log.w(TAG, "Could not download artwork", e)
       null
