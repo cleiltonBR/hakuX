@@ -12,6 +12,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.documentfile.provider.DocumentFile
 import androidx.core.content.ContextCompat
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -92,6 +93,7 @@ fun StoreScreen() {
   var alphabetical by remember { mutableStateOf(false) }
   var favorites by remember { mutableStateOf(context.getSharedPreferences("hakux_store_favorites", android.content.Context.MODE_PRIVATE).getStringSet("ids", emptySet())?.toSet() ?: emptySet()) }
   var selectedGame by remember { mutableStateOf<ArchiveXboxItem?>(null) }
+  var detailsGame by remember { mutableStateOf<ArchiveXboxItem?>(null) }
   var options by remember { mutableStateOf<List<ArchiveDownloadOption>>(emptyList()) }
   var selectedOption by remember { mutableStateOf<ArchiveDownloadOption?>(null) }
 
@@ -176,7 +178,7 @@ fun StoreScreen() {
         items(visibleGames, key = { game -> game.archiveFileName?.let { "${game.identifier}:$it" } ?: "${game.identifier}:${game.title}" }) { game ->
           Card(modifier = Modifier.fillMaxWidth()) {
             Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-              ArchiveGameCover(game = game)
+              ArchiveGameCover(game = game, onClick = { detailsGame = game })
               Text(game.title, modifier = Modifier.padding(horizontal = 8.dp), style = MaterialTheme.typography.titleSmall, maxLines = 2, minLines = 2)
               Text(game.genre + (game.year?.let { " · $it" } ?: ""), modifier = Modifier.padding(horizontal = 8.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
               Text(game.region, modifier = Modifier.padding(horizontal = 8.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, maxLines = 1)
@@ -245,6 +247,10 @@ fun StoreScreen() {
     }
   }
 
+  detailsGame?.let { game ->
+    ArchiveGameDetailsDialog(game = game, onDismiss = { detailsGame = null })
+  }
+
   selectedGame?.let { game ->
     AlertDialog(
       onDismissRequest = { selectedGame = null; options = emptyList(); selectedOption = null },
@@ -278,7 +284,7 @@ fun StoreScreen() {
 
 /** Resolves the shared 3D-cover manifest only for visible store cards. Coil downloads/caches only the requested image. */
 @Composable
-private fun ArchiveGameCover(game: ArchiveXboxItem) {
+private fun ArchiveGameCover(game: ArchiveXboxItem, onClick: () -> Unit) {
   val context = LocalContext.current
   var coverUrl by remember(game.title) { mutableStateOf<String?>(null) }
   LaunchedEffect(game.title) {
@@ -287,7 +293,7 @@ private fun ArchiveGameCover(game: ArchiveXboxItem) {
   AsyncImage(
     model = coverUrl,
     contentDescription = "Capa de ${game.title}",
-    modifier = Modifier.fillMaxWidth().aspectRatio(0.72f),
+    modifier = Modifier.fillMaxWidth().aspectRatio(0.72f).clickable(onClick = onClick),
     contentScale = ContentScale.Fit,
   )
 }
