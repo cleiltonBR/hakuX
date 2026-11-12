@@ -1023,21 +1023,75 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     header.addView(value)
     panel.addView(header)
 
-    val seek = SeekBar(this).apply {
-      this.max = max.coerceAtLeast(1)
-      progress = initial.coerceIn(0, this.max)
-      progressTintList = ColorStateList.valueOf(Color.rgb(57, 255, 20))
-      thumbTintList = ColorStateList.valueOf(Color.rgb(155, 230, 154))
-      progressBackgroundTintList = ColorStateList.valueOf(Color.rgb(48, 80, 54))
-    }
-    seek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-      override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-        value.text = valueLabel(progress)
+    var selected = initial.coerceIn(0, max.coerceAtLeast(1))
+    val seek = object : View(this) {
+      private val trackPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+      private val activePaint = Paint(Paint.ANTI_ALIAS_FLAG)
+      private val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+      private val thumbPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+
+      init {
+        contentDescription = title
+        isFocusable = true
+        minimumHeight = dp(48)
       }
-      override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
-      override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
-    })
-    panel.addView(seek, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44)))
+
+      override fun onDraw(canvas: Canvas) {
+        super.onDraw(canvas)
+        val left = paddingLeft + dp(8).toFloat()
+        val right = width - paddingRight - dp(8).toFloat()
+        val centerY = height / 2f
+        val radius = dp(4).toFloat()
+        val fraction = selected.toFloat() / max.coerceAtLeast(1)
+        val thumbX = left + (right - left) * fraction
+
+        trackPaint.color = Color.rgb(35, 59, 43)
+        canvas.drawRoundRect(left, centerY - radius, right, centerY + radius, radius, radius, trackPaint)
+
+        activePaint.color = Color.rgb(57, 255, 20)
+        canvas.drawRoundRect(left, centerY - radius, thumbX, centerY + radius, radius, radius, activePaint)
+
+        dotPaint.color = Color.rgb(57, 255, 20)
+        val dotRadius = dp(1.8f)
+        for (index in 0..11) {
+          val x = left + (right - left) * index / 11f
+          if (x > thumbX + dp(5)) canvas.drawCircle(x, centerY, dotRadius, dotPaint)
+        }
+
+        thumbPaint.color = Color.rgb(57, 255, 20)
+        val thumbWidth = dp(4).toFloat()
+        val thumbHeight = dp(26).toFloat()
+        canvas.drawRoundRect(
+          thumbX - thumbWidth / 2f, centerY - thumbHeight / 2f,
+          thumbX + thumbWidth / 2f, centerY + thumbHeight / 2f,
+          dp(2).toFloat(), dp(2).toFloat(), thumbPaint
+        )
+      }
+
+      override fun onTouchEvent(event: MotionEvent): Boolean {
+        when (event.actionMasked) {
+          MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE, MotionEvent.ACTION_UP -> {
+            val left = paddingLeft + dp(8).toFloat()
+            val right = width - paddingRight - dp(8).toFloat()
+            val fraction = ((event.x - left) / (right - left).coerceAtLeast(1f)).coerceIn(0f, 1f)
+            selected = (fraction * max.coerceAtLeast(1)).toInt()
+            value.text = valueLabel(selected)
+            invalidate()
+            if (event.actionMasked == MotionEvent.ACTION_UP) performClick()
+            return true
+          }
+          MotionEvent.ACTION_CANCEL -> return true
+        }
+        return true
+      }
+
+      override fun performClick(): Boolean {
+        super.performClick()
+        return true
+      }
+    }
+    seek.setPadding(dp(8), 0, dp(8), 0)
+    panel.addView(seek, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)))
 
     val labels = LinearLayout(this).apply {
       orientation = LinearLayout.HORIZONTAL
