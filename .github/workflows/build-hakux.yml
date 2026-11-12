@@ -4,9 +4,9 @@ name: Build hakuX (APK)
 
 on:
   push:
-    branches: [master, feature/nvidia-image-scaling, feature/resolution-scales-1x-8x, feature/fractional-resolution-scales, feature/fractional-fsr-cas-validation, feature/android-hdr-output, ui/xbox-series-x-on-build307, feature/sgsr2-build420]
+    branches: [feature/sgsr2-build420]
   pull_request:
-    branches: [master, feature/nvidia-image-scaling, feature/resolution-scales-1x-8x, feature/fractional-resolution-scales]
+    branches: [feature/sgsr2-build420]
   workflow_dispatch:
     inputs:
       publish:
@@ -19,6 +19,8 @@ permissions:
 
 jobs:
   build:
+    # Never generate an APK from the outdated master or unrelated feature branches.
+    if: github.ref == 'refs/heads/feature/sgsr2-build420'
     runs-on: ubuntu-24.04
     timeout-minutes: 240
     env:
