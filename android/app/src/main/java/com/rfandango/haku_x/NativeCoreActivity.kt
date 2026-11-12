@@ -1052,7 +1052,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
         canvas.drawRoundRect(left, centerY - radius, thumbX, centerY + radius, radius, radius, activePaint)
 
         dotPaint.color = Color.rgb(57, 255, 20)
-        val dotRadius = dp(1.8f)
+        val dotRadius = dp(2).toFloat()
         for (index in 0..11) {
           val x = left + (right - left) * index / 11f
           if (x > thumbX + dp(5)) canvas.drawCircle(x, centerY, dotRadius, dotPaint)
@@ -1114,7 +1114,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     val dialog = showMenuDialog(
       AlertDialog.Builder(this).setView(panel)
         .setNegativeButton("CANCELAR", null)
-        .setPositiveButton("APLICAR") { _, _ -> onConfirm(seek.progress) }
+        .setPositiveButton("APLICAR") { _, _ -> onConfirm(selected) }
     )
     dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
     dialog.window?.setLayout(minOf(resources.displayMetrics.widthPixels - dp(40), dp(520)), ViewGroup.LayoutParams.WRAP_CONTENT)
