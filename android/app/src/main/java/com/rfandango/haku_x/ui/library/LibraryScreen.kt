@@ -235,22 +235,38 @@ fun LibraryScreen(
           }
         }
       }
-      Row(
-        Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = if (screenLandscape) 0.dp else 2.dp)
-          .height(if (screenLandscape) 38.dp else 44.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+      Column(
+        Modifier.fillMaxWidth()
+          .padding(horizontal = 12.dp, vertical = if (screenLandscape) 2.dp else 6.dp)
+          .clip(RoundedCornerShape(12.dp))
+          .background(Color(0xFF101B12))
+          .border(1.dp, Color(0xFF397A40), RoundedCornerShape(12.dp))
+          .padding(horizontal = 14.dp, vertical = if (screenLandscape) 4.dp else 8.dp),
       ) {
-        Text("CAPAS", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Row(
+          Modifier.fillMaxWidth(),
+          verticalAlignment = Alignment.CenterVertically,
+          horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+          Text("TAMANHO DAS CAPAS", style = MaterialTheme.typography.labelMedium, color = Color(0xFFB8E8B8))
+          Text(
+            "${(coverScale * 100).toInt()}%",
+            style = MaterialTheme.typography.labelLarge,
+            color = Color(0xFF9BE69A),
+          )
+        }
         Slider(
           value = coverScale,
           onValueChange = { coverScale = it },
           onValueChangeFinished = { prefs.libraryCoverScale = coverScale },
           valueRange = 0.5f..2.0f,
           steps = 14,
-          modifier = Modifier.weight(1f),
+          modifier = Modifier.fillMaxWidth(),
         )
-        Text("${(coverScale * 100).toInt()}%", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+          Text("50%", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+          Text("200%", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
       }
       // The pull's indicator follows the refresh (under the loading dialog):
       // it only goes once isRefreshing has been true.
