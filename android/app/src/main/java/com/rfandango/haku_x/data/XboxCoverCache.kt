@@ -179,7 +179,7 @@ object XboxCoverCache {
     BitmapFactory.decodeFile(path, bounds)
     if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
     var sample = 1
-    while (bounds.outWidth / sample > MAX_COVER_WIDTH * 2 || bounds.outHeight / sample > MAX_COVER_HEIGHT * 2) {
+    while (bounds.outWidth / sample > MAX_COVER_WIDTH || bounds.outHeight / sample > MAX_COVER_HEIGHT) {
       sample *= 2
     }
     val options = BitmapFactory.Options().apply {
