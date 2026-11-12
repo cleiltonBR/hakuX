@@ -237,6 +237,7 @@ fun StoreScreen() {
             }
           }
         }
+      }
     }
     if (loading && results.isNotEmpty()) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
     } else {
