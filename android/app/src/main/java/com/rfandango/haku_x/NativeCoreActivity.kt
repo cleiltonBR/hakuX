@@ -46,6 +46,10 @@ import androidx.documentfile.provider.DocumentFile
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.LifecycleRegistry
+import androidx.lifecycle.ViewTreeLifecycleOwner
 import com.rfandango.haku_x.data.AppPrefs
 import com.rfandango.haku_x.data.CheatInfo
 import com.rfandango.haku_x.data.Controllers
@@ -978,6 +982,20 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     (if (i == selected) "✓  " else "") + label to if (i == selected) "SELECIONADO" else ""
   }) { onSelect(it) }
 
+  /** A lifecycle for a ComposeView hosted by the platform AlertDialog window. */
+  private class SliderDialogLifecycleOwner : LifecycleOwner {
+    private val registry = LifecycleRegistry(this)
+    override val lifecycle: Lifecycle get() = registry
+
+    init {
+      registry.currentState = Lifecycle.State.RESUMED
+    }
+
+    fun destroy() {
+      registry.currentState = Lifecycle.State.DESTROYED
+    }
+  }
+
   /** Uses the exact shared Material 3 slider composable from the initial settings screen. */
   private fun showSeriesXSlider(
     title: String,
@@ -989,7 +1007,19 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     onConfirm: (Int) -> Unit,
   ) {
     var selectedProgress = initial.coerceIn(0, max)
+    val sliderLifecycleOwner = SliderDialogLifecycleOwner()
     val sliderView = androidx.compose.ui.platform.ComposeView(this).apply {
+      // SDLActivity is a plain Activity, and a platform AlertDialog does not
+      // provide ViewTreeLifecycleOwner. Install one on the ComposeView itself
+      // before the dialog attaches it and Compose creates its WindowRecomposer.
+      ViewTreeLifecycleOwner.set(this, sliderLifecycleOwner)
+      addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+        override fun onViewAttachedToWindow(view: View) = Unit
+        override fun onViewDetachedFromWindow(view: View) {
+          sliderLifecycleOwner.destroy()
+          removeOnAttachStateChangeListener(this)
+        }
+      })
       setViewCompositionStrategy(
         androidx.compose.ui.platform.ViewCompositionStrategy.DisposeOnDetachedFromWindow
       )
