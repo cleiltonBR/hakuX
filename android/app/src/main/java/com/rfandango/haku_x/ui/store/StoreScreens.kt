@@ -320,7 +320,7 @@ private fun ArchiveGameCover(game: ArchiveXboxItem, onClick: () -> Unit) {
   AsyncImage(
     model = cover,
     contentDescription = "Capa de ${game.title}",
-    modifier = Modifier.fillMaxWidth().aspectRatio(0.78f).clickable(onClick = onClick),
+    modifier = Modifier.fillMaxWidth(0.5f).aspectRatio(0.78f).clickable(onClick = onClick),
     contentScale = ContentScale.Fit,
   )
 }
