@@ -975,28 +975,47 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     (if (i == selected) "✓  " else "") + label to if (i == selected) "SELECIONADO" else ""
   }) { onSelect(it) }
 
-  /** HakuX-styled continuous slider used by the in-game graphics quick menu. */
+  /** Graphics slider styled to match the cards used in the initial settings screen. */
   private fun showSeriesXSlider(
     title: String,
     initial: Int,
     max: Int,
     valueLabel: (Int) -> String,
+    startLabel: String = "",
+    endLabel: String = "",
     onConfirm: (Int) -> Unit,
   ) {
     val panel = LinearLayout(this).apply {
       orientation = LinearLayout.VERTICAL
-      setPadding(dp(20), dp(18), dp(20), dp(12))
-      setBackgroundColor(Color.rgb(15, 24, 17))
+      setPadding(dp(14), dp(8), dp(14), dp(8))
+      background = android.graphics.drawable.GradientDrawable().apply {
+        setColor(Color.rgb(16, 27, 18))
+        cornerRadius = dp(12).toFloat()
+        setStroke(dp(1), Color.rgb(57, 122, 64))
+      }
+    }
+    val header = LinearLayout(this).apply {
+      orientation = LinearLayout.HORIZONTAL
+      gravity = Gravity.CENTER_VERTICAL
+    }
+    val titleView = TextView(this).apply {
+      text = title
+      setTextColor(Color.rgb(184, 232, 184))
+      textSize = 14f
+      typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+      layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
     }
     val value = TextView(this).apply {
       text = valueLabel(initial.coerceIn(0, max))
       setTextColor(Color.rgb(155, 230, 154))
-      textSize = 22f
+      textSize = 14f
       typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
-      gravity = Gravity.CENTER
-      setPadding(0, dp(8), 0, dp(8))
+      gravity = Gravity.END or Gravity.CENTER_VERTICAL
     }
-    panel.addView(value)
+    header.addView(titleView)
+    header.addView(value)
+    panel.addView(header)
+
     val seek = SeekBar(this).apply {
       this.max = max.coerceAtLeast(1)
       progress = initial.coerceIn(0, this.max)
@@ -1011,9 +1030,28 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
       override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
       override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
     })
-    panel.addView(seek, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)))
+    panel.addView(seek, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44)))
+
+    val labels = LinearLayout(this).apply {
+      orientation = LinearLayout.HORIZONTAL
+      gravity = Gravity.CENTER_VERTICAL
+    }
+    labels.addView(TextView(this).apply {
+      text = startLabel
+      setTextColor(Color.rgb(170, 190, 170))
+      textSize = 11f
+      layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+    })
+    labels.addView(TextView(this).apply {
+      text = endLabel
+      setTextColor(Color.rgb(170, 190, 170))
+      textSize = 11f
+      gravity = Gravity.END
+    })
+    panel.addView(labels)
+
     val dialog = showMenuDialog(
-      AlertDialog.Builder(this).setTitle(title).setView(panel)
+      AlertDialog.Builder(this).setView(panel)
         .setNegativeButton("CANCELAR", null)
         .setPositiveButton("APLICAR") { _, _ -> onConfirm(seek.progress) }
     )
@@ -1289,6 +1327,8 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
             String.format(java.util.Locale.getDefault(), "%.1fx · %d×%d", halfSteps / 2f,
               320 * halfSteps, 240 * halfSteps)
           },
+          startLabel = "0,5x",
+          endLabel = "8,0x",
         ) { progress ->
           prefs.renderScaleHalfSteps = scaleValues[progress]
           showRuntimeGraphics()
@@ -1304,6 +1344,8 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
             levels.indexOf(prefs.anisotropyLevel).coerceAtLeast(0),
             levels.lastIndex,
             { "${levels[it.coerceIn(0, levels.lastIndex)]}x" },
+            startLabel = "1x",
+            endLabel = "16x",
           ) {
             prefs.anisotropyLevel = levels[it.coerceIn(0, levels.lastIndex)]
             showRuntimeGraphics()
@@ -1316,6 +1358,8 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
             (prefs.casSharpness * 10f).toInt().coerceIn(0, 20),
             20,
             { "%.1f".format(java.util.Locale.US, it / 10f) },
+            startLabel = "0,0",
+            endLabel = "2,0",
           ) {
             prefs.casSharpness = it / 10f
             refresh()
@@ -1329,6 +1373,8 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
             (prefs.nisSharpness * 100f).toInt().coerceIn(0, 100),
             100,
             { "$it%" },
+            startLabel = "0%",
+            endLabel = "100%",
           ) {
             prefs.nisSharpness = it / 100f
             refresh()
