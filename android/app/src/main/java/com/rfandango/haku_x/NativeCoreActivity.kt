@@ -43,6 +43,7 @@ import android.widget.TextView
 import android.widget.Toast
 import android.window.OnBackInvokedDispatcher
 import androidx.documentfile.provider.DocumentFile
+import androidx.compose.ui.platform.setContent
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import com.rfandango.haku_x.data.AppPrefs
 import com.rfandango.haku_x.data.CheatInfo
