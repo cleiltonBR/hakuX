@@ -72,7 +72,27 @@ private object ArchiveGameInfoRepository {
   }
 
   private fun wikipediaSummary(language: String, title: String): JSONObject? {
-    val slug = URLEncoder.encode(title.replace(' ', '_'), "UTF-8").replace("+", "%20")
+    // Resolve the title through Wikipedia search rather than assuming an exact
+    // article slug. Prefer a matching game entry to avoid unrelated same-name pages.
+    val query = URLEncoder.encode("\\"$title\\" video game", "UTF-8")
+    val searchUrl = "https://" + language +
+      ".wikipedia.org/w/api.php?action=query&list=search&srnamespace=0&srlimit=5&srsearch=" +
+      query + "&format=json"
+    val results = getJson(searchUrl)?.optJSONObject("query")?.optJSONArray("search")
+      ?: return null
+    val normalizedTitle = normalize(title)
+    var selectedTitle: String? = null
+    for (index in 0 until results.length()) {
+      val candidate = results.optJSONObject(index)?.optString("title").orEmpty()
+      val normalizedCandidate = normalize(candidate.substringBefore(" ("))
+      if (normalizedCandidate == normalizedTitle ||
+        normalizedCandidate.startsWith(normalizedTitle + " ")) {
+        selectedTitle = candidate
+        break
+      }
+    }
+    val articleTitle = selectedTitle ?: return null
+    val slug = URLEncoder.encode(articleTitle.replace(' ', '_'), "UTF-8").replace("+", "%20")
     return getJson("https://" + language + ".wikipedia.org/api/rest_v1/page/summary/" + slug)
   }
 
@@ -178,21 +198,21 @@ internal fun ArchiveGameDetailsScreen(game: ArchiveXboxItem, onBack: () -> Unit)
       Text("Detalhes do jogo", style = MaterialTheme.typography.titleMedium)
     }
     Column(
-      modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 14.dp, vertical = 8.dp),
-      verticalArrangement = Arrangement.spacedBy(12.dp),
+      modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 6.dp),
+      verticalArrangement = Arrangement.spacedBy(7.dp),
     ) {
-      Text(game.title, style = MaterialTheme.typography.headlineSmall)
-      Text("Xbox Clássico", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+      Text(game.title, style = MaterialTheme.typography.titleLarge)
+      Text("Xbox Clássico", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
       Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
         info?.thumbnail?.let { image ->
-          AsyncImage(model = image, contentDescription = "Imagem de " + game.title, modifier = Modifier.weight(0.8f).height(150.dp), contentScale = ContentScale.Fit)
+          AsyncImage(model = image, contentDescription = "Imagem de " + game.title, modifier = Modifier.weight(0.75f).height(112.dp), contentScale = ContentScale.Fit)
         }
-        Column(modifier = Modifier.weight(1.2f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-          Text("Gênero: " + game.genre)
-          Text("Lançamento: " + (info?.releaseDate ?: game.year ?: "Não identificado"))
-          Text("Região: " + game.region)
-          Text("Desenvolvedora: " + (info?.developer ?: "Não informado"))
-          Text("Publicadora: " + (info?.publisher ?: "Não informado"))
+        Column(modifier = Modifier.weight(1.25f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+          Text("Gênero: " + game.genre, style = MaterialTheme.typography.bodySmall)
+          Text("Lançamento: " + (info?.releaseDate ?: game.year ?: "Não identificado"), style = MaterialTheme.typography.bodySmall)
+          Text("Região: " + game.region, style = MaterialTheme.typography.bodySmall)
+          Text("Desenvolvedora: " + (info?.developer ?: "Não informado"), style = MaterialTheme.typography.bodySmall)
+          Text("Publicadora: " + (info?.publisher ?: "Não informado"), style = MaterialTheme.typography.bodySmall)
         }
       }
       Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -202,15 +222,25 @@ internal fun ArchiveGameDetailsScreen(game: ArchiveXboxItem, onBack: () -> Unit)
       }
       when (section) {
         "info" -> {
-          Text("Sobre o jogo", style = MaterialTheme.typography.titleLarge)
+          Text("Sobre o jogo", style = MaterialTheme.typography.titleMedium)
           when {
             info == null && !failed -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
               CircularProgressIndicator()
               Text("Buscando informações do jogo…")
             }
-            else -> Text(info?.description ?: "Não foi possível carregar informações adicionais agora.")
+            else -> Text(
+              info?.description ?: "Não foi possível carregar informações adicionais agora.",
+              style = MaterialTheme.typography.bodyMedium,
+              maxLines = 6,
+              overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            )
           }
-          Text("Fonte das informações: " + (info?.sourceLabel ?: "Catálogo HakuX"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+          Text(
+            "Fonte: " + (info?.sourceLabel ?: "Catálogo HakuX") +
+              " • Conteúdo informativo sobre o jogo; pode incluir versões de outras plataformas.",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
         }
         "screenshots" -> {
           Text("Capturas de tela", style = MaterialTheme.typography.titleLarge)
@@ -231,7 +261,7 @@ internal fun ArchiveGameDetailsScreen(game: ArchiveXboxItem, onBack: () -> Unit)
         }
         "gameplay" -> {
           Text("Vídeos de gameplay", style = MaterialTheme.typography.titleLarge)
-          Text("Resultados do YouTube para " + game.title + ". Selecione um vídeo para assistir.", style = MaterialTheme.typography.bodySmall)
+          Text("Vídeos do mesmo jogo, inclusive de outras plataformas, podem aparecer aqui.", style = MaterialTheme.typography.bodySmall)
           YouTubeGameplaySearch(gameTitle = game.title)
         }
       }
@@ -251,7 +281,9 @@ internal fun ArchiveGameDetailsScreen(game: ArchiveXboxItem, onBack: () -> Unit)
 @Composable
 private fun YouTubeGameplaySearch(gameTitle: String) {
   val context = LocalContext.current
-  val encoded = remember(gameTitle) { URLEncoder.encode(gameTitle + " Xbox gameplay", "UTF-8") }
+  // Platform-agnostic search: videos from other versions are acceptable
+  // when they depict the same game.
+  val encoded = remember(gameTitle) { URLEncoder.encode("\\"$gameTitle\\" gameplay", "UTF-8") }
   val searchUrl = "https://www.youtube.com/results?search_query=" + encoded
   Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
     Text(
