@@ -57,6 +57,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -145,6 +146,8 @@ fun LibraryScreen(
   vm: LibraryViewModel = viewModel(),
 ) {
   val state by vm.state.collectAsStateWithLifecycle()
+  val prefs = remember { com.rfandango.haku_x.data.AppPrefs(LocalContext.current) }
+  var coverScale by remember { mutableStateOf(prefs.libraryCoverScale) }
   val update by Updates.available.collectAsStateWithLifecycle()
   var updateDialog by remember { mutableStateOf(false) }
   var dashboardAsk by remember { mutableStateOf(false) }
@@ -231,6 +234,23 @@ fun LibraryScreen(
           }
         }
       }
+      Row(
+        Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = if (screenLandscape) 0.dp else 2.dp)
+          .height(if (screenLandscape) 38.dp else 44.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+      ) {
+        Text("CAPAS", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Slider(
+          value = coverScale,
+          onValueChange = { coverScale = it },
+          onValueChangeFinished = { prefs.libraryCoverScale = coverScale },
+          valueRange = 0.5f..2.0f,
+          steps = 14,
+          modifier = Modifier.weight(1f),
+        )
+        Text("${(coverScale * 100).toInt()}%", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+      }
       // The pull's indicator follows the refresh (under the loading dialog):
       // it only goes once isRefreshing has been true.
       PullToRefreshBox(
@@ -245,7 +265,7 @@ fun LibraryScreen(
             TextButton(onClick = onOpenSettings) { Text(stringResource(R.string.settings_games_folder_title)) }
           }
           games.isEmpty() -> Message(stringResource(R.string.library_empty_games))
-          else -> GameList(games, state.info, state.icons, state.covers, state.viewMode, onLaunch, onGameSettings, onLoadState, onMods, vm::askConvert)
+          else -> GameList(games, state.info, state.icons, state.covers, state.viewMode, coverScale, onLaunch, onGameSettings, onLoadState, onMods, vm::askConvert)
         }
       }
     }
@@ -396,6 +416,7 @@ private fun GameList(
   icons: Map<Uri, ImageBitmap>,
   covers: Map<Uri, ImageBitmap>,
   viewMode: String,
+  coverScale: Float,
   onLaunch: (Game) -> Unit,
   onGameSettings: (Game, DiscInfo?) -> Unit,
   onLoadState: (Game, SaveStateStore, Int) -> Unit,
@@ -422,8 +443,8 @@ private fun GameList(
     val disc = info[game.uri]
     var focused by remember { mutableStateOf(false) }
     val cardWidth = if (landscape) 270.dp else 176.dp
-    val coverWidth = if (landscape) 52.dp else 41.dp
-    val coverHeight = if (landscape) 45.dp else 58.dp
+    val coverWidth = (if (landscape) 52.dp else 41.dp) * coverScale
+    val coverHeight = (if (landscape) 45.dp else 58.dp) * coverScale
     val carouselOffset = gameIndex - carouselIndex
     val cardModifier = Modifier
       .then(if (viewMode == "carousel") Modifier.width(cardWidth).height(if (landscape) 245.dp else 300.dp).graphicsLayer {
@@ -455,7 +476,7 @@ private fun GameList(
         // dedicated footer below the cover, including on the side cards.
         Column(Modifier.fillMaxSize().background(Color(0xFF080D09))) {
           Box(Modifier.fillMaxWidth().weight(1f).padding(horizontal = 8.dp, vertical = 6.dp), contentAlignment = Alignment.Center) {
-            SeriesXGameCover(game, covers[game.uri], icons[game.uri], Modifier.width(if (landscape) 52.dp else 41.dp).height(if (landscape) 45.dp else 58.dp))
+            SeriesXGameCover(game, covers[game.uri], icons[game.uri], Modifier.width((if (landscape) 52.dp else 41.dp) * coverScale).height((if (landscape) 45.dp else 58.dp) * coverScale))
           }
           Column(
             Modifier.fillMaxWidth()
@@ -491,7 +512,7 @@ private fun GameList(
         }
       } else {
         Row(Modifier.padding(horizontal = 12.dp, vertical = if (landscape) 6.dp else 7.dp), verticalAlignment = Alignment.CenterVertically) {
-          SeriesXGameCover(game, covers[game.uri], icons[game.uri], Modifier.width(36.dp).height(36.dp))
+          SeriesXGameCover(game, covers[game.uri], icons[game.uri], Modifier.width(36.dp * coverScale).height(36.dp * coverScale))
           Column(Modifier.weight(1f).padding(start = 12.dp, end = 8.dp)) {
             Text(game.title, style = titleStyle, maxLines = 2, overflow = TextOverflow.Ellipsis)
             if (disc != null && disc.titleId != 0L) IdLine(disc, idStyle)
