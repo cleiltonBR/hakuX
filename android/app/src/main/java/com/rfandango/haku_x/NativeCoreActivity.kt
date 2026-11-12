@@ -49,7 +49,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
-import androidx.lifecycle.ViewTreeLifecycleOwner
+import androidx.lifecycle.setViewTreeLifecycleOwner
 import com.rfandango.haku_x.data.AppPrefs
 import com.rfandango.haku_x.data.CheatInfo
 import com.rfandango.haku_x.data.Controllers
@@ -1012,7 +1012,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
       // SDLActivity is a plain Activity, and a platform AlertDialog does not
       // provide ViewTreeLifecycleOwner. Install one on the ComposeView itself
       // before the dialog attaches it and Compose creates its WindowRecomposer.
-      ViewTreeLifecycleOwner.set(this, sliderLifecycleOwner)
+      setViewTreeLifecycleOwner(sliderLifecycleOwner)
       addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
         override fun onViewAttachedToWindow(view: View) = Unit
         override fun onViewDetachedFromWindow(view: View) {
