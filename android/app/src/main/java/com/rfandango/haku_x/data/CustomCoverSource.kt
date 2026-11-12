@@ -254,7 +254,7 @@ object CustomCoverSource {
   }
 
   private fun matchKey(value: String): String = normalize(value)
-  private fun String.removeRegion(): String = replace(Regex("_(usa|europe|world|japan|japanese|korea|france|germany|italy|spain)$"), "")
+  private fun String.removeRegion(): String = replace(Regex("_(usa|us|europe|european|eu|world|japan|japanese|jpn|korea|kor|france|germany|italy|spain|australia|uk|ntsc_u|ntsc_j|ntsc|pal|region_free|region_unknown)(_[a-z0-9]+)*$"), "")
 
   private fun normalize(value: String): String = value.substringBeforeLast('.', value)
     .lowercase(Locale.ROOT)
