@@ -431,14 +431,21 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
    * emulation stops while one is open. The next one opens before the one
    * chosen from closes, so the game stays stopped from one to the next.
    */
-  private fun showMenuDialog(b: AlertDialog.Builder): AlertDialog {
+  private fun showMenuDialog(
+    b: AlertDialog.Builder,
+    beforeShow: ((AlertDialog) -> Unit)? = null,
+  ): AlertDialog {
     menuDialogs++
     syncPause()
     b.setOnDismissListener {
       menuDialogs--
       syncPause()
     }
-    val dialog = b.show()
+    // Configure the dialog window before show() attaches its decor hierarchy.
+    // ComposeView's WindowRecomposer walks up to this root to find LifecycleOwner.
+    val dialog = b.create()
+    beforeShow?.invoke(dialog)
+    dialog.show()
     dialog.window?.setBackgroundDrawable(GradientDrawable().apply {
       setColor(Color.rgb(15, 18, 16))
       cornerRadius = dp(18).toFloat()
@@ -1049,8 +1056,15 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
         .setNegativeButton("CANCELAR", null)
         .setPositiveButton("APLICAR") { _, _ ->
           onConfirm(selectedProgress)
-        }
-    )
+        },
+    ) { alertDialog ->
+      // The ComposeView is attached below AlertDialogLayout. Installing the
+      // owner only on ComposeView is too late: WindowRecomposer resolves it
+      // from the dialog window's decor root during attachment.
+      alertDialog.window?.decorView?.let {
+        it.setViewTreeLifecycleOwner(sliderLifecycleOwner)
+      }
+    }
     dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
     dialog.window?.setLayout(minOf(resources.displayMetrics.widthPixels - dp(40), dp(520)), ViewGroup.LayoutParams.WRAP_CONTENT)
   }
