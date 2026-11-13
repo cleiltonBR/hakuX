@@ -53,6 +53,17 @@ android {
 
   }
 
+  // Separate package identity used only to test REDMAGIC Game Space recognition.
+  // The normal HakuX debug/release application IDs remain unchanged.
+  flavorDimensions += "distribution"
+  productFlavors {
+    create("redmagic") {
+      dimension = "distribution"
+      applicationId = "com.kurogame.wutheringwaves.global"
+      resValue("string", "app_name", "HakuX REDMAGIC Test")
+    }
+  }
+
   signingConfigs {
     if (hasCiKeystore) {
       create("ci") {
@@ -93,6 +104,22 @@ android {
         "proguard-rules.pro",
         "proguard-debug.pro"
       )
+    }
+    create("redmagicTest") {
+      initWith(getByName("debug"))
+      applicationIdSuffix = ""
+      resValue("string", "app_name", "HakuX REDMAGIC Test")
+      isDebuggable = true
+      matchingFallbacks += listOf("debug", "release")
+      isMinifyEnabled = true
+      proguardFiles(
+        getDefaultProguardFile("proguard-android-optimize.txt"),
+        "proguard-rules.pro",
+        "proguard-debug.pro"
+      )
+      if (hasCiKeystore) {
+        signingConfig = signingConfigs.getByName("ci")
+      }
     }
     create("seriesXTest") {
       applicationIdSuffix = ".seriesx"
