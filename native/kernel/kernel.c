@@ -1348,8 +1348,21 @@ static void port_io(NcFrame *f, const uint8_t *insn, unsigned size, bool out)
 bool nc_kernel_page_fault(NcKernel *k, NcFrame *f, uint32_t va, bool write)
 {
     const uint32_t handler = pf_handler(k);
-    const uint32_t esp = nc_frame_gpr(f, NC_ESP) - 16;
-    if (handler == k->trap_va || nc_vm_phys(k->vm, esp) == UINT32_MAX || nc_vm_phys(k->vm, esp + 15) == UINT32_MAX) {
+    const uint32_t old_esp = nc_frame_gpr(f, NC_ESP);
+    const uint32_t esp = old_esp - 16;
+    const uint32_t stack_first_pa = nc_vm_phys(k->vm, esp);
+    const uint32_t stack_last_pa = nc_vm_phys(k->vm, esp + 15);
+    if (handler == k->trap_va || stack_first_pa == UINT32_MAX || stack_last_pa == UINT32_MAX) {
+        static unsigned s_logged_rejections;
+        if (s_logged_rejections++ < 64) {
+            const uint32_t gate_lo = nc_vm_rd32(k->vm, k->idt_va + 8 * 14);
+            const uint32_t gate_hi = nc_vm_rd32(k->vm, k->idt_va + 8 * 14 + 4);
+            nc_log("hakuX-native",
+                   "paging: #PF rejected reason=%s va=%08x write=%u eip=%08x old_esp=%08x new_esp=%08x handler=%08x trap=%08x idt14=%08x:%08x stack_pa=%08x..%08x",
+                   handler == k->trap_va ? "default-handler" : "unmapped-stack", va, write,
+                   nc_frame_eip(f), old_esp, esp, handler, k->trap_va, gate_hi, gate_lo,
+                   stack_first_pa, stack_last_pa);
+        }
         return false;
     }
     /* As a ring-0 interrupt gate: EFLAGS, CS, EIP (the faulting instruction,
