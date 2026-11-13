@@ -156,7 +156,30 @@ bool nc_paging_fault(NcKernel *k, uint32_t va)
         return false;
     }
     sync_pde(k, va >> 22);
-    return nc_vm_phys(k->vm, va) != UINT32_MAX;
+    if (nc_vm_phys(k->vm, va) != UINT32_MAX) {
+        return true;
+    }
+
+    /* Keep a bounded record of misses so the next crash tells us exactly
+     * what the title's page tables contained at the faulting address. */
+    static unsigned s_logged_misses;
+    if (s_logged_misses++ < 64) {
+        const unsigned di = va >> 22, ti = (va >> 12) & 0x3FFu;
+        const uint32_t pde = nc_rd32(k->vm->ram + g_pd_pa + 4 * di);
+        uint32_t pte = 0xFFFFFFFFu;
+        uint32_t pt_pa = UINT32_MAX;
+        if ((pde & PTE_PRESENT) && !(pde & PDE_LARGE)) {
+            pt_pa = pde & ~0xFFFu;
+            if ((uint64_t)pt_pa + NC_PAGE <= k->vm->ram_size) {
+                pte = nc_rd32(k->vm->ram + pt_pa + 4 * ti);
+            }
+        }
+        nc_log("hakuX-native",
+               "paging: unresolved miss va=%08x cr3=%08x pde[%u]=%08x pt_pa=%08x pte[%u]=%08x applied_pde=%08x applied_pte=%08x phys=%08x",
+               va, g_pd_pa, di, pde, pt_pa, ti, pte, g_pd_applied[di],
+               g_pt_applied[di] ? g_pt_applied[di][ti] : 0, nc_vm_phys(k->vm, va));
+    }
+    return false;
 }
 
 /* ---------------------------------------------------------- savestates */
