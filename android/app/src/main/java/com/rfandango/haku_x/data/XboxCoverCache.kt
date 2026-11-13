@@ -59,24 +59,29 @@ object XboxCoverCache {
     }
     if (xmids.isEmpty()) return loadX1Cover(context, gameTitle, dir, id)
 
-    val temp = File(dir, "$id.tmp")
-    for (xmid in xmids) {
-      val publisher = xmid.take(2)
-      val candidates = listOf(
-        "$RAW/cover/$publisher/$xmid.jpg",
-        "$RAW/thumbnail/$publisher/$xmid.jpg",
-      )
-      for (imageUrl in candidates) {
-        val bitmap = downloadBitmap(imageUrl, temp) ?: continue
-        if (!temp.renameTo(cached)) {
-          temp.copyTo(cached, overwrite = true)
-          temp.delete()
+    // Each concurrent library refresh gets its own temporary file. A shared
+    // "$id.tmp" lets one caller rename/delete a file while another is writing it.
+    val temp = File.createTempFile("$id-", ".tmp", dir)
+    try {
+      for (xmid in xmids) {
+        val publisher = xmid.take(2)
+        val candidates = listOf(
+          "$RAW/cover/$publisher/$xmid.jpg",
+          "$RAW/thumbnail/$publisher/$xmid.jpg",
+        )
+        for (imageUrl in candidates) {
+          val bitmap = downloadBitmap(imageUrl, temp) ?: continue
+          if (!temp.renameTo(cached)) {
+            runCatching { temp.copyTo(cached, overwrite = true) }
+              .onFailure { Log.w(TAG, "Could not cache cover for Title ID $id", it) }
+          }
+          Log.i(TAG, "Loaded cover for Title ID $id (XMID $xmid)")
+          return bitmap
         }
-        Log.i(TAG, "Loaded cover for Title ID $id (XMID $xmid)")
-        return bitmap
       }
+    } finally {
+      temp.delete()
     }
-    temp.delete()
     Log.i(TAG, "No MobCat cover available for Title ID $id; trying X1_Covers")
     return loadX1Cover(context, gameTitle, dir, id)
   }
