@@ -195,7 +195,8 @@ jobs:
 
       - name: Nomear os APKs
         run: |
-          APK=$(find android/app/build/outputs/apk/debug -name "*.apk" | head -n1)
+          APK=$(find android/app/build/outputs/apk/redmagic/debug -name "*.apk" -type f | head -n1)
+          test -n "$APK"
           cp "$APK" hakuX-debug.apk
           ls -la hakuX-debug.apk
 
