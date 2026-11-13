@@ -178,7 +178,7 @@ jobs:
           # Retry transient Maven Central / GitHub release gateway failures.
           for attempt in 1 2 3; do
             echo "Gradle build attempt $attempt/3"
-            if ./gradlew testDebugUnitTest assembleDebug assembleRedmagicRedmagicTest --no-daemon --refresh-dependencies \
+            if ./gradlew testStandardDebugUnitTest assembleStandardDebug assembleRedmagicRedmagicTest --no-daemon --refresh-dependencies \
               -PciVersionCode="$GITHUB_RUN_NUMBER" \
               -PciStorePassword="$HAKUX_STORE_PASSWORD" \
               -PciKeyAlias="$HAKUX_KEY_ALIAS" \
@@ -193,17 +193,19 @@ jobs:
           echo "Gradle build failed after 3 attempts."
           exit 1
 
-      - name: Nomear os APKs
+      - name: Nomear APK padrão hakuX FSR
         run: |
-          APK=$(find android/app/build/outputs/apk/redmagic/debug -name "*.apk" -type f | head -n1)
+          set -euo pipefail
+          APK=$(find android/app/build/outputs/apk/standard/debug -maxdepth 1 -name "*.apk" -type f | head -n1)
           test -n "$APK"
-          cp "$APK" hakuX-debug.apk
-          ls -la hakuX-debug.apk
+          cp "$APK" hakuX-fsr-debug.apk
+          ls -lh hakuX-fsr-debug.apk
 
       - uses: actions/upload-artifact@v4
         with:
-          name: hakuX-standard-debug-apk
-          path: hakuX-debug.apk
+          name: hakuX-fsr-standard-debug
+          path: hakuX-fsr-debug.apk
+          retention-days: 14
 
       - name: Nomear APK experimental REDMAGIC
         run: |
@@ -223,8 +225,10 @@ jobs:
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish }}
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: Build-420
-          name: HakuX FSR — Build 420
+          tag_name: hakux-prerelease-${{ github.run_number }}
+          name: HakuX FSR — Pre-release #${{ github.run_number }}
           prerelease: true
-          files: hakuX-debug.apk
+          files: |
+            hakuX-fsr-debug.apk
+            hakuX-redmagic-gamespace-test.apk
           fail_on_unmatched_files: true
