@@ -57,6 +57,11 @@ android {
   // The normal HakuX debug/release application IDs remain unchanged.
   flavorDimensions += "distribution"
   productFlavors {
+    create("standard") {
+      dimension = "distribution"
+      applicationId = "com.rfandango.haku_x"
+      resValue("string", "app_name", "hakuX")
+    }
     create("redmagic") {
       dimension = "distribution"
       applicationId = "com.kurogame.wutheringwaves.global"
