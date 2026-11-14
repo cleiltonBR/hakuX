@@ -182,6 +182,21 @@ class AppPrefs(context: Context) {
     get() = sp.getInt(NativeCoreActivity.PREF_ANISO_LEVEL, 16).coerceIn(1, 16)
     set(value) = sp.edit { putInt(NativeCoreActivity.PREF_ANISO_LEVEL, value.coerceIn(1, 16)) }
 
+  /** LSFG output multiplier selected on the setup screen. */
+  var lsfgMultiplier: Int
+    get() = sp.getInt(KEY_LSFG_MULTIPLIER, 2).coerceIn(2, 4)
+    set(value) = sp.edit { putInt(KEY_LSFG_MULTIPLIER, value.coerceIn(2, 4)) }
+
+  /** LSFG performance mode; true favors lower GPU cost. */
+  var lsfgPerformanceMode: Boolean
+    get() = sp.getBoolean(KEY_LSFG_PERFORMANCE, true)
+    set(value) = sp.edit { putBoolean(KEY_LSFG_PERFORMANCE, value) }
+
+  /** LSFG optical-flow scale, normalized to 25, 50, 75 or 100 percent. */
+  var lsfgFlowScalePercent: Int
+    get() = (((sp.getInt(KEY_LSFG_FLOW_SCALE, 100).coerceIn(25, 100) + 12) / 25) * 25).coerceIn(25, 100)
+    set(value) = sp.edit { putInt(KEY_LSFG_FLOW_SCALE, (((value.coerceIn(25, 100) + 12) / 25) * 25).coerceIn(25, 100)) }
+
   /** LSFG shader source imported by the user; the executable DLL is never loaded. */
   var lsfgDllPath: String
     get() = sp.getString(KEY_LSFG_DLL_PATH, "") ?: ""
@@ -324,6 +339,9 @@ class AppPrefs(context: Context) {
     private const val KEY_LIBRARY_COVER_SCALE = "library_cover_scale"
     private const val KEY_RENDER_SCALE_HALF = "render_scale_half"
     private const val KEY_LSFG_DLL_PATH = "lsfg_dll_path"
+    private const val KEY_LSFG_MULTIPLIER = "lsfg_multiplier"
+    private const val KEY_LSFG_PERFORMANCE = "lsfg_performance"
+    private const val KEY_LSFG_FLOW_SCALE = "lsfg_flow_scale"
     private const val KEY_CONSOLE_TIMING = "console_timing"
     private const val KEY_THEME = "app_theme"
     private const val KEY_TURNIP_NOTE = "turnip_note_shown"
