@@ -123,8 +123,13 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
       lsfgView?.let { v ->
         val prefs = AppPrefs(this@NativeCoreActivity)
         val available = prefs.lsfgDllPath.isNotBlank() && File(prefs.lsfgDllPath).isFile
+        val lsfgStats = if (prefs.lsfgEnabled && available) nativeGetLsfgStats() else null
         v.text = if (prefs.lsfgEnabled && available) {
-          "LSFG: ATIVADO • ${prefs.lsfgMultiplier}×"
+          if (lsfgStats != null && lsfgStats.size >= 2 && lsfgStats[0] > 0f && lsfgStats[1] > 0f) {
+            "LSFG: ATIVADO • ${prefs.lsfgMultiplier}×\nENTRADA: ${lsfgStats[0].toInt()} FPS • SAÍDA: ${lsfgStats[1].toInt()} FPS"
+          } else {
+            "LSFG: ATIVADO • ${prefs.lsfgMultiplier}×\nENTRADA: -- FPS • SAÍDA: -- FPS"
+          }
         } else if (prefs.lsfgEnabled) {
           "LSFG: ATIVADO • DLL AUSENTE"
         } else {
@@ -1942,6 +1947,10 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     /** fps, average frame time (ms), last frame time (ms), 1 if push-buffer decoding renders. */
     @JvmStatic
     external fun nativeGetFrameStats(): FloatArray?
+
+    /** Measured LSFG input and total output FPS from successful Vulkan presents. */
+    @JvmStatic
+    external fun nativeGetLsfgStats(): FloatArray?
 
     /** Why the game can't run on this device (the GPU driver, or the game), or null. */
     @JvmStatic
