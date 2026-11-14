@@ -226,6 +226,37 @@ static struct {
     bool lsfg_performance;
 } g_ps;
 
+/* Rolling LSFG telemetry counts only successful Vulkan presentation calls.
+ * Input is the real frame; generated is each extra frame accepted by present. */
+static uint64_t g_lsfg_stats_start_ns;
+static uint64_t g_lsfg_stats_input, g_lsfg_stats_generated;
+static float g_lsfg_input_fps, g_lsfg_output_fps;
+
+static void lsfg_stats_record(bool generated)
+{
+    const uint64_t now = (uint64_t)hle_now_ns();
+    if (!g_lsfg_stats_start_ns) g_lsfg_stats_start_ns = now;
+    if (generated) ++g_lsfg_stats_generated;
+    else ++g_lsfg_stats_input;
+    const uint64_t elapsed = now - g_lsfg_stats_start_ns;
+    if (elapsed >= 500000000ull) {
+        const float seconds = (float)elapsed / 1000000000.0f;
+        const float input = (float)g_lsfg_stats_input / seconds;
+        const float output = (float)(g_lsfg_stats_input + g_lsfg_stats_generated) / seconds;
+        __atomic_store_n(&g_lsfg_input_fps, input, __ATOMIC_RELAXED);
+        __atomic_store_n(&g_lsfg_output_fps, output, __ATOMIC_RELAXED);
+        g_lsfg_stats_input = 0;
+        g_lsfg_stats_generated = 0;
+        g_lsfg_stats_start_ns = now;
+    }
+}
+
+void hle_present_lsfg_stats(float *input_fps, float *output_fps)
+{
+    if (input_fps) *input_fps = __atomic_load_n(&g_lsfg_input_fps, __ATOMIC_RELAXED);
+    if (output_fps) *output_fps = __atomic_load_n(&g_lsfg_output_fps, __ATOMIC_RELAXED);
+}
+
 void hle_present_set_lsfg(int multiplier, bool performance, int flow_scale)
 {
     const int next_multiplier = multiplier < 2 ? 2 : multiplier > 4 ? 4 : multiplier;
@@ -4186,6 +4217,8 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
                 .pImageIndices = &lsfg_acquired_indices[i]
             };
             const VkResult generated_pr = T.vkQueuePresentKHR(g_hvk.queue, &generated_pi);
+            if (generated_pr == VK_SUCCESS || generated_pr == VK_SUBOPTIMAL_KHR)
+                lsfg_stats_record(true);
             if (generated_pr == VK_ERROR_OUT_OF_DATE_KHR ||
                 (generated_pr == VK_SUBOPTIMAL_KHR && g_ps.follows) ||
                 generated_pr == VK_ERROR_SURFACE_LOST_KHR)
@@ -4194,6 +4227,8 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
                 hle_vk_lose(generated_pr, "vkQueuePresentKHR (LSFG)");
         }
         pr = T.vkQueuePresentKHR(g_hvk.queue, &pi);
+        if (pr == VK_SUCCESS || pr == VK_SUBOPTIMAL_KHR)
+            lsfg_stats_record(false);
         g_present_ns += hle_now_ns() - tp0;
         hle_vk_queue_unlock();
     }
