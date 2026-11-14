@@ -228,8 +228,8 @@ static struct {
 void hle_present_set_lsfg(int multiplier, bool performance, int flow_scale)
 {
     const int next_multiplier = multiplier < 2 ? 2 : multiplier > 4 ? 4 : multiplier;
-    if (g_ps.lsfg_multiplier != next_multiplier && g_ps.sc)
-        g_ps.stale = true; /* rebuild with enough swapchain images for the new multiplier */
+    if (g_ps.sc)
+        g_ps.stale = true; /* also re-evaluate capacity if the DLL was just imported */
     g_ps.lsfg_multiplier = next_multiplier;
     g_ps.lsfg_performance = performance;
     g_ps.lsfg_flow_scale = flow_scale < 25 ? 25 : flow_scale > 100 ? 100 : flow_scale;
@@ -2118,8 +2118,19 @@ static bool lsfg_generate_dispatch(VkCommandBuffer cb, uint64_t serial,
                            VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
     lsfg_alpha_transition(cb, detail2, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                            VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
-    lsfg_alpha_transition(cb, output, VK_IMAGE_LAYOUT_GENERAL,
-                           VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
+    const VkImageLayout old_output_layout = output->layout;
+    const VkPipelineStageFlags2 output_src_stage =
+        old_output_layout == VK_IMAGE_LAYOUT_UNDEFINED ? VK_PIPELINE_STAGE_2_NONE :
+        old_output_layout == VK_IMAGE_LAYOUT_GENERAL ? VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT :
+                                                       VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+    const VkAccessFlags2 output_src_access =
+        old_output_layout == VK_IMAGE_LAYOUT_UNDEFINED ? 0 :
+        old_output_layout == VK_IMAGE_LAYOUT_GENERAL ? VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT :
+                                                       VK_ACCESS_2_SHADER_SAMPLED_READ_BIT;
+    barrier(cb, output->image, old_output_layout, VK_IMAGE_LAYOUT_GENERAL,
+            output_src_stage, output_src_access, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+            VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
+    output->layout = VK_IMAGE_LAYOUT_GENERAL;
 
     VkSampler samplers[2] = { g_ps.lsfg_sampler, g_ps.lsfg_sampler };
     for (unsigned i = 0; i < 2; ++i) {
@@ -3822,7 +3833,9 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
         g_ps.lsfg_history_count >= 3 &&
         lsfg_mipmap_dispatch(cb, (unsigned)(g_ps.serial % ARRAY_SIZE(g_ps.lsfg_mipmap_sets))) &&
         lsfg_alpha_dispatch(cb, g_ps.serial) && lsfg_beta_dispatch(cb, g_ps.serial)) {
-        const unsigned wanted = MIN((unsigned)(g_ps.lsfg_multiplier - 1), g_ps.lsfg_extra_budget);
+        const unsigned configured_generations =
+            g_ps.lsfg_multiplier < 2 ? 1u : (unsigned)(g_ps.lsfg_multiplier - 1);
+        const unsigned wanted = MIN(configured_generations, g_ps.lsfg_extra_budget);
         for (unsigned i = 0; i < wanted; ++i) {
             uint32_t image_index = 0;
             const VkResult acquire = T.vkAcquireNextImageKHR(g_hvk.dev, g_ps.sc, 50000000ull,
