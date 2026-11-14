@@ -317,6 +317,8 @@ int hle_vk_init(void)
                          has_ext(ext, ne, VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME)));
     bool e_eds1 = has_ext(ext, ne, VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME);
     bool e_pcc = has_ext(ext, ne, VK_EXT_PIPELINE_CREATION_CACHE_CONTROL_EXTENSION_NAME);
+    bool e_vmm = has_ext(ext, ne, "VK_KHR_vulkan_memory_model");
+    bool e_r2 = has_ext(ext, ne, "VK_EXT_robustness2");
     if (api < VK_API_VERSION_1_1) {     /* no vkGetPhysicalDeviceFeatures2 */
         hle_log("hakuX-hle-back", "vk: \"%s\" is a Vulkan 1.0 device", v->props.deviceName);
         snprintf(g_hle_unavailable, sizeof(g_hle_unavailable), "%s lacks vulkan1.1",
@@ -382,6 +384,10 @@ int hle_vk_init(void)
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT };
     VkPhysicalDevicePipelineCreationCacheControlFeatures q_pcc = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_CREATION_CACHE_CONTROL_FEATURES };
+    VkPhysicalDeviceVulkanMemoryModelFeatures q_vmm = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_MEMORY_MODEL_FEATURES };
+    VkPhysicalDeviceRobustness2FeaturesEXT q_r2 = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT };
     VkBaseOutStructure *tail = v13 ? (VkBaseOutStructure *)&q13 : (VkBaseOutStructure *)&q;
     if (!v13) {
         if (e_tl) chain(&tail, &q_tl);
@@ -393,6 +399,8 @@ int hle_vk_init(void)
         if (e_eds1) chain(&tail, &q_eds1);
         if (e_pcc) chain(&tail, &q_pcc);
     }
+    if (v12 || e_vmm) chain(&tail, &q_vmm);
+    if (e_r2) chain(&tail, &q_r2);
     if (e_vids) chain(&tail, &q_vids);
     if (e_eds2) chain(&tail, &q_eds2);
     if (e_cbc) chain(&tail, &q_cbc);
@@ -518,6 +526,8 @@ int hle_vk_init(void)
     c->local_read = v13 && e_lr && q_lr.dynamicRenderingLocalRead;
     c->fbfetch = c->local_read && !getenv("HAKUX_HLE_NO_FBFETCH");
     c->exec_props = has_ext(ext, ne, VK_KHR_PIPELINE_EXECUTABLE_PROPERTIES_EXTENSION_NAME);
+    c->lsfg_memory_model = (v12 || e_vmm) && q_vmm.vulkanMemoryModel;
+    c->lsfg_null_descriptor = e_r2 && q_r2.nullDescriptor;
     c->aniso = q.features.samplerAnisotropy;
     c->host_query_reset = v13 ? q12.hostQueryReset : e_hqr && q_hqr.hostQueryReset;
     c->cache_control = v13 ? q13.pipelineCreationCacheControl
@@ -611,6 +621,14 @@ int hle_vk_init(void)
         .sType = q_eds1.sType, .extendedDynamicState = VK_TRUE };
     VkPhysicalDevicePipelineCreationCacheControlFeatures f_pcc = {
         .sType = q_pcc.sType, .pipelineCreationCacheControl = VK_TRUE };
+    VkPhysicalDeviceVulkanMemoryModelFeatures f_vmm = {
+        .sType = q_vmm.sType, .vulkanMemoryModel = VK_TRUE,
+        .vulkanMemoryModelDeviceScope = q_vmm.vulkanMemoryModelDeviceScope,
+        .vulkanMemoryModelAvailabilityVisibilityChains = q_vmm.vulkanMemoryModelAvailabilityVisibilityChains };
+    VkPhysicalDeviceRobustness2FeaturesEXT f_r2 = {
+        .sType = q_r2.sType, .nullDescriptor = VK_TRUE,
+        .robustBufferAccess2 = q_r2.robustBufferAccess2,
+        .robustImageAccess2 = q_r2.robustImageAccess2 };
     f.features.wideLines = c->wide_lines;
     f.features.largePoints = VK_TRUE;
     f.features.depthClamp = c->depth_clamp;
@@ -633,6 +651,8 @@ int hle_vk_init(void)
         if (c->eds1) chain(&tail, &f_eds1);
         if (c->cache_control) chain(&tail, &f_pcc);
     }
+    if (c->lsfg_memory_model) chain(&tail, &f_vmm);
+    if (c->lsfg_null_descriptor) chain(&tail, &f_r2);
     if (u_vids) chain(&tail, &f_vids);
     if (u_eds2) chain(&tail, &f_eds2);
     if (c->cbc) chain(&tail, &f_cbc);
@@ -689,6 +709,8 @@ int hle_vk_init(void)
     if (c->swapchain) {
         exts[nx++] = VK_KHR_SWAPCHAIN_EXTENSION_NAME;
     }
+    if (c->lsfg_memory_model && !v12) exts[nx++] = "VK_KHR_vulkan_memory_model";
+    if (c->lsfg_null_descriptor) exts[nx++] = "VK_EXT_robustness2";
     float prio = 1.0f;
     VkDeviceQueueCreateInfo qci = {
         .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
@@ -714,12 +736,13 @@ int hle_vk_init(void)
         vkGetDeviceProcAddr(v->dev, "vkGetAndroidHardwareBufferPropertiesANDROID") : NULL;
     hle_log("hakuX-hle-back", "vk: device \"%s\" api %u.%u.%u driver 0x%x floor=ok "
             "plus: gpl=%d eds3=%d dbuf=%d m5=%d sscaled=%d local_read=%d fbfetch=%d cache_control=%d "
-            "swapchain=%d",
+            "swapchain=%d lsfg_memory_model=%d lsfg_null_descriptor=%d",
             v->props.deviceName, VK_API_VERSION_MAJOR(v->props.apiVersion),
             VK_API_VERSION_MINOR(v->props.apiVersion),
             VK_API_VERSION_PATCH(v->props.apiVersion), v->props.driverVersion,
             c->gpl, c->eds3, c->descriptor_buffer, c->maint5, c->sscaled,
-            c->local_read, c->fbfetch, c->cache_control, c->swapchain);
+            c->local_read, c->fbfetch, c->cache_control, c->swapchain,
+            c->lsfg_memory_model, c->lsfg_null_descriptor);
     hle_log("hakuX-hle-back", "vk: bc=%d vids=%d push=%d push_desc=%d cbc=%d cbc_any=%d "
             "x4444=%d d24s8=%d bda=%d ahb=%d vk13=%d dyn_render=%d sync2=%d eds1=%d eds2=%d "
             "bindless=%d depth_clamp=%d (0: the substitute runs)", c->bc, c->vids, c->push,
