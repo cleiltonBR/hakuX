@@ -1176,8 +1176,8 @@ static bool lsfg_alpha_dispatch(VkCommandBuffer cb, uint64_t frame_serial)
         VkDescriptorSet set = g_ps.lsfg_alpha_sets[level][2];
         T.vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_COMPUTE,
                                   g_ps.lsfg_pipeline_layouts[14], 0, 1, &set, 0, NULL);
-        const uint32_t w = MAX(1u, ((MAX(1u, (MAX(1u, g_ps.lsfg_flow_w >> level) + 1u) >> 1) + 1u) >> 1);
-        const uint32_t h = MAX(1u, ((MAX(1u, (MAX(1u, g_ps.lsfg_flow_h >> level) + 1u) >> 1) + 1u) >> 1);
+        const uint32_t w = MAX(1u, (MAX(1u, g_ps.lsfg_flow_w >> level) + 3u) >> 2);
+        const uint32_t h = MAX(1u, (MAX(1u, g_ps.lsfg_flow_h >> level) + 3u) >> 2);
         T.vkCmdDispatch(cb, (w + 7u) >> 3, (h + 7u) >> 3, 1);
     }
     for (unsigned level = 0; level < 7; ++level) {
@@ -1192,8 +1192,8 @@ static bool lsfg_alpha_dispatch(VkCommandBuffer cb, uint64_t frame_serial)
         VkDescriptorSet set = g_ps.lsfg_alpha_sets[level][3 + slot];
         T.vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_COMPUTE,
                                   g_ps.lsfg_pipeline_layouts[15], 0, 1, &set, 0, NULL);
-        const uint32_t w = MAX(1u, ((MAX(1u, (MAX(1u, g_ps.lsfg_flow_w >> level) + 1u) >> 1) + 1u) >> 1);
-        const uint32_t h = MAX(1u, ((MAX(1u, (MAX(1u, g_ps.lsfg_flow_h >> level) + 1u) >> 1) + 1u) >> 1);
+        const uint32_t w = MAX(1u, (MAX(1u, g_ps.lsfg_flow_w >> level) + 3u) >> 2);
+        const uint32_t h = MAX(1u, (MAX(1u, g_ps.lsfg_flow_h >> level) + 3u) >> 2);
         T.vkCmdDispatch(cb, (w + 7u) >> 3, (h + 7u) >> 3, 1);
     }
     return true;
