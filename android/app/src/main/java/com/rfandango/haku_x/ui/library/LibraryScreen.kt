@@ -217,7 +217,6 @@ fun LibraryScreen(
             modifier = Modifier.weight(1f).clip(RoundedCornerShape(10.dp))
               .background(if (selected) Color(0xFF18351C) else Color.Transparent)
               .border(1.dp, if (selected) Color(0xFF5EAA63) else MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp)),
-            contentPadding = PaddingValues(horizontal = 2.dp, vertical = 0.dp),
           ) {
             Icon(image, contentDescription = mode, tint = if (selected) Color(0xFF9BE69A) else MaterialTheme.colorScheme.onSurfaceVariant)
           }
