@@ -15,6 +15,7 @@
 #include "hw/xbox/hle/vk/lsfg_native.h"
 
 #include <string.h>
+#include <stdlib.h>
 #include <sys/system_properties.h>
 #include "hw/xbox/hle/prop.h"
 #include <time.h>
