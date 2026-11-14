@@ -42,10 +42,6 @@ import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.GridView
-import androidx.compose.material.icons.filled.ViewList
-import androidx.compose.material.icons.filled.ViewCarousel
-import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
@@ -210,7 +206,7 @@ fun LibraryScreen(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
       ) {
-        listOf("grid" to Icons.Filled.GridView, "list" to Icons.Filled.ViewList, "carousel" to Icons.Filled.ViewCarousel).forEach { (mode, image) ->
+        listOf("grid" to Icons.Filled.Build, "list" to Icons.Filled.Home, "carousel" to Icons.Filled.PlayArrow).forEach { (mode, image) ->
           val selected = state.viewMode == mode
           IconButton(
             onClick = { vm.setViewMode(mode) },
@@ -521,7 +517,7 @@ private fun GameList(
         DropdownMenu(expanded = true, onDismissRequest = { menuFor = null }) {
           DropdownMenuItem(
             text = { Text("Escolher capa personalizada") },
-            leadingIcon = { Icon(Icons.Filled.Image, contentDescription = null) },
+            leadingIcon = { Icon(Icons.Filled.Star, contentDescription = null) },
             onClick = { menuFor = null; coverTarget = game to disc; coverPicker.launch(arrayOf("image/*")) },
           )
           DropdownMenuItem(
