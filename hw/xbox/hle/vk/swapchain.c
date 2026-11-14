@@ -76,6 +76,11 @@ static struct {
     VkPipeline lsfg_pipelines[25];
     VkDescriptorPool lsfg_descriptor_pool;
     VkDescriptorSet lsfg_descriptor_sets[25];
+    VkImage lsfg_history[6];
+    VkDeviceMemory lsfg_history_mem[6];
+    VkImageView lsfg_history_view[6];
+    uint32_t lsfg_history_w, lsfg_history_h;
+    bool lsfg_history_ready, lsfg_history_failed;
     bool lsfg_modules_ready, lsfg_modules_failed, lsfg_pipelines_ready, lsfg_pipelines_failed;
     VkSemaphore tl;             /* timeline: each submit's value */
     uint64_t submitted;
@@ -330,6 +335,107 @@ fail:
     lsfg_pipeline_destroy();
     g_ps.lsfg_pipelines_failed = true;
     return false;
+}
+
+static void lsfg_history_drop(void)
+{
+    for (unsigned i = 0; i < ARRAY_SIZE(g_ps.lsfg_history); ++i) {
+        if (g_ps.lsfg_history_view[i])
+            T.vkDestroyImageView(g_hvk.dev, g_ps.lsfg_history_view[i], NULL);
+        if (g_ps.lsfg_history[i])
+            T.vkDestroyImage(g_hvk.dev, g_ps.lsfg_history[i], NULL);
+        if (g_ps.lsfg_history_mem[i])
+            T.vkFreeMemory(g_hvk.dev, g_ps.lsfg_history_mem[i], NULL);
+        g_ps.lsfg_history_view[i] = VK_NULL_HANDLE;
+        g_ps.lsfg_history[i] = VK_NULL_HANDLE;
+        g_ps.lsfg_history_mem[i] = VK_NULL_HANDLE;
+    }
+    g_ps.lsfg_history_w = g_ps.lsfg_history_h = 0;
+    g_ps.lsfg_history_ready = false;
+}
+
+static bool lsfg_history_make_image(uint32_t w, uint32_t h, unsigned index)
+{
+    const VkFormat format = VK_FORMAT_R8G8B8A8_UNORM;
+    VkImageCreateInfo ici = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .imageType = VK_IMAGE_TYPE_2D,
+        .format = format,
+        .extent = { w, h, 1 },
+        .mipLevels = 1,
+        .arrayLayers = 1,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .tiling = VK_IMAGE_TILING_OPTIMAL,
+        .usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+                 VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED
+    };
+    if (T.vkCreateImage(g_hvk.dev, &ici, NULL, &g_ps.lsfg_history[index]) != VK_SUCCESS)
+        return false;
+
+    VkMemoryRequirements mr;
+    T.vkGetImageMemoryRequirements(g_hvk.dev, g_ps.lsfg_history[index], &mr);
+    const int mt = hle_vk_memtype(mr.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 0);
+    if (mt < 0) return false;
+    VkMemoryAllocateInfo mai = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize = mr.size,
+        .memoryTypeIndex = (uint32_t)mt
+    };
+    if (T.vkAllocateMemory(g_hvk.dev, &mai, NULL, &g_ps.lsfg_history_mem[index]) != VK_SUCCESS ||
+        T.vkBindImageMemory(g_hvk.dev, g_ps.lsfg_history[index],
+                            g_ps.lsfg_history_mem[index], 0) != VK_SUCCESS)
+        return false;
+
+    VkImageViewCreateInfo vci = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .image = g_ps.lsfg_history[index],
+        .viewType = VK_IMAGE_VIEW_TYPE_2D,
+        .format = format,
+        .subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 }
+    };
+    return T.vkCreateImageView(g_hvk.dev, &vci, NULL,
+                               &g_ps.lsfg_history_view[index]) == VK_SUCCESS;
+}
+
+/* Six temporal images mirror LSFG's three history slots, each holding the
+ * previous/current frame pair. They are only allocated here: capture, layout
+ * transitions and dispatch are deliberately separate follow-up stages. */
+static bool lsfg_history_ensure(uint32_t w, uint32_t h)
+{
+    if (g_ps.lsfg_history_ready && g_ps.lsfg_history_w == w &&
+        g_ps.lsfg_history_h == h) return true;
+    if (w < 2 || h < 2 || w > 8192 || h > 8192) return false;
+    if (g_ps.lsfg_history_ready || g_ps.lsfg_history[0]) {
+        idle();
+        lsfg_history_drop();
+    }
+
+    VkFormatProperties fp;
+    vkGetPhysicalDeviceFormatProperties(g_hvk.phys, VK_FORMAT_R8G8B8A8_UNORM, &fp);
+    const VkFormatFeatureFlags required = VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
+                                           VK_FORMAT_FEATURE_TRANSFER_DST_BIT;
+    if ((fp.optimalTilingFeatures & required) != required) {
+        hle_log("hakuX-lsfg", "RGBA8 does not support sampled/transfer-destination history images");
+        g_ps.lsfg_history_failed = true;
+        return false;
+    }
+
+    for (unsigned i = 0; i < ARRAY_SIZE(g_ps.lsfg_history); ++i) {
+        if (!lsfg_history_make_image(w, h, i)) {
+            hle_log("hakuX-lsfg", "history image %u allocation failed at %ux%u", i, w, h);
+            lsfg_history_drop();
+            g_ps.lsfg_history_failed = true;
+            return false;
+        }
+    }
+    g_ps.lsfg_history_w = w;
+    g_ps.lsfg_history_h = h;
+    g_ps.lsfg_history_ready = true;
+    g_ps.lsfg_history_failed = false;
+    hle_log("hakuX-lsfg", "allocated six RGBA8 temporal history images at %ux%u", w, h);
+    return true;
 }
 
 static bool lsfg_modules_init(void)
@@ -1817,7 +1923,8 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
                                     .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT };
     T.vkBeginCommandBuffer(cb, &bi);
     if (g_ps.have && hle_lsfg_shader_count() == ARRAY_SIZE(k_lsfg_passes) &&
-        lsfg_modules_init()) lsfg_pipelines_init();
+        lsfg_modules_init() && lsfg_pipelines_init())
+        lsfg_history_ensure(g_ps.f.w, g_ps.f.h);
     VkImageView src = g_ps.have ? g_ps.f.view : VK_NULL_HANDLE;
     bool fxaa_done = false;
     /* The frame's writes need no barrier here: each writer of a display
