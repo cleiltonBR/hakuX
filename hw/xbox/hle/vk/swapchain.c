@@ -82,7 +82,8 @@ typedef struct PsFrame {
     VkCommandPool pool;
     VkCommandBuffer cb;
     VkSemaphore acquired;       /* its swapchain image is ready */
-    VkDescriptorSet set[3];     /* the window pass's, FXAA's */
+    VkSemaphore lsfg_acquired[3]; /* extra swapchain images for generated frames */
+    VkDescriptorSet set[6];     /* window, FXAA, EASU and up to three generated-frame draws */
     VkDescriptorSet nis_set;
     uint64_t value;             /* its last submit's on the timeline */
     bool ramp_stale;            /* its share of the ramp buffer is behind */
@@ -115,7 +116,11 @@ static struct {
     VkDescriptorSet lsfg_gamma_sets[7][6][7];
     LsfgGammaLevel lsfg_gamma[7];
     VkDescriptorSet lsfg_delta_sets[3][6][14];
+    VkDescriptorSet lsfg_generate_sets[6][PS_FRAMES * 3][2];
     LsfgDeltaLevel lsfg_delta[3];
+    LsfgAlphaImage lsfg_generated[PS_FRAMES][3];
+    uint32_t lsfg_generated_w, lsfg_generated_h;
+    bool lsfg_generate_sets_allocated, lsfg_generate_ready;
     VkBuffer lsfg_delta_constants_buffer[3][6];
     VkDeviceMemory lsfg_delta_constants_memory[3][6];
     uint8_t *lsfg_delta_constants_map[3][6];
@@ -185,6 +190,7 @@ static struct {
     VkExtent2D ext, wsize;      /* the images' (the panel's orientation), the window's */
     float rot[4];               /* the window's clip space into the images' (k_vs) */
     uint32_t nimg, idx;
+    uint32_t lsfg_extra_budget;
     VkImage *img;               /* nimg each */
     VkImageView *view;
     VkSemaphore *drawn;         /* its pass done: what its present waits for */
@@ -221,7 +227,10 @@ static struct {
 
 void hle_present_set_lsfg(int multiplier, bool performance, int flow_scale)
 {
-    g_ps.lsfg_multiplier = multiplier < 2 ? 2 : multiplier > 4 ? 4 : multiplier;
+    const int next_multiplier = multiplier < 2 ? 2 : multiplier > 4 ? 4 : multiplier;
+    if (g_ps.lsfg_multiplier != next_multiplier && g_ps.sc)
+        g_ps.stale = true; /* rebuild with enough swapchain images for the new multiplier */
+    g_ps.lsfg_multiplier = next_multiplier;
     g_ps.lsfg_performance = performance;
     g_ps.lsfg_flow_scale = flow_scale < 25 ? 25 : flow_scale > 100 ? 100 : flow_scale;
 }
@@ -281,7 +290,9 @@ static void lsfg_pipeline_destroy(void)
         memset(g_ps.lsfg_beta_sets, 0, sizeof(g_ps.lsfg_beta_sets));
         memset(g_ps.lsfg_gamma_sets, 0, sizeof(g_ps.lsfg_gamma_sets));
         memset(g_ps.lsfg_delta_sets, 0, sizeof(g_ps.lsfg_delta_sets));
+        memset(g_ps.lsfg_generate_sets, 0, sizeof(g_ps.lsfg_generate_sets));
         g_ps.lsfg_delta_sets_allocated = false;
+        g_ps.lsfg_generate_sets_allocated = false;
         g_ps.lsfg_alpha_sets_allocated = false;
         g_ps.lsfg_gamma_sets_allocated = false;
 
@@ -405,6 +416,11 @@ static bool lsfg_pipelines_init(void)
     descriptor_totals[1] += 3u * 6u * 22u;
     descriptor_totals[2] += 3u * 6u * 49u;
     descriptor_totals[3] += 3u * 6u * 23u;
+    /* Generate: six timestamp slots, nine per-frame targets, two frame parities. */
+    descriptor_totals[0] += 108u;
+    descriptor_totals[1] += 216u;
+    descriptor_totals[2] += 540u;
+    descriptor_totals[3] += 108u;
     const VkDescriptorType descriptor_types[4] = {
         VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_DESCRIPTOR_TYPE_SAMPLER,
         VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE
@@ -417,7 +433,7 @@ static bool lsfg_pipelines_init(void)
     }
     VkDescriptorPoolCreateInfo dpci = {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-        .maxSets = ARRAY_SIZE(k_lsfg_passes) + ARRAY_SIZE(g_ps.lsfg_mipmap_sets) - 1 + 42 + 7 + 294 + 252,
+        .maxSets = ARRAY_SIZE(k_lsfg_passes) + ARRAY_SIZE(g_ps.lsfg_mipmap_sets) - 1 + 42 + 7 + 294 + 252 + 108,
         .poolSizeCount = ARRAY_SIZE(pool_sizes),
         .pPoolSizes = pool_sizes
     };
@@ -557,6 +573,27 @@ static bool lsfg_pipelines_init(void)
             for (unsigned set = 0; set < 14; ++set)
                 g_ps.lsfg_delta_sets[instance][slot][set] = delta_sets[delta_n++];
     g_ps.lsfg_delta_sets_allocated = true;
+    VkDescriptorSetLayout generate_layouts[108];
+    VkDescriptorSet generate_sets[108];
+    for (unsigned i = 0; i < ARRAY_SIZE(generate_layouts); ++i)
+        generate_layouts[i] = g_ps.lsfg_set_layouts[1];
+    VkDescriptorSetAllocateInfo generate_ai = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool = g_ps.lsfg_descriptor_pool,
+        .descriptorSetCount = ARRAY_SIZE(generate_layouts),
+        .pSetLayouts = generate_layouts
+    };
+    r = T.vkAllocateDescriptorSets(g_hvk.dev, &generate_ai, generate_sets);
+    if (r != VK_SUCCESS) {
+        hle_log("hakuX-lsfg", "Generate descriptor allocation failed: %d", r);
+        goto fail;
+    }
+    unsigned generate_n = 0;
+    for (unsigned slot = 0; slot < 6; ++slot)
+        for (unsigned target = 0; target < PS_FRAMES * 3; ++target)
+            for (unsigned parity = 0; parity < 2; ++parity)
+                g_ps.lsfg_generate_sets[slot][target][parity] = generate_sets[generate_n++];
+    g_ps.lsfg_generate_sets_allocated = true;
     g_ps.lsfg_pipelines_ready = true;
     hle_log("hakuX-lsfg", "created %u LSFG compute pipelines and six history-indexed mipmap descriptor sets",
             (unsigned)ARRAY_SIZE(k_lsfg_passes));
@@ -2012,6 +2049,104 @@ static bool lsfg_gamma_dispatch(VkCommandBuffer cb, uint64_t frame_serial, unsig
     return true;
 }
 
+/* Generate shader 256 consumes the two adjacent source frames, final Gamma
+ * motion and the two final Delta detail images. Its timestamp UBOs are the
+ * non-first-iteration Gamma buffers, which already contain the exact LSFG
+ * interpolation fractions for generation slots 0..5. */
+static void lsfg_generate_drop(void)
+{
+    for (unsigned frame = 0; frame < PS_FRAMES; ++frame)
+        for (unsigned generation = 0; generation < 3; ++generation)
+            lsfg_alpha_image_drop(&g_ps.lsfg_generated[frame][generation]);
+    g_ps.lsfg_generated_w = g_ps.lsfg_generated_h = 0;
+    g_ps.lsfg_generate_ready = false;
+}
+
+static bool lsfg_generate_ensure(uint32_t w, uint32_t h)
+{
+    if (!g_ps.lsfg_generate_sets_allocated || !g_ps.lsfg_gamma_ready ||
+        !g_ps.lsfg_delta_ready || !g_ps.lsfg_sampler) return false;
+    if (g_ps.lsfg_generate_ready && g_ps.lsfg_generated_w == w &&
+        g_ps.lsfg_generated_h == h) return true;
+    if (g_ps.lsfg_generate_ready) {
+        idle();
+        lsfg_generate_drop();
+    }
+    for (unsigned frame = 0; frame < PS_FRAMES; ++frame)
+        for (unsigned generation = 0; generation < 3; ++generation)
+            if (!lsfg_alpha_image_make(&g_ps.lsfg_generated[frame][generation], w, h)) {
+                hle_log("hakuX-lsfg", "Generate output image allocation failed at %ux%u", w, h);
+                lsfg_generate_drop();
+                return false;
+            }
+    g_ps.lsfg_generated_w = w;
+    g_ps.lsfg_generated_h = h;
+    g_ps.lsfg_generate_ready = true;
+    hle_log("hakuX-lsfg", "Generate outputs ready: %u frame slots x 3 interpolation targets at %ux%u",
+            PS_FRAMES, w, h);
+    return true;
+}
+
+static unsigned lsfg_generation_slot(unsigned generation_count, unsigned generation)
+{
+    return ((generation_count - 1u) * generation_count) / 2u + generation;
+}
+
+static bool lsfg_generate_dispatch(VkCommandBuffer cb, uint64_t serial,
+                                   unsigned frame_slot, unsigned generation,
+                                   unsigned generation_count, unsigned generation_slot)
+{
+    if (!g_ps.lsfg_generate_ready || frame_slot >= PS_FRAMES || generation >= 3 ||
+        generation_count == 0 || generation_count > 3 || generation >= generation_count ||
+        generation_slot >= 6) return false;
+
+    const unsigned current = (unsigned)(serial % ARRAY_SIZE(g_ps.lsfg_history));
+    const unsigned previous = (current + ARRAY_SIZE(g_ps.lsfg_history) - 1u) %
+                              ARRAY_SIZE(g_ps.lsfg_history);
+    const unsigned parity = (unsigned)(serial & 1u);
+    VkImageView frames[2];
+    frames[parity] = g_ps.lsfg_history_view[current];
+    frames[1u - parity] = g_ps.lsfg_history_view[previous];
+
+    LsfgAlphaImage *motion = &g_ps.lsfg_gamma[6].output;
+    LsfgAlphaImage *detail1 = &g_ps.lsfg_delta[2].output1;
+    LsfgAlphaImage *detail2 = &g_ps.lsfg_delta[2].output2;
+    LsfgAlphaImage *output = &g_ps.lsfg_generated[frame_slot][generation];
+    lsfg_alpha_transition(cb, motion, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                           VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
+    lsfg_alpha_transition(cb, detail1, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                           VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
+    lsfg_alpha_transition(cb, detail2, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                           VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
+    lsfg_alpha_transition(cb, output, VK_IMAGE_LAYOUT_GENERAL,
+                           VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
+
+    VkSampler samplers[2] = { g_ps.lsfg_sampler, g_ps.lsfg_sampler };
+    for (unsigned i = 0; i < 2; ++i) {
+        VkImageView sampled[5] = {
+            frames[1u - i], frames[i], motion->view, detail1->view, detail2->view
+        };
+        VkImageView storage[1] = { output->view };
+        const unsigned target = frame_slot * 3u + generation;
+        lsfg_gamma_write_set(g_ps.lsfg_generate_sets[generation_slot][target][i],
+            g_ps.lsfg_gamma_constants_buffer[generation_slot][0], samplers, 2,
+            sampled, 5, storage, 1, true);
+    }
+
+    const unsigned target = frame_slot * 3u + generation;
+    VkDescriptorSet set = g_ps.lsfg_generate_sets[generation_slot][target][parity];
+    T.vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_COMPUTE, g_ps.lsfg_pipelines[1]);
+    T.vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_COMPUTE,
+        g_ps.lsfg_pipeline_layouts[1], 0, 1, &set, 0, NULL);
+    T.vkCmdDispatch(cb, (g_ps.lsfg_generated_w + 15u) >> 4,
+                    (g_ps.lsfg_generated_h + 15u) >> 4, 1);
+    barrier(cb, output->image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+            VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
+    output->layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    return true;
+}
+
 
 static void lsfg_alpha_drop(void)
 {
@@ -2881,14 +3016,14 @@ static bool init(void)
         .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO, .setLayoutCount = 1,
         .pSetLayouts = &g_ps.dsl, .pushConstantRangeCount = 1, .pPushConstantRanges = &pcr };
     VkDescriptorPoolSize ps[5] = {
-        { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, PS_FRAMES * 3 },
-        { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, PS_FRAMES * 4 },
+        { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, PS_FRAMES * 6 },
+        { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, PS_FRAMES * 7 },
         { VK_DESCRIPTOR_TYPE_SAMPLER, PS_FRAMES },
         { VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, PS_FRAMES * 3 },
         { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, PS_FRAMES }
     };
     VkDescriptorPoolCreateInfo pci = {
-        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO, .maxSets = PS_FRAMES * 4,
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO, .maxSets = PS_FRAMES * 7,
         .poolSizeCount = ARRAY_SIZE(ps), .pPoolSizes = ps };
     VkBufferCreateInfo bci = { .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, .size = PS_FRAMES * PS_RAMP,
                                .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT };
@@ -2917,15 +3052,18 @@ static bool init(void)
                                         .flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
                                         .queueFamilyIndex = g_hvk.qfam };
         VkSemaphoreCreateInfo si = { .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
-        VkDescriptorSetLayout l[3] = { g_ps.dsl, g_ps.dsl, g_ps.dsl };
+        VkDescriptorSetLayout l[6] = { g_ps.dsl, g_ps.dsl, g_ps.dsl, g_ps.dsl, g_ps.dsl, g_ps.dsl };
         VkDescriptorSetAllocateInfo dai = { .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-                                            .descriptorPool = g_ps.dp, .descriptorSetCount = 3,
+                                            .descriptorPool = g_ps.dp, .descriptorSetCount = 6,
                                             .pSetLayouts = l };
         if (T.vkCreateCommandPool(g_hvk.dev, &cpi, NULL, &f->pool) != VK_SUCCESS ||
             T.vkCreateSemaphore(g_hvk.dev, &si, NULL, &f->acquired) != VK_SUCCESS ||
             T.vkAllocateDescriptorSets(g_hvk.dev, &dai, f->set) != VK_SUCCESS) {
             return false;
         }
+        for (unsigned generation = 0; generation < 3; ++generation)
+            if (T.vkCreateSemaphore(g_hvk.dev, &si, NULL, &f->lsfg_acquired[generation]) != VK_SUCCESS)
+                return false;
         VkCommandBufferAllocateInfo ai = { .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
                                            .commandPool = f->pool, .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
                                            .commandBufferCount = 1 };
@@ -2983,6 +3121,7 @@ static void drop_images(void)
     g_free(g_ps.img);
     g_free(g_ps.view);
     g_free(g_ps.drawn);
+    g_ps.lsfg_extra_budget = 0;
     g_ps.img = NULL;
     g_ps.view = NULL;
     g_ps.drawn = NULL;
@@ -3067,7 +3206,12 @@ static bool make_swapchain(uint32_t w, uint32_t h)
     }
     /* Android may make more images than asked for (10 for 6 on a Dimensity
      * 8300), so the arrays are sized from what the swapchain reports. */
-    uint32_t n = MAX(caps.minImageCount, 3u);
+    const uint32_t base_image_count = MAX(caps.minImageCount, 3u);
+    uint32_t n = base_image_count;
+    const bool lsfg_can_request_images = hle_lsfg_shader_count() == ARRAY_SIZE(k_lsfg_passes) &&
+        g_hvk.caps.lsfg_memory_model && g_hvk.caps.lsfg_null_descriptor;
+    if (lsfg_can_request_images)
+        n += (uint32_t)(g_ps.lsfg_multiplier < 2 ? 1 : g_ps.lsfg_multiplier - 1);
     if (caps.maxImageCount) {
         n = MIN(n, caps.maxImageCount);
     }
@@ -3153,7 +3297,12 @@ static bool make_swapchain(uint32_t w, uint32_t h)
         T.vkCreateSemaphore(g_hvk.dev, &sci, NULL, &g_ps.drawn[i]);
     }
     g_ps.nimg = ni;
+    g_ps.lsfg_extra_budget = ni > base_image_count
+        ? MIN(ni - base_image_count, 3u) : 0u;
+    if (!lsfg_can_request_images) g_ps.lsfg_extra_budget = 0;
     g_ps.ext = (VkExtent2D){ w, h };
+    hle_log("hakuX-lsfg", "swapchain frame-generation capacity: %u extra images (requested multiplier %dx)",
+            g_ps.lsfg_extra_budget, g_ps.lsfg_multiplier);
     g_ps.stale = false;
     if (fmt.format != g_ps.pipe_fmt) {
         static const char *const names[P_FXAA] = { "bilinear", "area", "SGSR", "FSR RCAS" };
@@ -3657,21 +3806,57 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
     VkCommandBufferBeginInfo bi = { .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
                                     .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT };
     T.vkBeginCommandBuffer(cb, &bi);
-    bool lsfg_capture_ready = g_ps.have &&
+    bool lsfg_capture_ready = g_ps.have && g_ps.lsfg_extra_budget > 0 &&
         hle_lsfg_shader_count() == ARRAY_SIZE(k_lsfg_passes) &&
         lsfg_modules_init() && lsfg_pipelines_init() &&
         lsfg_history_ensure(g_ps.f.w, g_ps.f.h) &&
         lsfg_flow_ensure(g_ps.f.w, g_ps.f.h, g_ps.lsfg_flow_scale) &&
         lsfg_mipmap_descriptors_update() &&
         lsfg_alpha_ensure() && lsfg_beta_ensure() && lsfg_gamma_ensure() &&
-        lsfg_delta_ensure();
+        lsfg_delta_ensure() && lsfg_generate_ensure(g_ps.f.w, g_ps.f.h);
     VkImageView src = g_ps.have ? g_ps.f.view : VK_NULL_HANDLE;
+    uint32_t lsfg_acquired_indices[3] = { 0, 0, 0 };
+    bool lsfg_generated_ready[3] = { false, false, false };
+    unsigned lsfg_acquired_count = 0;
     if (lsfg_capture_ready && lsfg_history_capture(cb) &&
         g_ps.lsfg_history_count >= 3 &&
-        lsfg_mipmap_dispatch(cb, (unsigned)(g_ps.serial % ARRAY_SIZE(g_ps.lsfg_mipmap_sets))))
-        if (lsfg_alpha_dispatch(cb, g_ps.serial) && lsfg_beta_dispatch(cb, g_ps.serial))
-            if (lsfg_gamma_dispatch(cb, g_ps.serial, 0))
-                lsfg_delta_dispatch(cb, g_ps.serial, 0);
+        lsfg_mipmap_dispatch(cb, (unsigned)(g_ps.serial % ARRAY_SIZE(g_ps.lsfg_mipmap_sets))) &&
+        lsfg_alpha_dispatch(cb, g_ps.serial) && lsfg_beta_dispatch(cb, g_ps.serial)) {
+        const unsigned wanted = MIN((unsigned)(g_ps.lsfg_multiplier - 1), g_ps.lsfg_extra_budget);
+        for (unsigned i = 0; i < wanted; ++i) {
+            uint32_t image_index = 0;
+            const VkResult acquire = T.vkAcquireNextImageKHR(g_hvk.dev, g_ps.sc, 50000000ull,
+                f->lsfg_acquired[i], VK_NULL_HANDLE, &image_index);
+            if (acquire != VK_SUCCESS && acquire != VK_SUBOPTIMAL_KHR) {
+                if (acquire == VK_ERROR_OUT_OF_DATE_KHR || acquire == VK_SUBOPTIMAL_KHR)
+                    g_ps.stale = true;
+                else if (acquire == VK_ERROR_SURFACE_LOST_KHR)
+                    g_ps.stale = true;
+                else if (acquire == VK_ERROR_DEVICE_LOST)
+                    hle_vk_lose(acquire, "vkAcquireNextImageKHR (LSFG)");
+                break;
+            }
+            if (image_index >= g_ps.nimg) {
+                g_ps.stale = true;
+                break;
+            }
+            if (acquire == VK_SUBOPTIMAL_KHR && g_ps.follows) g_ps.stale = true;
+            lsfg_acquired_indices[lsfg_acquired_count++] = image_index;
+        }
+        const unsigned generation_count = lsfg_acquired_count;
+        for (unsigned generation = 0; generation < generation_count; ++generation) {
+            const unsigned slot = lsfg_generation_slot(generation_count, generation);
+            if (!lsfg_gamma_dispatch(cb, g_ps.serial, slot) ||
+                !lsfg_delta_dispatch(cb, g_ps.serial, slot) ||
+                !lsfg_generate_dispatch(cb, g_ps.serial, g_ps.cur, generation,
+                                        generation_count, slot)) {
+                hle_log("hakuX-lsfg", "generation %u/%u failed; remaining extra presents will repeat the real frame",
+                        generation + 1u, generation_count);
+                break;
+            }
+            lsfg_generated_ready[generation] = true;
+        }
+    }
     bool fxaa_done = false;
     /* The frame's writes need no barrier here: each writer of a display
      * image (the swap's blit, the gamma pass, the overlay) ends with one
@@ -3851,6 +4036,29 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
     barrier(cb, dst, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
             VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
             VK_PIPELINE_STAGE_2_NONE, 0);
+
+    /* Present generated frames before the real frame. Each output has its own
+     * descriptor set so recorded draws never observe a later descriptor update. */
+    for (unsigned i = 0; i < lsfg_acquired_count; ++i) {
+        const uint32_t image_index = lsfg_acquired_indices[i];
+        const VkImageView generated_view = lsfg_generated_ready[i]
+            ? g_ps.lsfg_generated[g_ps.cur][i].view : src;
+        VkImage generated_dst = g_ps.img[image_index];
+        barrier(cb, generated_dst, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, 0,
+                VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT);
+        rendering(cb, g_ps.view[image_index], iw, ih, true);
+        const float generated_pc[12] = {
+            -sx, -sy, sx, sy, 0.0f, 0.0f, 0.0f, 0.0f,
+            g_ps.rot[0], g_ps.rot[1], g_ps.rot[2], g_ps.rot[3]
+        };
+        quad(cb, f, 3u + i, g_ps.pipe[P_BILINEAR], generated_view,
+             generated_pc, iw, ih);
+        T.vkCmdEndRendering(cb);
+        barrier(cb, generated_dst, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+                VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+                VK_PIPELINE_STAGE_2_NONE, 0);
+    }
     T.vkEndCommandBuffer(cb);
 
     /* The present waits for the pass on the GPU: Turnip's hands the
@@ -3867,19 +4075,42 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
      * presenter. The wait is ours there, unlocked. */
     const bool cpu_wait = hle_quirk(HLE_QUIRK_PRESENT_CPU_WAIT);
     const uint64_t value = g_ps.submitted + 1;
-    VkSemaphoreSubmitInfo wait = { .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO, .semaphore = f->acquired,
-                                   .stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT };
-    VkSemaphoreSubmitInfo sig[2] = {
-        { .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO, .semaphore = g_ps.tl, .value = value,
-          .stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT },
-        { .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO, .semaphore = g_ps.drawn[g_ps.idx],
-          .stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT } };
+    VkSemaphoreSubmitInfo waits[4];
+    waits[0] = (VkSemaphoreSubmitInfo) {
+        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO, .semaphore = f->acquired,
+        .stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT
+    };
+    for (unsigned i = 0; i < lsfg_acquired_count; ++i)
+        waits[i + 1u] = (VkSemaphoreSubmitInfo) {
+            .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+            .semaphore = f->lsfg_acquired[i],
+            .stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT
+        };
+    VkSemaphoreSubmitInfo signals[5];
+    signals[0] = (VkSemaphoreSubmitInfo) {
+        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO, .semaphore = g_ps.tl, .value = value,
+        .stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT
+    };
+    for (unsigned i = 0; i < lsfg_acquired_count; ++i)
+        signals[i + 1u] = (VkSemaphoreSubmitInfo) {
+            .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+            .semaphore = g_ps.drawn[lsfg_acquired_indices[i]],
+            .stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT
+        };
+    signals[lsfg_acquired_count + 1u] = (VkSemaphoreSubmitInfo) {
+        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+        .semaphore = g_ps.drawn[g_ps.idx],
+        .stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT
+    };
     VkCommandBufferSubmitInfo cbi = { .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO, .commandBuffer = cb };
-    VkSubmitInfo2 si = { .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2, .waitSemaphoreInfoCount = 1,
-                         .pWaitSemaphoreInfos = &wait, .commandBufferInfoCount = 1,
-                         .pCommandBufferInfos = &cbi, .signalSemaphoreInfoCount = cpu_wait ? 1 : 2,
-                         .pSignalSemaphoreInfos = sig };
-    VkPresentInfoKHR pi = { .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR, .waitSemaphoreCount = cpu_wait ? 0 : 1,
+    VkSubmitInfo2 si = { .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
+                         .waitSemaphoreInfoCount = 1u + lsfg_acquired_count,
+                         .pWaitSemaphoreInfos = waits, .commandBufferInfoCount = 1,
+                         .pCommandBufferInfos = &cbi,
+                         .signalSemaphoreInfoCount = cpu_wait ? 1u : 2u + lsfg_acquired_count,
+                         .pSignalSemaphoreInfos = signals };
+    VkPresentInfoKHR pi = { .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+                            .waitSemaphoreCount = cpu_wait ? 0 : 1,
                             .pWaitSemaphores = &g_ps.drawn[g_ps.idx], .swapchainCount = 1,
                             .pSwapchains = &g_ps.sc, .pImageIndices = &g_ps.idx };
     hle_vk_queue_lock();
@@ -3906,6 +4137,22 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
         }
         hle_vk_queue_lock();
         const int64_t tp0 = hle_now_ns();
+        for (unsigned i = 0; i < lsfg_acquired_count; ++i) {
+            const VkPresentInfoKHR generated_pi = {
+                .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+                .waitSemaphoreCount = cpu_wait ? 0u : 1u,
+                .pWaitSemaphores = cpu_wait ? NULL : &g_ps.drawn[lsfg_acquired_indices[i]],
+                .swapchainCount = 1, .pSwapchains = &g_ps.sc,
+                .pImageIndices = &lsfg_acquired_indices[i]
+            };
+            const VkResult generated_pr = T.vkQueuePresentKHR(g_hvk.queue, &generated_pi);
+            if (generated_pr == VK_ERROR_OUT_OF_DATE_KHR ||
+                (generated_pr == VK_SUBOPTIMAL_KHR && g_ps.follows) ||
+                generated_pr == VK_ERROR_SURFACE_LOST_KHR)
+                g_ps.stale = true;
+            else if (generated_pr == VK_ERROR_DEVICE_LOST)
+                hle_vk_lose(generated_pr, "vkQueuePresentKHR (LSFG)");
+        }
         pr = T.vkQueuePresentKHR(g_hvk.queue, &pi);
         g_present_ns += hle_now_ns() - tp0;
         hle_vk_queue_unlock();
