@@ -386,7 +386,7 @@ static bool lsfg_pipelines_init(void)
     for (unsigned i = 1; i < ARRAY_SIZE(g_ps.lsfg_mipmap_sets); ++i)
         g_ps.lsfg_mipmap_sets[i] = extra_mipmap_sets[i - 1];
     g_ps.lsfg_pipelines_ready = true;
-    hle_log("hakuX-lsfg", "created %u LSFG compute pipelines and reserved descriptor sets; dispatch is not enabled yet",
+    hle_log("hakuX-lsfg", "created %u LSFG compute pipelines and six history-indexed mipmap descriptor sets",
             (unsigned)ARRAY_SIZE(k_lsfg_passes));
     return true;
 
@@ -505,9 +505,7 @@ static bool lsfg_history_ensure(uint32_t w, uint32_t h)
     return true;
 }
 
-/* Allocate the seven R8_UNORM flow pyramid targets used by LSFG's mipmap pass.
- * They are storage outputs and sampled inputs for later passes; no dispatch is
- * issued until the descriptors and per-frame constants are populated. */
+/* Allocate the seven R8_UNORM flow pyramid targets used by LSFG's mipmap pass. */
 static void lsfg_flow_drop(void)
 {
     for (unsigned i = 0; i < ARRAY_SIZE(g_ps.lsfg_flow); ++i) {
@@ -618,9 +616,7 @@ static bool lsfg_flow_ensure(uint32_t w, uint32_t h, int scale_percent)
 }
 
 /* The first LSFG pass consumes a 48-byte constants block, one linear
- * sampler, the current display image and seven R8 flow storage targets.
- * This wires only the mipmap pass; dispatch remains disabled until the
- * remaining motion/generation passes and their layouts are implemented. */
+ * sampler, one captured history image and seven R8 flow storage targets. */
 typedef struct LsfgConstants {
     uint32_t input_offset[2];
     uint32_t first_iter, first_iter_s;
@@ -680,12 +676,12 @@ static bool lsfg_mipmap_resources_init(void)
         .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
         .magFilter = VK_FILTER_LINEAR,
         .minFilter = VK_FILTER_LINEAR,
-        .mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
+        .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
         .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
         .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
         .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
         .maxAnisotropy = 1.0f,
-        .borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK,
+        .borderColor = VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK,
         .minLod = 0.0f,
         .maxLod = 0.0f
     };
