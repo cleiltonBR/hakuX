@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -160,10 +161,10 @@ fun LibraryScreen(
   }
 
   val screenLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
-  Scaffold { padding ->
+  Scaffold(contentWindowInsets = WindowInsets(0, 0, 0, 0)) { padding ->
     Column(Modifier.padding(padding).fillMaxSize()) {
       Column(
-        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = if (screenLandscape) 2.dp else 6.dp)
+        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp)
           .clip(RoundedCornerShape(14.dp))
           .background(Brush.linearGradient(listOf(Color(0xFF064016), Color(0xFF0B170E), Color(0xFF050806))))
           .border(1.dp, Color(0xFF39FF14), RoundedCornerShape(14.dp))
@@ -177,7 +178,7 @@ fun LibraryScreen(
       // Keep the navigation/action icons in a full touch-target row.
       Row(
         Modifier.fillMaxWidth()
-          .padding(start = 4.dp, end = 4.dp, top = if (screenLandscape) 0.dp else 2.dp)
+          .padding(horizontal = 4.dp)
           .then(if (screenLandscape) Modifier.height(48.dp) else Modifier),
         verticalAlignment = Alignment.CenterVertically,
       ) {
@@ -199,7 +200,7 @@ fun LibraryScreen(
         }
       }
       Row(
-        Modifier.fillMaxWidth().padding(vertical = 2.dp),
+        Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
       ) {
