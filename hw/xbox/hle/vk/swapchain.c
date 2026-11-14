@@ -1520,7 +1520,7 @@ static bool lsfg_delta_ensure(void)
         const unsigned level = 2u - instance;
         LsfgDeltaLevel *d = &g_ps.lsfg_delta[instance];
         LsfgAlphaLevel *a = &g_ps.lsfg_alpha[level];
-        VkImageView pg = instance == 0 ? VK_NULL_HANDLE : g_ps.lsfg_gamma[instance + 2].output.view;
+        VkImageView pg = instance == 0 ? VK_NULL_HANDLE : g_ps.lsfg_gamma[instance + 3].output.view;
         VkImageView p1 = instance == 0 ? VK_NULL_HANDLE : g_ps.lsfg_delta[instance - 1].output1.view;
         VkImageView p2 = instance == 0 ? VK_NULL_HANDLE : g_ps.lsfg_delta[instance - 1].output2.view;
         VkImageView flow = g_ps.lsfg_beta_outputs[level].view;
@@ -1591,7 +1591,7 @@ static bool lsfg_delta_dispatch(VkCommandBuffer cb, uint64_t serial, unsigned sl
         const unsigned level = 2u - instance;
         LsfgDeltaLevel *d = &g_ps.lsfg_delta[instance];
         LsfgAlphaLevel *a = &g_ps.lsfg_alpha[level];
-        LsfgAlphaImage *pg = instance == 0 ? NULL : &g_ps.lsfg_gamma[instance + 2].output;
+        LsfgAlphaImage *pg = instance == 0 ? NULL : &g_ps.lsfg_gamma[instance + 3].output;
         LsfgAlphaImage *p1 = instance == 0 ? NULL : &g_ps.lsfg_delta[instance - 1].output1;
         LsfgAlphaImage *p2 = instance == 0 ? NULL : &g_ps.lsfg_delta[instance - 1].output2;
         LsfgAlphaImage *flow = &g_ps.lsfg_beta_outputs[level];
