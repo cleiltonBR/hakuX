@@ -71,10 +71,13 @@ void nc_present_set_cas_sharpness(float sharpness)
 
 void nc_present_set_nis(bool on, float sharpness)
 {
-    g_nis = on;
     if (sharpness < 0.0f) sharpness = 0.0f;
     if (sharpness > 1.0f) sharpness = 1.0f;
-    g_nis_sharpness = sharpness;
+    /* The Android settings menu calls this on the UI thread while the
+     * presenter reads the values on the frame thread. Keep both accesses
+     * atomic; publish sharpness before enabling the new setting. */
+    __atomic_store_n(&g_nis_sharpness, sharpness, __ATOMIC_RELAXED);
+    __atomic_store_n(&g_nis, on, __ATOMIC_RELAXED);
 }
 
 void nc_present_set_aspect(int mode)
@@ -197,13 +200,17 @@ bool nc_present_frame(struct ANativeWindow *win)
 {
     count_frames();
     debug_poll();
+    /* Snapshot runtime NIS controls once per frame. nativeSetNis can run
+     * concurrently from Android's UI thread. */
+    const bool nis = __atomic_load_n(&g_nis, __ATOMIC_RELAXED);
+    const float nis_sharpness = __atomic_load_n(&g_nis_sharpness, __ATOMIC_RELAXED);
     const bool fxaa = g_dbg.fxaa < 0 ? g_fxaa : g_dbg.fxaa != 0;
     const int upscale = g_dbg.upscale < 0 ? g_upscale : g_dbg.upscale;
     /* what places and filters the frame, beside it and the window */
     const uint64_t key = (uint64_t)fxaa | (uint64_t)upscale << 1 | (uint64_t)g_dbg.average << 4 |
                          (uint64_t)g_widescreen << 5 | (uint64_t)(uint32_t)g_aspect << 8 |
                          (uint64_t)g_cas << 16 | (uint64_t)(uint32_t)(g_cas_sharpness * 1000.0f) << 17 |
-                         (uint64_t)g_nis << 30 | (uint64_t)(uint32_t)(g_nis_sharpness * 1000.0f) << 31;
+                         (uint64_t)nis << 30 | (uint64_t)(uint32_t)(nis_sharpness * 1000.0f) << 31;
     if (hle_present_unchanged(win, key)) {
         nc_dev_nv2a_display_pickup(now_ns()); /* it looked: the vblank keeps clear of it */
         wait_next_vsync();
@@ -219,6 +226,6 @@ bool nc_present_frame(struct ANativeWindow *win)
         place(fw, fh, ww, wh, &sx, &sy);
         __atomic_store_n(&g_shown, true, __ATOMIC_RELAXED);
     }
-    hle_present_end(sx, sy, fxaa, upscale, g_dbg.average, g_cas, g_cas_sharpness, g_nis, g_nis_sharpness, key);
+    hle_present_end(sx, sy, fxaa, upscale, g_dbg.average, g_cas, g_cas_sharpness, nis, nis_sharpness, key);
     return true;
 }
