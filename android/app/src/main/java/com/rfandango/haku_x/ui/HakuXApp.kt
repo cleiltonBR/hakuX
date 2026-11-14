@@ -133,17 +133,16 @@ fun HakuXApp(
         }
       }
     },
-    navigationRail = {
-      if (showMainTabs && landscape) {
-        NavigationRail {
-          NavigationRailItem(selected = currentRoute == Routes.LIBRARY, onClick = { nav.navigate(Routes.LIBRARY) { launchSingleTop = true; restoreState = true } }, icon = { Icon(Icons.Filled.Home, contentDescription = "Biblioteca") }, label = { Text("Biblioteca") })
-          NavigationRailItem(selected = currentRoute == Routes.STORE, onClick = { nav.navigate(Routes.STORE) { launchSingleTop = true; restoreState = true } }, icon = { Icon(Icons.Filled.Search, contentDescription = "Loja") }, label = { Text("Loja") })
-          NavigationRailItem(selected = currentRoute == Routes.DOWNLOADS, onClick = { nav.navigate(Routes.DOWNLOADS) { launchSingleTop = true; restoreState = true } }, icon = { Icon(Icons.Filled.Refresh, contentDescription = "Downloads") }, label = { Text("Downloads") })
-        }
-      }
-    },
   ) { contentPadding ->
-  NavHost(nav, startDestination = start, modifier = androidx.compose.ui.Modifier.padding(contentPadding)) {
+  androidx.compose.foundation.layout.Row(Modifier.fillMaxSize()) {
+    if (showMainTabs && landscape) {
+      NavigationRail {
+        NavigationRailItem(selected = currentRoute == Routes.LIBRARY, onClick = { nav.navigate(Routes.LIBRARY) { launchSingleTop = true; restoreState = true } }, icon = { Icon(Icons.Filled.Home, contentDescription = "Biblioteca") }, label = { Text("Biblioteca") })
+        NavigationRailItem(selected = currentRoute == Routes.STORE, onClick = { nav.navigate(Routes.STORE) { launchSingleTop = true; restoreState = true } }, icon = { Icon(Icons.Filled.Search, contentDescription = "Loja") }, label = { Text("Loja") })
+        NavigationRailItem(selected = currentRoute == Routes.DOWNLOADS, onClick = { nav.navigate(Routes.DOWNLOADS) { launchSingleTop = true; restoreState = true } }, icon = { Icon(Icons.Filled.Refresh, contentDescription = "Downloads") }, label = { Text("Downloads") })
+      }
+    }
+    NavHost(nav, startDestination = start, modifier = androidx.compose.ui.Modifier.weight(1f).padding(contentPadding)) {
     composable(Routes.MIGRATE) {
       MigrateScreen(onDone = {
         nav.navigate(if (needsSetup) Routes.SETUP else Routes.LIBRARY) { popUpTo(Routes.MIGRATE) { inclusive = true } }
