@@ -22,6 +22,8 @@ enum { HLE_UPSCALE_BILINEAR, HLE_UPSCALE_SGSR, HLE_UPSCALE_FSR };
 bool hle_present_unchanged(struct ANativeWindow *win, uint64_t key);
 /* LSFG runtime options shared with the Vulkan frame-generation chain. */
 void hle_present_set_lsfg(int multiplier, bool performance, int flow_scale);
+/* Measured rates: real input frames and total successfully presented output frames. */
+void hle_present_lsfg_stats(float *input_fps, float *output_fps);
 
 /* Each display refresh, on the window's thread, these three in order.
  * begin: an image of win's swapchain (made or remade as the window comes,
