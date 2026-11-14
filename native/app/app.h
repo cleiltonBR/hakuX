@@ -35,6 +35,8 @@ void nc_present_set_cas(bool on);
 void nc_present_set_cas_sharpness(float sharpness);
 /* NVIDIA Image Scaling: independent toggle and SDK sharpness, 0-100%. */
 void nc_present_set_nis(bool on, float sharpness);
+/* Lossless Scaling shader resources and generation tuning, loaded once Vulkan is ready. */
+void nc_present_set_lsfg(const char *path, int multiplier, bool performance, int flow_scale);
 /* Frames the title presented per second over the last half second, their
  * average interval, and the last one's (ms). */
 void nc_present_stats(float *fps, float *avg_ms, float *last_ms);
