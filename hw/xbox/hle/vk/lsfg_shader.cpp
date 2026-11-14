@@ -159,7 +159,7 @@ bool ReadResources(const char *path,
   if (!file) return fail(error, "DLL cannot be opened");
   const auto end = file.tellg();
   if (end < 64 || uint64_t(end) > MAX_IMAGE) return fail(error, "invalid PE file size");
-  std::vector<uint8_t> image(size_t(end));
+  std::vector<uint8_t> image(static_cast<size_t>(end));
   file.seekg(0);
   if (!file.read(reinterpret_cast<char *>(image.data()), std::streamsize(image.size())))
     return fail(error, "DLL read failed");
