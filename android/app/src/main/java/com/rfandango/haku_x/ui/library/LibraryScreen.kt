@@ -42,6 +42,10 @@ import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.ViewList
+import androidx.compose.material.icons.filled.ViewCarousel
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
@@ -152,8 +156,6 @@ fun LibraryScreen(
   val update by Updates.available.collectAsStateWithLifecycle()
   var updateDialog by remember { mutableStateOf(false) }
   var dashboardAsk by remember { mutableStateOf(false) }
-  var coverSourceDialog by remember { mutableStateOf(false) }
-  var coverSourceText by remember { mutableStateOf(vm.coverSource) }
   val pickDashboard = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
     if (uri != null) vm.installDashboard(uri)
   }
@@ -184,28 +186,15 @@ fun LibraryScreen(
           .then(if (screenLandscape) Modifier.height(48.dp) else Modifier),
         verticalAlignment = Alignment.CenterVertically,
       ) {
-        // the dashboard (Xbox Live's accounts): started, or installed from its zip first
-        IconButton(
-          onClick = { if (state.dashboard) onDashboard() else dashboardAsk = true },
-          modifier = Modifier.padding(end = 4.dp),
-        ) {
-          Icon(Icons.Filled.Home, contentDescription = stringResource(R.string.library_dashboard))
-        }
-        if (!screenLandscape) SearchField(state.query, vm::setQuery, Modifier.weight(1f))
-        else Spacer(Modifier.weight(1f))
-        IconButton(onClick = { coverSourceText = vm.coverSource; coverSourceDialog = true }, modifier = Modifier.padding(start = 2.dp)) {
-          Icon(Icons.Filled.Star, contentDescription = "Capas 3D")
-        }
-        // a newer release found by a check: its notes and download
-        if (update != null) {
-          IconButton(onClick = { updateDialog = true }, modifier = Modifier.padding(start = 4.dp)) {
-            Icon(
-              painterResource(R.drawable.ic_update),
-              contentDescription = stringResource(R.string.update_available_icon),
-              tint = MaterialTheme.colorScheme.primary,
-            )
+        if (!screenLandscape) {
+          IconButton(onClick = { if (state.dashboard) onDashboard() else dashboardAsk = true }, modifier = Modifier.padding(end = 4.dp)) {
+            Icon(Icons.Filled.Home, contentDescription = stringResource(R.string.library_dashboard))
           }
-        }
+          Spacer(Modifier.weight(1f))
+          if (update != null) IconButton(onClick = { updateDialog = true }) {
+            Icon(painterResource(R.drawable.ic_update), contentDescription = stringResource(R.string.update_available_icon), tint = MaterialTheme.colorScheme.primary)
+          }
+        } else Spacer(Modifier.weight(1f))
         // the folders listed again, as a pull does (a controller can't pull)
         IconButton(onClick = vm::refresh, modifier = Modifier.padding(start = 4.dp)) {
           Icon(Icons.Filled.Refresh, contentDescription = stringResource(R.string.library_refresh))
@@ -221,23 +210,22 @@ fun LibraryScreen(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
       ) {
-        listOf("grid" to "GRADE", "list" to "LISTA", "carousel" to "CARROSSEL").forEach { (mode, label) ->
+        listOf("grid" to Icons.Filled.GridView, "list" to Icons.Filled.ViewList, "carousel" to Icons.Filled.ViewCarousel).forEach { (mode, image) ->
           val selected = state.viewMode == mode
-          TextButton(
+          IconButton(
             onClick = { vm.setViewMode(mode) },
             modifier = Modifier.weight(1f).clip(RoundedCornerShape(10.dp))
               .background(if (selected) Color(0xFF18351C) else Color.Transparent)
               .border(1.dp, if (selected) Color(0xFF5EAA63) else MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp)),
             contentPadding = PaddingValues(horizontal = 2.dp, vertical = 0.dp),
           ) {
-            Text(label, style = MaterialTheme.typography.labelSmall, maxLines = 1,
-              color = if (selected) Color(0xFF9BE69A) else MaterialTheme.colorScheme.onSurfaceVariant)
+            Icon(image, contentDescription = mode, tint = if (selected) Color(0xFF9BE69A) else MaterialTheme.colorScheme.onSurfaceVariant)
           }
         }
       }
-      Column(
+      if (!screenLandscape) Column(
         Modifier.fillMaxWidth()
-          .padding(horizontal = 12.dp, vertical = if (screenLandscape) 2.dp else 6.dp)
+          .padding(horizontal = 12.dp, vertical = 6.dp)
           .clip(RoundedCornerShape(12.dp))
           .background(Color(0xFF101B12))
           .border(1.dp, Color(0xFF397A40), RoundedCornerShape(12.dp))
@@ -282,7 +270,7 @@ fun LibraryScreen(
             TextButton(onClick = onOpenSettings) { Text(stringResource(R.string.settings_games_folder_title)) }
           }
           games.isEmpty() -> Message(stringResource(R.string.library_empty_games))
-          else -> GameList(games, state.info, state.icons, state.covers, state.viewMode, coverScale, onLaunch, onGameSettings, onLoadState, onMods, vm::askConvert)
+          else -> GameList(games, state.info, state.icons, state.covers, state.viewMode, coverScale, onLaunch, onGameSettings, onLoadState, onMods, vm::askConvert, vm::setCustomCover)
         }
       }
     }
@@ -296,22 +284,6 @@ fun LibraryScreen(
   }
   if (updateDialog) {
     update?.let { UpdateDialog(it, onDismiss = { updateDialog = false }) }
-  }
-  if (coverSourceDialog) {
-    AlertDialog(
-      onDismissRequest = { if (!state.coverDownloadRunning) coverSourceDialog = false },
-      title = { Text("CAPAS 3D PERSONALIZADAS") },
-      text = {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-          Text("Cole um link direto (ZIP, PNG, JPG ou manifesto JSON) ou uma página pública que disponibilize os arquivos.")
-          OutlinedTextField(value = coverSourceText, onValueChange = { coverSourceText = it }, modifier = Modifier.fillMaxWidth(), minLines = 2, maxLines = 4, label = { Text("Link da fonte") }, placeholder = { Text("https://...") })
-          state.coverDownloadMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
-          Text("Páginas que exigem login, assinatura ou CAPTCHA precisam de um link autorizado. O HakuX não contorna essas proteções.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-      },
-      confirmButton = { TextButton(enabled = !state.coverDownloadRunning && coverSourceText.isNotBlank(), onClick = { vm.downloadCustomCovers(coverSourceText) }) { Text(if (state.coverDownloadRunning) "BAIXANDO..." else "SALVAR E BAIXAR") } },
-      dismissButton = { TextButton(enabled = !state.coverDownloadRunning, onClick = { vm.saveCoverSource(coverSourceText); coverSourceDialog = false }) { Text("SALVAR LINK") } },
-    )
   }
   if (dashboardAsk) {
     ConfirmDialog(
@@ -439,10 +411,17 @@ private fun GameList(
   onLoadState: (Game, SaveStateStore, Int) -> Unit,
   onMods: (Game, DiscInfo) -> Unit,
   onConvert: (Game) -> Unit,
+  onSetCustomCover: (Game, DiscInfo?, Uri) -> Unit,
 ) {
   var menuFor by remember { mutableStateOf<Uri?>(null) }
   var statesFor by remember { mutableStateOf<Pair<Game, SaveStateStore>?>(null) }
   val context = LocalContext.current
+  var coverTarget by remember { mutableStateOf<Pair<Game, DiscInfo?>?>(null) }
+  val coverPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+    val target = coverTarget
+    coverTarget = null
+    if (uri != null && target != null) onSetCustomCover(target.first, target.second, uri)
+  }
   val haptics = LocalHapticFeedback.current
   val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
   val colors = MaterialTheme.colorScheme
@@ -541,6 +520,11 @@ private fun GameList(
         val store = remember(key) { SaveStateStore(context, key, game.uri.toString()) }
         val hasStates = remember(store) { store.saved().isNotEmpty() }
         DropdownMenu(expanded = true, onDismissRequest = { menuFor = null }) {
+          DropdownMenuItem(
+            text = { Text("Escolher capa personalizada") },
+            leadingIcon = { Icon(Icons.Filled.Image, contentDescription = null) },
+            onClick = { menuFor = null; coverTarget = game to disc; coverPicker.launch(arrayOf("image/*")) },
+          )
           DropdownMenuItem(
             text = { Text(stringResource(R.string.library_menu_settings)) },
             leadingIcon = { Icon(Icons.Filled.Settings, contentDescription = null) },
