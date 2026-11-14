@@ -81,6 +81,13 @@ static struct {
     VkImageView lsfg_history_view[6];
     VkImageLayout lsfg_history_layout[6];
     uint32_t lsfg_history_w, lsfg_history_h;
+    /* Seven R8 flow pyramid levels consumed by the LSFG mipmap pass. */
+    VkImage lsfg_flow[7];
+    VkDeviceMemory lsfg_flow_mem[7];
+    VkImageView lsfg_flow_view[7];
+    uint32_t lsfg_flow_w, lsfg_flow_h;
+    int lsfg_flow_scale_allocated;
+    bool lsfg_flow_ready, lsfg_flow_failed;
     uint64_t lsfg_history_last_serial;
     uint32_t lsfg_history_count;
     bool lsfg_history_ready, lsfg_history_failed;
@@ -460,6 +467,115 @@ static bool lsfg_history_ensure(uint32_t w, uint32_t h)
     g_ps.lsfg_history_ready = true;
     g_ps.lsfg_history_failed = false;
     hle_log("hakuX-lsfg", "allocated six RGBA8 temporal history images at %ux%u", w, h);
+    return true;
+}
+
+/* Allocate the seven R8_UNORM flow pyramid targets used by LSFG's mipmap pass.
+ * They are storage outputs and sampled inputs for later passes; no dispatch is
+ * issued until the descriptors and per-frame constants are populated. */
+static void lsfg_flow_drop(void)
+{
+    for (unsigned i = 0; i < ARRAY_SIZE(g_ps.lsfg_flow); ++i) {
+        if (g_ps.lsfg_flow_view[i])
+            T.vkDestroyImageView(g_hvk.dev, g_ps.lsfg_flow_view[i], NULL);
+        if (g_ps.lsfg_flow[i])
+            T.vkDestroyImage(g_hvk.dev, g_ps.lsfg_flow[i], NULL);
+        if (g_ps.lsfg_flow_mem[i])
+            T.vkFreeMemory(g_hvk.dev, g_ps.lsfg_flow_mem[i], NULL);
+        g_ps.lsfg_flow_view[i] = VK_NULL_HANDLE;
+        g_ps.lsfg_flow[i] = VK_NULL_HANDLE;
+        g_ps.lsfg_flow_mem[i] = VK_NULL_HANDLE;
+    }
+    g_ps.lsfg_flow_w = g_ps.lsfg_flow_h = 0;
+    g_ps.lsfg_flow_scale_allocated = 0;
+    g_ps.lsfg_flow_ready = false;
+}
+
+static bool lsfg_flow_make_image(uint32_t w, uint32_t h, unsigned index)
+{
+    VkImageCreateInfo ici = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .imageType = VK_IMAGE_TYPE_2D,
+        .format = VK_FORMAT_R8_UNORM,
+        .extent = { w, h, 1 },
+        .mipLevels = 1,
+        .arrayLayers = 1,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .tiling = VK_IMAGE_TILING_OPTIMAL,
+        .usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
+                 VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED
+    };
+    if (T.vkCreateImage(g_hvk.dev, &ici, NULL, &g_ps.lsfg_flow[index]) != VK_SUCCESS)
+        return false;
+
+    VkMemoryRequirements mr;
+    T.vkGetImageMemoryRequirements(g_hvk.dev, g_ps.lsfg_flow[index], &mr);
+    const int mt = hle_vk_memtype(mr.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 0);
+    if (mt < 0) return false;
+    VkMemoryAllocateInfo mai = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize = mr.size,
+        .memoryTypeIndex = (uint32_t)mt
+    };
+    if (T.vkAllocateMemory(g_hvk.dev, &mai, NULL, &g_ps.lsfg_flow_mem[index]) != VK_SUCCESS ||
+        T.vkBindImageMemory(g_hvk.dev, g_ps.lsfg_flow[index], g_ps.lsfg_flow_mem[index], 0) != VK_SUCCESS)
+        return false;
+
+    VkImageViewCreateInfo vci = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .image = g_ps.lsfg_flow[index],
+        .viewType = VK_IMAGE_VIEW_TYPE_2D,
+        .format = VK_FORMAT_R8_UNORM,
+        .subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 }
+    };
+    return T.vkCreateImageView(g_hvk.dev, &vci, NULL, &g_ps.lsfg_flow_view[index]) == VK_SUCCESS;
+}
+
+static bool lsfg_flow_ensure(uint32_t w, uint32_t h, int scale_percent)
+{
+    if (scale_percent < 25) scale_percent = 25;
+    if (scale_percent > 100) scale_percent = 100;
+    if (g_ps.lsfg_flow_ready && g_ps.lsfg_flow_w == w &&
+        g_ps.lsfg_flow_h == h && g_ps.lsfg_flow_scale_allocated == scale_percent)
+        return true;
+    if (w < 2 || h < 2 || w > 8192 || h > 8192) return false;
+    if (g_ps.lsfg_flow[0]) {
+        idle();
+        lsfg_flow_drop();
+    }
+    g_ps.lsfg_flow_failed = false;
+
+    VkFormatProperties fp;
+    vkGetPhysicalDeviceFormatProperties(g_hvk.phys, VK_FORMAT_R8_UNORM, &fp);
+    const VkFormatFeatureFlags required = VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
+                                           VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT;
+    if ((fp.optimalTilingFeatures & required) != required) {
+        hle_log("hakuX-lsfg", "R8_UNORM lacks sampled/storage support; flow pyramid disabled");
+        g_ps.lsfg_flow_failed = true;
+        return false;
+    }
+
+    const uint32_t flow_w = MAX(1u, (uint32_t)((uint64_t)w * (uint32_t)scale_percent / 100u));
+    const uint32_t flow_h = MAX(1u, (uint32_t)((uint64_t)h * (uint32_t)scale_percent / 100u));
+    for (unsigned i = 0; i < ARRAY_SIZE(g_ps.lsfg_flow); ++i) {
+        const uint32_t level_w = MAX(1u, flow_w >> i);
+        const uint32_t level_h = MAX(1u, flow_h >> i);
+        if (!lsfg_flow_make_image(level_w, level_h, i)) {
+            hle_log("hakuX-lsfg", "flow pyramid level %u allocation failed at %ux%u",
+                    i, level_w, level_h);
+            lsfg_flow_drop();
+            g_ps.lsfg_flow_failed = true;
+            return false;
+        }
+    }
+    g_ps.lsfg_flow_w = flow_w;
+    g_ps.lsfg_flow_h = flow_h;
+    g_ps.lsfg_flow_scale_allocated = scale_percent;
+    g_ps.lsfg_flow_ready = true;
+    hle_log("hakuX-lsfg", "allocated seven R8_UNORM flow levels at %ux%u (Flow Scale %d%%)",
+            flow_w, flow_h, scale_percent);
     return true;
 }
 
@@ -1994,8 +2110,9 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
                                     .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT };
     T.vkBeginCommandBuffer(cb, &bi);
     if (g_ps.have && hle_lsfg_shader_count() == ARRAY_SIZE(k_lsfg_passes) &&
-        lsfg_modules_init() && lsfg_pipelines_init())
-        lsfg_history_ensure(g_ps.f.w, g_ps.f.h);
+        lsfg_modules_init() && lsfg_pipelines_init() &&
+        lsfg_history_ensure(g_ps.f.w, g_ps.f.h))
+        lsfg_flow_ensure(g_ps.f.w, g_ps.f.h, g_ps.lsfg_flow_scale);
     VkImageView src = g_ps.have ? g_ps.f.view : VK_NULL_HANDLE;
     if (g_ps.have && g_ps.lsfg_history_ready)
         lsfg_history_capture(cb);
