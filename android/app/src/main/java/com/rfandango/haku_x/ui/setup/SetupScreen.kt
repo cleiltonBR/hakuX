@@ -83,7 +83,7 @@ fun SetupScreen(onDone: () -> Unit) {
         Text(stringResource(R.string.setup_pick_disc))
       }
     }
-        OnboardingCard("Lossless Scaling · Frame Generation") {
+    OnboardingCard("Lossless Scaling · Frame Generation") {
       Text(
         "Opcional: selecione sua Lossless.dll original (Windows x64). O HakuX guarda o arquivo em seus dados privados e lê apenas os shaders; não executa a DLL.",
         style = MaterialTheme.typography.bodyMedium,
@@ -97,7 +97,8 @@ fun SetupScreen(onDone: () -> Unit) {
         Text(if (lsfgDll.isNotBlank()) "Substituir Lossless.dll" else "Selecionar Lossless.dll")
       }
     }
-\n    Spacer(Modifier.height(8.dp))
+
+    Spacer(Modifier.height(8.dp))
     Button(
       onClick = {
         prefs.setupComplete = true
