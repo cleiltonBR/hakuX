@@ -4,6 +4,7 @@ import android.app.DatePickerDialog
 import android.app.TimePickerDialog
 import android.content.Context
 import android.net.Uri
+import android.widget.Toast
 import android.text.format.DateFormat
 import android.text.format.DateUtils
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -53,6 +54,7 @@ import com.rfandango.haku_x.NativeCoreActivity
 import com.rfandango.haku_x.R
 import com.rfandango.haku_x.data.AppPrefs
 import com.rfandango.haku_x.data.Logs
+import com.rfandango.haku_x.data.LosslessDllStore
 import com.rfandango.haku_x.data.PreviousVersion
 import com.rfandango.haku_x.data.Storage
 import com.rfandango.haku_x.data.Updates
@@ -72,6 +74,7 @@ import com.rfandango.haku_x.ui.update.UpdateDialog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 import java.util.Calendar
 import java.util.GregorianCalendar
 import java.util.Locale
@@ -106,6 +109,7 @@ fun SettingsScreen(
   var automatic3dCovers by remember { mutableStateOf(prefs.automatic3dCovers) }
   var showHitches by remember { mutableStateOf(prefs.showHitches) }
   var scaleHalfSteps by remember { mutableIntStateOf(prefs.renderScaleHalfSteps) }
+  var lsfgDllPath by remember { mutableStateOf(prefs.lsfgDllPath) }
   var anisotropyEnabled by remember { mutableStateOf(prefs.anisotropyEnabled) }
   var anisotropyLevel by remember { mutableIntStateOf(prefs.anisotropyLevel) }
   var aspect by remember { mutableStateOf(prefs.aspectRatio) }
@@ -388,6 +392,17 @@ fun SettingsScreen(
 
       if (selectedSettingsCategory == "graphics") {
       Section(stringResource(R.string.settings_section_graphics))
+      ListItem(
+        headlineContent = { Text("Lossless Scaling · Frame Generation") },
+        supportingContent = {
+          Text(
+            if (lsfgDllPath.isNotBlank() && File(lsfgDllPath).isFile)
+              "DLL importada: ${File(lsfgDllPath).name} · shaders guardados nos dados privados"
+            else "Nenhuma Lossless.dll importada · selecione a DLL Windows x64",
+          )
+        },
+        modifier = Modifier.clickable { pickLsfgDll.launch(arrayOf("*/*")) },
+      )
       GraphicsSlider(
         title = stringResource(R.string.settings_scale),
         valueLabel = String.format(Locale.getDefault(), "%.1fx · %d×%d", scaleHalfSteps / 2f,
