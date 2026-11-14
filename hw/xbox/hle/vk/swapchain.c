@@ -102,8 +102,14 @@ static struct {
     VkImageLayout lsfg_flow_layout[7];
     LsfgAlphaLevel lsfg_alpha[7];
     VkDescriptorSet lsfg_alpha_sets[7][6];
+    LsfgAlphaImage lsfg_beta_temp1[2], lsfg_beta_temp2[2], lsfg_beta_outputs[6];
+    VkDescriptorSet lsfg_beta_sets[7];
+    VkSampler lsfg_beta_sampler;
+    VkBuffer lsfg_beta_constants_buffer;
+    VkDeviceMemory lsfg_beta_constants_memory;
+    uint8_t *lsfg_beta_constants_map;
     uint32_t lsfg_alpha_w, lsfg_alpha_h;
-    bool lsfg_alpha_ready, lsfg_alpha_sets_allocated;
+    bool lsfg_alpha_ready, lsfg_alpha_sets_allocated, lsfg_beta_ready;
 
     uint32_t lsfg_flow_w, lsfg_flow_h;
     int lsfg_flow_scale_allocated;
@@ -249,6 +255,7 @@ static void lsfg_pipeline_destroy(void)
         memset(g_ps.lsfg_descriptor_sets, 0, sizeof(g_ps.lsfg_descriptor_sets));
         memset(g_ps.lsfg_mipmap_sets, 0, sizeof(g_ps.lsfg_mipmap_sets));
         memset(g_ps.lsfg_alpha_sets, 0, sizeof(g_ps.lsfg_alpha_sets));
+        memset(g_ps.lsfg_beta_sets, 0, sizeof(g_ps.lsfg_beta_sets));
         g_ps.lsfg_alpha_sets_allocated = false;
 
     }
@@ -352,11 +359,15 @@ static bool lsfg_pipelines_init(void)
         descriptor_totals[2] += k_lsfg_passes[0].sampled_images;
         descriptor_totals[3] += k_lsfg_passes[0].storage_images;
     }
-    /* Alpha: seven mip levels, each with three early-stage sets and
-     * six temporal-output sets (sampler + sampled/storage images). */
+    /* Alpha: seven levels, three early-stage and three temporal sets. */
     descriptor_totals[1] += 7u * 6u;
     descriptor_totals[2] += 7u * 9u;
     descriptor_totals[3] += 7u * 10u;
+    /* Beta: three history-indexed first-pass sets plus four later passes. */
+    descriptor_totals[0] += 1u;
+    descriptor_totals[1] += 7u;
+    descriptor_totals[2] += 26u;
+    descriptor_totals[3] += 18u;
     const VkDescriptorType descriptor_types[4] = {
         VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_DESCRIPTOR_TYPE_SAMPLER,
         VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE
@@ -369,7 +380,7 @@ static bool lsfg_pipelines_init(void)
     }
     VkDescriptorPoolCreateInfo dpci = {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-        .maxSets = ARRAY_SIZE(k_lsfg_passes) + ARRAY_SIZE(g_ps.lsfg_mipmap_sets) - 1 + 42,
+        .maxSets = ARRAY_SIZE(k_lsfg_passes) + ARRAY_SIZE(g_ps.lsfg_mipmap_sets) - 1 + 42 + 7,
         .poolSizeCount = ARRAY_SIZE(pool_sizes),
         .pPoolSizes = pool_sizes
     };
@@ -435,6 +446,22 @@ static bool lsfg_pipelines_init(void)
         for (unsigned set = 0; set < 6; ++set)
             g_ps.lsfg_alpha_sets[level][set] = alpha_sets[level * 6 + set];
     g_ps.lsfg_alpha_sets_allocated = true;
+    VkDescriptorSetLayout beta_layouts[7] = {
+        g_ps.lsfg_set_layouts[20], g_ps.lsfg_set_layouts[20], g_ps.lsfg_set_layouts[20],
+        g_ps.lsfg_set_layouts[21], g_ps.lsfg_set_layouts[22],
+        g_ps.lsfg_set_layouts[23], g_ps.lsfg_set_layouts[24]
+    };
+    VkDescriptorSetAllocateInfo beta_dsai = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool = g_ps.lsfg_descriptor_pool,
+        .descriptorSetCount = ARRAY_SIZE(beta_layouts),
+        .pSetLayouts = beta_layouts
+    };
+    r = T.vkAllocateDescriptorSets(g_hvk.dev, &beta_dsai, g_ps.lsfg_beta_sets);
+    if (r != VK_SUCCESS) {
+        hle_log("hakuX-lsfg", "Beta descriptor set allocation failed: %d", r);
+        goto fail;
+    }
     g_ps.lsfg_pipelines_ready = true;
     hle_log("hakuX-lsfg", "created %u LSFG compute pipelines and six history-indexed mipmap descriptor sets",
             (unsigned)ARRAY_SIZE(k_lsfg_passes));
@@ -557,9 +584,11 @@ static bool lsfg_history_ensure(uint32_t w, uint32_t h)
 
 /* Allocate the seven R8_UNORM flow pyramid targets used by LSFG's mipmap pass. */
 static void lsfg_alpha_drop(void);
+static void lsfg_beta_drop(void);
 
 static void lsfg_flow_drop(void)
 {
+    lsfg_beta_drop();
     lsfg_alpha_drop();
     for (unsigned i = 0; i < ARRAY_SIZE(g_ps.lsfg_flow); ++i) {
         if (g_ps.lsfg_flow_view[i])
@@ -991,6 +1020,315 @@ static bool lsfg_alpha_image_make(LsfgAlphaImage *out, uint32_t w, uint32_t h)
         .subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 }
     };
     return T.vkCreateImageView(g_hvk.dev, &vci, NULL, &out->view) == VK_SUCCESS;
+}
+
+static void lsfg_beta_drop(void)
+{
+    for (unsigned i = 0; i < ARRAY_SIZE(g_ps.lsfg_beta_temp1); ++i) {
+        lsfg_alpha_image_drop(&g_ps.lsfg_beta_temp1[i]);
+        lsfg_alpha_image_drop(&g_ps.lsfg_beta_temp2[i]);
+    }
+    for (unsigned i = 0; i < ARRAY_SIZE(g_ps.lsfg_beta_outputs); ++i)
+        lsfg_alpha_image_drop(&g_ps.lsfg_beta_outputs[i]);
+    if (g_ps.lsfg_beta_sampler)
+        T.vkDestroySampler(g_hvk.dev, g_ps.lsfg_beta_sampler, NULL);
+    if (g_ps.lsfg_beta_constants_map)
+        T.vkUnmapMemory(g_hvk.dev, g_ps.lsfg_beta_constants_memory);
+    if (g_ps.lsfg_beta_constants_buffer)
+        T.vkDestroyBuffer(g_hvk.dev, g_ps.lsfg_beta_constants_buffer, NULL);
+    if (g_ps.lsfg_beta_constants_memory)
+        T.vkFreeMemory(g_hvk.dev, g_ps.lsfg_beta_constants_memory, NULL);
+    g_ps.lsfg_beta_sampler = VK_NULL_HANDLE;
+    g_ps.lsfg_beta_constants_buffer = VK_NULL_HANDLE;
+    g_ps.lsfg_beta_constants_memory = VK_NULL_HANDLE;
+    g_ps.lsfg_beta_constants_map = NULL;
+    g_ps.lsfg_beta_ready = false;
+}
+
+static bool lsfg_beta_image_make(LsfgAlphaImage *out, uint32_t w, uint32_t h,
+                                 VkFormat format)
+{
+    VkImageCreateInfo ici = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .imageType = VK_IMAGE_TYPE_2D,
+        .format = format,
+        .extent = { MAX(1u, w), MAX(1u, h), 1 },
+        .mipLevels = 1,
+        .arrayLayers = 1,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .tiling = VK_IMAGE_TILING_OPTIMAL,
+        .usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
+                 VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED
+    };
+    if (T.vkCreateImage(g_hvk.dev, &ici, NULL, &out->image) != VK_SUCCESS) return false;
+    VkMemoryRequirements mr;
+    T.vkGetImageMemoryRequirements(g_hvk.dev, out->image, &mr);
+    const int mt = hle_vk_memtype(mr.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 0);
+    if (mt < 0) return false;
+    VkMemoryAllocateInfo mai = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize = mr.size,
+        .memoryTypeIndex = (uint32_t)mt
+    };
+    if (T.vkAllocateMemory(g_hvk.dev, &mai, NULL, &out->memory) != VK_SUCCESS ||
+        T.vkBindImageMemory(g_hvk.dev, out->image, out->memory, 0) != VK_SUCCESS)
+        return false;
+    VkImageViewCreateInfo vci = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .image = out->image,
+        .viewType = VK_IMAGE_VIEW_TYPE_2D,
+        .format = format,
+        .subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 }
+    };
+    return T.vkCreateImageView(g_hvk.dev, &vci, NULL, &out->view) == VK_SUCCESS;
+}
+
+static void lsfg_beta_write_set(VkDescriptorSet set, VkSampler sampler,
+                                VkImageView const *sampled, unsigned sampled_count,
+                                VkImageView const *storage, unsigned storage_count,
+                                bool constants)
+{
+    VkDescriptorImageInfo infos[9];
+    VkDescriptorBufferInfo buffer = {
+        .buffer = g_ps.lsfg_beta_constants_buffer, .offset = 0, .range = sizeof(LsfgConstants)
+    };
+    VkWriteDescriptorSet writes[10];
+    memset(infos, 0, sizeof(infos));
+    memset(writes, 0, sizeof(writes));
+    unsigned n = 0;
+    if (constants) {
+        writes[n] = (VkWriteDescriptorSet) {
+            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstSet = set,
+            .dstBinding = n, .descriptorCount = 1,
+            .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .pBufferInfo = &buffer
+        };
+        ++n;
+    }
+    infos[n].sampler = sampler;
+    writes[n] = (VkWriteDescriptorSet) {
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstSet = set,
+        .dstBinding = n, .descriptorCount = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER, .pImageInfo = &infos[n]
+    };
+    ++n;
+    for (unsigned i = 0; i < sampled_count; ++i, ++n) {
+        infos[n] = (VkDescriptorImageInfo) {
+            .imageView = sampled[i], .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+        };
+        writes[n] = (VkWriteDescriptorSet) {
+            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstSet = set,
+            .dstBinding = n, .descriptorCount = 1,
+            .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, .pImageInfo = &infos[n]
+        };
+    }
+    for (unsigned i = 0; i < storage_count; ++i, ++n) {
+        infos[n] = (VkDescriptorImageInfo) {
+            .imageView = storage[i], .imageLayout = VK_IMAGE_LAYOUT_GENERAL
+        };
+        writes[n] = (VkWriteDescriptorSet) {
+            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstSet = set,
+            .dstBinding = n, .descriptorCount = 1,
+            .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, .pImageInfo = &infos[n]
+        };
+    }
+    T.vkUpdateDescriptorSets(g_hvk.dev, n, writes, 0, NULL);
+}
+
+static bool lsfg_beta_ensure(void)
+{
+    if (!g_ps.lsfg_alpha_ready || !g_ps.lsfg_pipelines_ready) return false;
+    if (g_ps.lsfg_beta_ready) return true;
+    const uint32_t w = MAX(1u, (g_ps.lsfg_flow_w + 3u) >> 2);
+    const uint32_t h = MAX(1u, (g_ps.lsfg_flow_h + 3u) >> 2);
+    bool ok = true;
+    for (unsigned i = 0; ok && i < 2; ++i)
+        ok = lsfg_beta_image_make(&g_ps.lsfg_beta_temp1[i], w, h, VK_FORMAT_R8G8B8A8_UNORM) &&
+             lsfg_beta_image_make(&g_ps.lsfg_beta_temp2[i], w, h, VK_FORMAT_R8G8B8A8_UNORM);
+    for (unsigned i = 0; ok && i < 6; ++i)
+        ok = lsfg_beta_image_make(&g_ps.lsfg_beta_outputs[i], MAX(1u, w >> i),
+                                  MAX(1u, h >> i), VK_FORMAT_R8_UNORM);
+    if (!ok) {
+        hle_log("hakuX-lsfg", "Beta intermediate/output image allocation failed");
+        lsfg_beta_drop();
+        return false;
+    }
+
+    VkBufferCreateInfo bci = {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size = sizeof(LsfgConstants),
+        .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE
+    };
+    if (T.vkCreateBuffer(g_hvk.dev, &bci, NULL, &g_ps.lsfg_beta_constants_buffer) != VK_SUCCESS)
+        goto fail;
+    VkMemoryRequirements mr;
+    T.vkGetBufferMemoryRequirements(g_hvk.dev, g_ps.lsfg_beta_constants_buffer, &mr);
+    const int mt = hle_vk_memtype(mr.memoryTypeBits,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, 0);
+    if (mt < 0) goto fail;
+    VkMemoryAllocateInfo mai = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize = mr.size, .memoryTypeIndex = (uint32_t)mt
+    };
+    if (T.vkAllocateMemory(g_hvk.dev, &mai, NULL, &g_ps.lsfg_beta_constants_memory) != VK_SUCCESS ||
+        T.vkBindBufferMemory(g_hvk.dev, g_ps.lsfg_beta_constants_buffer,
+                             g_ps.lsfg_beta_constants_memory, 0) != VK_SUCCESS ||
+        T.vkMapMemory(g_hvk.dev, g_ps.lsfg_beta_constants_memory, 0, sizeof(LsfgConstants),
+                      0, (void **)&g_ps.lsfg_beta_constants_map) != VK_SUCCESS)
+        goto fail;
+    const unsigned scale = (unsigned)(g_ps.lsfg_flow_scale < 25 ? 25 :
+                              g_ps.lsfg_flow_scale > 100 ? 100 : g_ps.lsfg_flow_scale);
+    const LsfgConstants constants = {
+        .input_offset = { 0, 0 }, .first_iter = 0, .first_iter_s = 0,
+        .advanced_color_kind = 0, .hdr_support = 0,
+        .resolution_inv_scale = 100.0f / (float)scale,
+        .timestamp = 0.5f, .ui_threshold = 0.5f, .padding = { 0, 0, 0 }
+    };
+    memcpy(g_ps.lsfg_beta_constants_map, &constants, sizeof(constants));
+
+    VkSamplerCreateInfo sci = {
+        .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+        .magFilter = VK_FILTER_LINEAR, .minFilter = VK_FILTER_LINEAR,
+        .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
+        .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+        .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+        .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+        .maxAnisotropy = 1.0f, .minLod = 0.0f, .maxLod = 0.0f
+    };
+    if (T.vkCreateSampler(g_hvk.dev, &sci, NULL, &g_ps.lsfg_beta_sampler) != VK_SUCCESS)
+        goto fail;
+
+    VkImageView sampled[6], storage[6];
+    for (unsigned slot = 0; slot < 3; ++slot) {
+        unsigned n = 0;
+        for (unsigned pair = 0; pair < 2; ++pair)
+            sampled[n++] = g_ps.lsfg_alpha[0].outputs[(slot + 1) % 3][pair].view;
+        for (unsigned pair = 0; pair < 2; ++pair)
+            sampled[n++] = g_ps.lsfg_alpha[0].outputs[(slot + 2) % 3][pair].view;
+        for (unsigned pair = 0; pair < 2; ++pair)
+            sampled[n++] = g_ps.lsfg_alpha[0].outputs[slot][pair].view;
+        storage[0] = g_ps.lsfg_beta_temp1[0].view;
+        storage[1] = g_ps.lsfg_beta_temp1[1].view;
+        lsfg_beta_write_set(g_ps.lsfg_beta_sets[slot], g_ps.lsfg_sampler,
+                            sampled, 6, storage, 2, false);
+    }
+    for (unsigned i = 0; i < 2; ++i) sampled[i] = g_ps.lsfg_beta_temp1[i].view;
+    storage[0] = g_ps.lsfg_beta_temp2[0].view;
+    storage[1] = g_ps.lsfg_beta_temp2[1].view;
+    lsfg_beta_write_set(g_ps.lsfg_beta_sets[3], g_ps.lsfg_beta_sampler,
+                        sampled, 2, storage, 2, false);
+    for (unsigned i = 0; i < 2; ++i) sampled[i] = g_ps.lsfg_beta_temp2[i].view;
+    storage[0] = g_ps.lsfg_beta_temp1[0].view;
+    storage[1] = g_ps.lsfg_beta_temp1[1].view;
+    lsfg_beta_write_set(g_ps.lsfg_beta_sets[4], g_ps.lsfg_beta_sampler,
+                        sampled, 2, storage, 2, false);
+    for (unsigned i = 0; i < 2; ++i) sampled[i] = g_ps.lsfg_beta_temp1[i].view;
+    storage[0] = g_ps.lsfg_beta_temp2[0].view;
+    storage[1] = g_ps.lsfg_beta_temp2[1].view;
+    lsfg_beta_write_set(g_ps.lsfg_beta_sets[5], g_ps.lsfg_beta_sampler,
+                        sampled, 2, storage, 2, false);
+    for (unsigned i = 0; i < 2; ++i) sampled[i] = g_ps.lsfg_beta_temp2[i].view;
+    for (unsigned i = 0; i < 6; ++i) storage[i] = g_ps.lsfg_beta_outputs[i].view;
+    lsfg_beta_write_set(g_ps.lsfg_beta_sets[6], g_ps.lsfg_beta_sampler,
+                        sampled, 2, storage, 6, true);
+    g_ps.lsfg_beta_ready = true;
+    hle_log("hakuX-lsfg", "Beta resources ready: five compute passes, three temporal sets, six flow outputs");
+    return true;
+
+fail:
+    hle_log("hakuX-lsfg", "Beta constants/sampler initialization failed");
+    lsfg_beta_drop();
+    return false;
+}
+
+static void lsfg_beta_transition(VkCommandBuffer cb, LsfgAlphaImage *image,
+                                 VkImageLayout target, VkAccessFlags2 dst_access)
+{
+    const VkImageLayout old = image->layout;
+    const VkAccessFlags2 src_access = old == VK_IMAGE_LAYOUT_UNDEFINED ? 0 :
+        old == VK_IMAGE_LAYOUT_GENERAL ? VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT :
+                                         VK_ACCESS_2_SHADER_SAMPLED_READ_BIT;
+    barrier(cb, image->image, old, target,
+            old == VK_IMAGE_LAYOUT_UNDEFINED ? VK_PIPELINE_STAGE_2_NONE :
+                                               VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+            src_access, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, dst_access);
+    image->layout = target;
+}
+
+static bool lsfg_beta_dispatch(VkCommandBuffer cb, uint64_t frame_serial)
+{
+    if (!g_ps.lsfg_beta_ready || !g_ps.lsfg_alpha_ready) return false;
+    const uint32_t w = g_ps.lsfg_beta_temp1[0].image ? MAX(1u, (g_ps.lsfg_flow_w + 3u) >> 2) : 0;
+    const uint32_t h = g_ps.lsfg_beta_temp1[0].image ? MAX(1u, (g_ps.lsfg_flow_h + 3u) >> 2) : 0;
+    const uint32_t gx = (w + 7u) >> 3, gy = (h + 7u) >> 3;
+    if (!gx || !gy) return false;
+    for (unsigned slot = 0; slot < 3; ++slot)
+        for (unsigned pair = 0; pair < 2; ++pair)
+            lsfg_alpha_transition(cb, &g_ps.lsfg_alpha[0].outputs[slot][pair],
+                                  VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                                  VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
+    for (unsigned i = 0; i < 2; ++i) {
+        lsfg_beta_transition(cb, &g_ps.lsfg_beta_temp1[i], VK_IMAGE_LAYOUT_GENERAL,
+                             VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
+        lsfg_beta_transition(cb, &g_ps.lsfg_beta_temp2[i], VK_IMAGE_LAYOUT_GENERAL,
+                             VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
+    }
+    for (unsigned i = 0; i < 6; ++i)
+        lsfg_beta_transition(cb, &g_ps.lsfg_beta_outputs[i], VK_IMAGE_LAYOUT_GENERAL,
+                             VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
+    T.vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_COMPUTE, g_ps.lsfg_pipelines[20]);
+    VkDescriptorSet set = g_ps.lsfg_beta_sets[frame_serial % 3u];
+    T.vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_COMPUTE,
+                              g_ps.lsfg_pipeline_layouts[20], 0, 1, &set, 0, NULL);
+    T.vkCmdDispatch(cb, gx, gy, 1);
+
+    for (unsigned i = 0; i < 2; ++i)
+        lsfg_beta_transition(cb, &g_ps.lsfg_beta_temp1[i], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                             VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
+    for (unsigned i = 0; i < 2; ++i)
+        lsfg_beta_transition(cb, &g_ps.lsfg_beta_temp2[i], VK_IMAGE_LAYOUT_GENERAL,
+                             VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
+    T.vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_COMPUTE, g_ps.lsfg_pipelines[21]);
+    set = g_ps.lsfg_beta_sets[3];
+    T.vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_COMPUTE,
+                              g_ps.lsfg_pipeline_layouts[21], 0, 1, &set, 0, NULL);
+    T.vkCmdDispatch(cb, gx, gy, 1);
+
+    for (unsigned i = 0; i < 2; ++i)
+        lsfg_beta_transition(cb, &g_ps.lsfg_beta_temp2[i], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                             VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
+    for (unsigned i = 0; i < 2; ++i)
+        lsfg_beta_transition(cb, &g_ps.lsfg_beta_temp1[i], VK_IMAGE_LAYOUT_GENERAL,
+                             VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
+    T.vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_COMPUTE, g_ps.lsfg_pipelines[22]);
+    set = g_ps.lsfg_beta_sets[4];
+    T.vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_COMPUTE,
+                              g_ps.lsfg_pipeline_layouts[22], 0, 1, &set, 0, NULL);
+    T.vkCmdDispatch(cb, gx, gy, 1);
+
+    for (unsigned i = 0; i < 2; ++i)
+        lsfg_beta_transition(cb, &g_ps.lsfg_beta_temp1[i], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                             VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
+    for (unsigned i = 0; i < 2; ++i)
+        lsfg_beta_transition(cb, &g_ps.lsfg_beta_temp2[i], VK_IMAGE_LAYOUT_GENERAL,
+                             VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
+    T.vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_COMPUTE, g_ps.lsfg_pipelines[23]);
+    set = g_ps.lsfg_beta_sets[5];
+    T.vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_COMPUTE,
+                              g_ps.lsfg_pipeline_layouts[23], 0, 1, &set, 0, NULL);
+    T.vkCmdDispatch(cb, gx, gy, 1);
+
+    for (unsigned i = 0; i < 2; ++i)
+        lsfg_beta_transition(cb, &g_ps.lsfg_beta_temp2[i], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                             VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
+    T.vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_COMPUTE, g_ps.lsfg_pipelines[24]);
+    set = g_ps.lsfg_beta_sets[6];
+    T.vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_COMPUTE,
+                              g_ps.lsfg_pipeline_layouts[24], 0, 1, &set, 0, NULL);
+    T.vkCmdDispatch(cb, (w + 31u) >> 5, (h + 31u) >> 5, 1);
+    return true;
 }
 
 static void lsfg_alpha_drop(void)
@@ -2643,12 +2981,13 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
         lsfg_history_ensure(g_ps.f.w, g_ps.f.h) &&
         lsfg_flow_ensure(g_ps.f.w, g_ps.f.h, g_ps.lsfg_flow_scale) &&
         lsfg_mipmap_descriptors_update() &&
-        lsfg_alpha_ensure();
+        lsfg_alpha_ensure() && lsfg_beta_ensure();
     VkImageView src = g_ps.have ? g_ps.f.view : VK_NULL_HANDLE;
     if (lsfg_capture_ready && lsfg_history_capture(cb) &&
         g_ps.lsfg_history_count >= 3 &&
         lsfg_mipmap_dispatch(cb, (unsigned)(g_ps.serial % ARRAY_SIZE(g_ps.lsfg_mipmap_sets))))
-        lsfg_alpha_dispatch(cb, g_ps.serial);
+        if (lsfg_alpha_dispatch(cb, g_ps.serial))
+            lsfg_beta_dispatch(cb, g_ps.serial);
     bool fxaa_done = false;
     /* The frame's writes need no barrier here: each writer of a display
      * image (the swap's blit, the gamma pass, the overlay) ends with one
