@@ -1,6 +1,8 @@
 package com.rfandango.haku_x.ui.setup
 
 import android.net.Uri
+import android.widget.Toast
+import java.io.File
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Spacer
@@ -21,6 +23,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.rfandango.haku_x.R
 import com.rfandango.haku_x.data.AppPrefs
+import com.rfandango.haku_x.data.LosslessDllStore
 import com.rfandango.haku_x.data.Storage
 import com.rfandango.haku_x.ui.common.OnboardingCard
 import com.rfandango.haku_x.ui.common.OnboardingLead
@@ -36,6 +39,7 @@ fun SetupScreen(onDone: () -> Unit) {
   val context = LocalContext.current
   val prefs = remember { AppPrefs(context) }
   var folder by remember { mutableStateOf(prefs.gamesFolderUri) }
+  var lsfgDll by remember { mutableStateOf(prefs.lsfgDllPath) }
   val ready = remember(folder) { Storage.isFolderReady(context, folder) }
 
   val pickFolder = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri: Uri? ->
@@ -43,6 +47,20 @@ fun SetupScreen(onDone: () -> Unit) {
       Storage.persistPermission(context, uri)
       prefs.gamesFolderUri = uri
       folder = uri
+    }
+  }
+
+  val pickLsfgDll = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+    if (uri != null) {
+      runCatching { LosslessDllStore.import(context, uri) }
+        .onSuccess { file ->
+          prefs.lsfgDllPath = file.absolutePath
+          lsfgDll = file.absolutePath
+          Toast.makeText(context, "Lossless.dll importada e validada.", Toast.LENGTH_LONG).show()
+        }
+        .onFailure { error ->
+          Toast.makeText(context, error.message ?: "Falha ao importar Lossless.dll.", Toast.LENGTH_LONG).show()
+        }
     }
   }
 
@@ -65,7 +83,21 @@ fun SetupScreen(onDone: () -> Unit) {
         Text(stringResource(R.string.setup_pick_disc))
       }
     }
-    Spacer(Modifier.height(8.dp))
+        OnboardingCard("Lossless Scaling · Frame Generation") {
+      Text(
+        "Opcional: selecione sua Lossless.dll original (Windows x64). O HakuX guarda o arquivo em seus dados privados e lê apenas os shaders; não executa a DLL.",
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
+      Text(
+        if (lsfgDll.isNotBlank()) "DLL importada: ${File(lsfgDll).name}" else "Nenhuma DLL selecionada",
+        style = MaterialTheme.typography.bodyMedium,
+      )
+      OutlinedButton(onClick = { pickLsfgDll.launch(arrayOf("*/*")) }) {
+        Text(if (lsfgDll.isNotBlank()) "Substituir Lossless.dll" else "Selecionar Lossless.dll")
+      }
+    }
+\n    Spacer(Modifier.height(8.dp))
     Button(
       onClick = {
         prefs.setupComplete = true
