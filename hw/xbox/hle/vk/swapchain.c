@@ -154,6 +154,11 @@ static struct {
     uint64_t shown_key;
 } g_ps;
 
+/* Used by temporal capture before the presenter's helper implementation. */
+static void barrier(VkCommandBuffer cb, VkImage img, VkImageLayout from, VkImageLayout to,
+                    VkPipelineStageFlags2 src, VkAccessFlags2 src_access, VkPipelineStageFlags2 dst,
+                    VkAccessFlags2 dst_access);
+
 /* Read by the Android debug overlay; each field is independently atomic. */
 /* Create the user's validated SPIR-V modules on this Vulkan device. This is
  * deliberately separate from DLL parsing: the PE is never executed, and
