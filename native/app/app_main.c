@@ -25,6 +25,7 @@
 #include "native/core/options.h"
 #ifdef CONFIG_VULKAN
 #include "hw/xbox/hle/vk/vkdev.h"
+#include "hw/xbox/hle/vk/lsfg_native.h"
 #endif
 #include "native/dev/usb.h"
 #include "native/kernel/kernel.h"
@@ -596,6 +597,8 @@ EXPORT int SDL_main(int argc, char *argv[])
     nc_options_init(&opt);
     bool nis_enabled = false;
     float nis_sharpness = 0.5f;
+    const char *lsfg_dll_path = NULL;
+    int lsfg_multiplier = 2, lsfg_performance = 1, lsfg_flow_scale = 100;
     for (int i = 3; i < argc; i++) {
         if (nc_option(&opt, argv[i])) {
             continue;                           /* the core's (native/core/options.h) */
@@ -627,6 +630,12 @@ EXPORT int SDL_main(int argc, char *argv[])
         if (!strncmp(argv[i], "nis=", 4)) nis_enabled = atoi(argv[i] + 4) != 0;
         if (!strncmp(argv[i], "nis_sharpness=", 14)) nis_sharpness = strtof(argv[i] + 14, NULL);
 #ifdef CONFIG_VULKAN
+        if (!strncmp(argv[i], "lsfg_dll=", 9)) lsfg_dll_path = argv[i] + 9;
+        if (!strncmp(argv[i], "lsfg_multiplier=", 16)) lsfg_multiplier = atoi(argv[i] + 16);
+        if (!strncmp(argv[i], "lsfg_performance=", 17)) lsfg_performance = atoi(argv[i] + 17);
+        if (!strncmp(argv[i], "lsfg_flow_scale=", 16)) lsfg_flow_scale = atoi(argv[i] + 16);
+#endif
+#ifdef CONFIG_VULKAN
         if (!strncmp(argv[i], "aniso=", 6)) {
             g_hle_aniso_enabled = atoi(argv[i] + 6) != 0;
         }
@@ -643,6 +652,22 @@ EXPORT int SDL_main(int argc, char *argv[])
         }
     }
     nc_present_set_nis(nis_enabled, nis_sharpness);
+#ifdef CONFIG_VULKAN
+    if (lsfg_dll_path && lsfg_dll_path[0]) {
+        char lsfg_error[256] = {0};
+        /* FP16 is deliberately disabled until the HLE device reports its
+         * shaderFloat16 capability; FP32 is the safe native Vulkan variant. */
+        if (hle_lsfg_load_shaders(lsfg_dll_path, 0, 0, lsfg_error, sizeof(lsfg_error))) {
+            nc_log("hakuX-lsfg", "Lossless.dll parsed: %d native SPIR-V modules; multiplier %dx, performance %s, flow scale %d%%",
+                   hle_lsfg_shader_count(), lsfg_multiplier,
+                   lsfg_performance ? "on" : "off", lsfg_flow_scale);
+        } else {
+            nc_log("hakuX-lsfg", "Lossless.dll shader load failed: %s", lsfg_error);
+        }
+    } else {
+        nc_log("hakuX-lsfg", "no Lossless.dll configured; frame generation remains unavailable");
+    }
+#endif
     nc_options_apply(&opt);
     nc_present_set_widescreen(opt.video >= 0 && (opt.video & NC_VIDEO_WIDESCREEN));
     nc_log("hakuX-app", "native core: disc %s, hdd %s%s", disc, argv[2], opt.uncap ? ", frame rate uncapped" : "");
