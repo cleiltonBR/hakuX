@@ -90,6 +90,7 @@ void nc_present_set_lsfg(const char *path, int multiplier, bool performance, int
     g_lsfg_multiplier = multiplier < 2 ? 2 : multiplier > 4 ? 4 : multiplier;
     g_lsfg_performance = performance;
     g_lsfg_flow_scale = flow_scale < 25 ? 25 : flow_scale > 100 ? 100 : flow_scale;
+    hle_present_set_lsfg(g_lsfg_multiplier, g_lsfg_performance, g_lsfg_flow_scale);
     g_lsfg_load_attempted = false;
 }
 
