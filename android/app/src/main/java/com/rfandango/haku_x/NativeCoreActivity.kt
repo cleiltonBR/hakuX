@@ -1281,14 +1281,16 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
       getString(if (shown) R.string.overlay_menu_hide else R.string.overlay_menu_show) to "Mostrar ou ocultar os controles na tela",
       getString(R.string.overlay_menu_controllers) to "Configurar jogadores e controles conectados",
       "Informações na tela" to "Escolha FPS, RAM, FSR, NIS, CAS e GPU",
-      "Imagem e gráficos" to "FSR 1.0, CAS, NIS, resolução e filtros"
+      "Imagem e gráficos" to "FSR 1.0, CAS, NIS, resolução e filtros",
+      "LSFG • Geração de quadros" to "Multiplicador, desempenho e Flow Scale"
     )
     val actions = mutableListOf<() -> Unit>(
       ::editControls,
       { controlsShown = !shown; updateControllerVisibility() },
       ::showPlayers,
       ::showRuntimeOverlayOptions,
-      ::showRuntimeGraphics
+      ::showRuntimeGraphics,
+      ::showRuntimeLsfg
     )
     if (states) {
       items += getString(R.string.overlay_menu_save_state) to "Salvar o progresso em um dos slots"
@@ -1308,6 +1310,57 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     items += getString(exit) to "Fechar o jogo"
     actions += ::exitGame
     showSeriesXMenu("HakuX FSR  •  Menu rápido", items) { actions[it]() }
+  }
+
+  /** LSFG tuning controls in the in-game quick menu; values are shared with SetupScreen. */
+  private fun showRuntimeLsfg() {
+    val prefs = AppPrefs(this)
+    fun render() {
+      val entries = listOf(
+        "Multiplicador de quadros" to "${prefs.lsfgMultiplier}×",
+        "Modo de desempenho" to if (prefs.lsfgPerformanceMode) "Desempenho" else "Qualidade",
+        "Flow Scale" to "${prefs.lsfgFlowScalePercent}%"
+      )
+      showSeriesXMenu("LSFG • Geração de quadros", entries) { index ->
+        when (index) {
+          0 -> showSeriesXSlider(
+            "Multiplicador de quadros",
+            prefs.lsfgMultiplier - 2,
+            2,
+            { "${it + 2}×" },
+            startLabel = "2×",
+            endLabel = "4×",
+          ) {
+            prefs.lsfgMultiplier = it + 2
+            render()
+          }
+          1 -> showSeriesXChoices(
+            "Modo de desempenho",
+            listOf("Qualidade", "Desempenho"),
+            if (prefs.lsfgPerformanceMode) 1 else 0,
+          ) {
+            prefs.lsfgPerformanceMode = it == 1
+            render()
+          }
+          2 -> {
+            val values = listOf(25, 50, 75, 100)
+            val selected = values.indexOf(prefs.lsfgFlowScalePercent).coerceAtLeast(0)
+            showSeriesXSlider(
+              "Flow Scale",
+              selected,
+              values.lastIndex,
+              { "${values[it.coerceIn(0, values.lastIndex)]}%" },
+              startLabel = "25%",
+              endLabel = "100%",
+            ) {
+              prefs.lsfgFlowScalePercent = values[it.coerceIn(0, values.lastIndex)]
+              render()
+            }
+          }
+        }
+      }
+    }
+    render()
   }
 
   /** Selects independently which performance and graphics details appear over gameplay. */
