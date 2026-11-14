@@ -28,6 +28,7 @@ import com.rfandango.haku_x.data.Storage
 import com.rfandango.haku_x.ui.common.OnboardingCard
 import com.rfandango.haku_x.ui.common.OnboardingLead
 import com.rfandango.haku_x.ui.common.OnboardingPage
+import com.rfandango.haku_x.ui.common.GraphicsSlider
 
 /**
  * First run: the games folder, the one thing the native core needs (it boots
@@ -40,6 +41,9 @@ fun SetupScreen(onDone: () -> Unit) {
   val prefs = remember { AppPrefs(context) }
   var folder by remember { mutableStateOf(prefs.gamesFolderUri) }
   var lsfgDll by remember { mutableStateOf(prefs.lsfgDllPath) }
+  var lsfgMultiplier by remember { mutableStateOf(prefs.lsfgMultiplier.toFloat()) }
+  var lsfgPerformance by remember { mutableStateOf(if (prefs.lsfgPerformanceMode) 1f else 0f) }
+  var lsfgFlowScale by remember { mutableStateOf(prefs.lsfgFlowScalePercent.toFloat()) }
   val ready = remember(folder) { Storage.isFolderReady(context, folder) }
 
   val pickFolder = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri: Uri? ->
@@ -96,6 +100,54 @@ fun SetupScreen(onDone: () -> Unit) {
       OutlinedButton(onClick = { pickLsfgDll.launch(arrayOf("*/*")) }) {
         Text(if (lsfgDll.isNotBlank()) "Substituir Lossless.dll" else "Selecionar Lossless.dll")
       }
+      Text(
+        "Parâmetros experimentais do LSFG",
+        style = MaterialTheme.typography.titleSmall,
+      )
+      GraphicsSlider(
+        title = "Multiplicador de quadros",
+        valueLabel = "${lsfgMultiplier.toInt()}×",
+        value = lsfgMultiplier,
+        valueRange = 2f..4f,
+        steps = 1,
+        startLabel = "2×",
+        endLabel = "4×",
+        onValueChange = {
+          lsfgMultiplier = it
+          prefs.lsfgMultiplier = it.toInt()
+        },
+      )
+      GraphicsSlider(
+        title = "Modo desempenho",
+        valueLabel = if (lsfgPerformance >= 0.5f) "Ativado" else "Desativado",
+        value = lsfgPerformance,
+        valueRange = 0f..1f,
+        steps = 1,
+        startLabel = "Qualidade",
+        endLabel = "Desempenho",
+        onValueChange = {
+          lsfgPerformance = it
+          prefs.lsfgPerformanceMode = it >= 0.5f
+        },
+      )
+      GraphicsSlider(
+        title = "Flow Scale",
+        valueLabel = "${lsfgFlowScale.toInt()}%",
+        value = lsfgFlowScale,
+        valueRange = 25f..100f,
+        steps = 2,
+        startLabel = "25%",
+        endLabel = "100%",
+        onValueChange = {
+          lsfgFlowScale = it
+          prefs.lsfgFlowScalePercent = it.toInt()
+        },
+      )
+      Text(
+        "Os valores ficam salvos. A aplicação efetiva depende da integração do mecanismo LSFG ao renderizador Vulkan.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
     }
 
     Spacer(Modifier.height(8.dp))
