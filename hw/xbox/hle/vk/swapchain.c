@@ -37,6 +37,7 @@
 #include "hw/xbox/hle/vk/swapchain.h"
 #include <math.h>
 #include "hw/xbox/hle/vk/nis_coefficients.h"
+#include "hw/xbox/hle/vk/lsfg_native.h"
 #include "nis_shader_sources.h"
 
 #include <string.h>
@@ -69,6 +70,8 @@ typedef struct PsFrame {
 static struct {
     struct VolkDeviceTable t;
     bool inited, failed;
+    VkShaderModule lsfg_modules[25];
+    bool lsfg_modules_ready, lsfg_modules_failed;
     VkSemaphore tl;             /* timeline: each submit's value */
     uint64_t submitted;
     VkSampler smp;
@@ -139,6 +142,53 @@ static struct {
 } g_ps;
 
 /* Read by the Android debug overlay; each field is independently atomic. */
+/* Create the user's validated SPIR-V modules on this Vulkan device. This is
+ * deliberately separate from DLL parsing: the PE is never executed, and
+ * every module is owned by the presenter device for its lifetime. */
+static bool lsfg_modules_init(void)
+{
+    static const uint32_t ids[25] = {
+        255, 256, 280, 281, 282, 283, 284, 285, 286, 287, 288, 289,
+        290, 291, 292, 293, 294, 295, 296, 297, 298, 299, 300, 301, 302
+    };
+    if (g_ps.lsfg_modules_ready) return true;
+    if (g_ps.lsfg_modules_failed || hle_lsfg_shader_count() != ARRAY_SIZE(ids)) return false;
+
+    for (unsigned i = 0; i < ARRAY_SIZE(ids); ++i) {
+        const uint32_t *words = NULL;
+        size_t count = 0;
+        if (!hle_lsfg_get_shader(ids[i], &words, &count) || !words ||
+            count < 5 || count > SIZE_MAX / sizeof(uint32_t)) {
+            hle_log("hakuX-lsfg", "shader %u is missing or invalid; Vulkan modules disabled", ids[i]);
+            goto fail;
+        }
+        VkShaderModuleCreateInfo ci = {
+            .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+            .codeSize = count * sizeof(uint32_t),
+            .pCode = words
+        };
+        const VkResult result = T.vkCreateShaderModule(g_hvk.dev, &ci, NULL, &g_ps.lsfg_modules[i]);
+        if (result != VK_SUCCESS) {
+            hle_log("hakuX-lsfg", "vkCreateShaderModule failed for resource %u: %d", ids[i], result);
+            goto fail;
+        }
+    }
+    g_ps.lsfg_modules_ready = true;
+    hle_log("hakuX-lsfg", "Vulkan accepted all %u LSFG shader modules; compute pipelines are not built yet",
+            (unsigned)ARRAY_SIZE(ids));
+    return true;
+
+fail:
+    for (unsigned i = 0; i < ARRAY_SIZE(ids); ++i) {
+        if (g_ps.lsfg_modules[i]) {
+            T.vkDestroyShaderModule(g_hvk.dev, g_ps.lsfg_modules[i], NULL);
+            g_ps.lsfg_modules[i] = VK_NULL_HANDLE;
+        }
+    }
+    g_ps.lsfg_modules_failed = true;
+    return false;
+}
+
 static int g_nis_status[14];
 static void nis_status(int index, int value)
 {
@@ -1578,6 +1628,7 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
     VkCommandBufferBeginInfo bi = { .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
                                     .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT };
     T.vkBeginCommandBuffer(cb, &bi);
+    if (g_ps.have && hle_lsfg_shader_count() == 25) lsfg_modules_init();
     VkImageView src = g_ps.have ? g_ps.f.view : VK_NULL_HANDLE;
     bool fxaa_done = false;
     /* The frame's writes need no barrier here: each writer of a display
