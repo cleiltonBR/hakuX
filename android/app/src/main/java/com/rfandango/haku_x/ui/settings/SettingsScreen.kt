@@ -155,6 +155,19 @@ fun SettingsScreen(
       }
     }
   }
+  val pickLsfgDll = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+    if (uri != null) {
+      runCatching { LosslessDllStore.import(context, uri) }
+        .onSuccess { file ->
+          lsfgDllPath = file.absolutePath
+          prefs.lsfgDllPath = file.absolutePath
+          Toast.makeText(context, "Lossless.dll importada e validada.", Toast.LENGTH_LONG).show()
+        }
+        .onFailure { error ->
+          Toast.makeText(context, error.message ?: "Falha ao importar Lossless.dll.", Toast.LENGTH_LONG).show()
+        }
+    }
+  }
   val snackbar = remember { SnackbarHostState() }
   /* The folder the logs' ZIP goes to (data/Logs.kt). */
   val pickLogsFolder = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri: Uri? ->
