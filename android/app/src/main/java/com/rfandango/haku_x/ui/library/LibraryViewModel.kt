@@ -1,6 +1,7 @@
 package com.rfandango.haku_x.ui.library
 
 import android.app.Application
+import android.content.Intent
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.SystemClock
@@ -362,6 +363,17 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
         XisoConverter.Result.Cancelled -> _state.update { it.copy(conversion = null) }
       }
     }
+  }
+
+  /** Saves one game's user-selected artwork and reloads the library cover map. */
+  fun setCustomCover(game: Game, disc: DiscInfo?, uri: Uri) {
+    val app = getApplication<Application>()
+    runCatching {
+      app.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+    val key = GameOverrides.gameKey(disc?.titleId ?: 0L, disc?.version ?: 0L, game.relativePath)
+    GameOverrides(app, key)[GameSetting.CUSTOM_3D_COVER] = uri.toString()
+    refresh()
   }
 
   fun setQuery(query: String) = _state.update { it.copy(query = query) }
