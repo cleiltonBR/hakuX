@@ -2065,25 +2065,19 @@ static void lsfg_generate_drop(void)
 static bool lsfg_generate_ensure(uint32_t w, uint32_t h)
 {
     if (!g_ps.lsfg_generate_sets_allocated || !g_ps.lsfg_gamma_ready ||
-        !g_ps.lsfg_delta_ready || !g_ps.lsfg_sampler) return false;
+        !g_ps.lsfg_delta_ready || !g_ps.lsfg_sampler || !g_ps.lsfg_beta_sampler) return false;
     if (g_ps.lsfg_generate_ready && g_ps.lsfg_generated_w == w &&
         g_ps.lsfg_generated_h == h) return true;
     if (g_ps.lsfg_generate_ready) {
         idle();
         lsfg_generate_drop();
     }
-    for (unsigned frame = 0; frame < PS_FRAMES; ++frame)
-        for (unsigned generation = 0; generation < 3; ++generation)
-            if (!lsfg_alpha_image_make(&g_ps.lsfg_generated[frame][generation], w, h)) {
-                hle_log("hakuX-lsfg", "Generate output image allocation failed at %ux%u", w, h);
-                lsfg_generate_drop();
-                return false;
-            }
+    /* Allocate per-frame/per-generation outputs lazily in dispatch. A 2x
+     * configuration therefore owns three images, not the full nine-image 4x pool. */
     g_ps.lsfg_generated_w = w;
     g_ps.lsfg_generated_h = h;
     g_ps.lsfg_generate_ready = true;
-    hle_log("hakuX-lsfg", "Generate outputs ready: %u frame slots x 3 interpolation targets at %ux%u",
-            PS_FRAMES, w, h);
+    hle_log("hakuX-lsfg", "Generate output pool ready at %ux%u (targets allocated on demand)", w, h);
     return true;
 }
 
@@ -2112,6 +2106,13 @@ static bool lsfg_generate_dispatch(VkCommandBuffer cb, uint64_t serial,
     LsfgAlphaImage *detail1 = &g_ps.lsfg_delta[2].output1;
     LsfgAlphaImage *detail2 = &g_ps.lsfg_delta[2].output2;
     LsfgAlphaImage *output = &g_ps.lsfg_generated[frame_slot][generation];
+    if (!output->image && !lsfg_alpha_image_make(output, g_ps.lsfg_generated_w,
+                                                  g_ps.lsfg_generated_h)) {
+        lsfg_alpha_image_drop(output);
+        hle_log("hakuX-lsfg", "Generate target allocation failed for frame slot %u generation %u",
+                frame_slot, generation);
+        return false;
+    }
     lsfg_alpha_transition(cb, motion, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                            VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
     lsfg_alpha_transition(cb, detail1, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
@@ -2132,7 +2133,7 @@ static bool lsfg_generate_dispatch(VkCommandBuffer cb, uint64_t serial,
             VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
     output->layout = VK_IMAGE_LAYOUT_GENERAL;
 
-    VkSampler samplers[2] = { g_ps.lsfg_sampler, g_ps.lsfg_sampler };
+    VkSampler samplers[2] = { g_ps.lsfg_sampler, g_ps.lsfg_beta_sampler };
     for (unsigned i = 0; i < 2; ++i) {
         VkImageView sampled[5] = {
             frames[1u - i], frames[i], motion->view, detail1->view, detail2->view
@@ -3169,6 +3170,14 @@ static void drop_window(void)
  * wait, may tear). FIFO remains the guaranteed fallback. */
 static VkPresentModeKHR choose_present_mode(void)
 {
+    /* MAILBOX/IMMEDIATE can replace generated images before they reach the
+     * panel. LSFG needs ordered FIFO presents: generated frames first, real
+     * frame last, exactly one display interval per queued image. */
+    if (hle_lsfg_shader_count() == ARRAY_SIZE(k_lsfg_passes) &&
+        g_hvk.caps.lsfg_memory_model && g_hvk.caps.lsfg_null_descriptor) {
+        hle_log("hakuX-hle-back", "present: LSFG active; FIFO preserves generated-frame order");
+        return VK_PRESENT_MODE_FIFO_KHR;
+    }
     if (!getenv("HAKUX_HLE_UNCAP")) return VK_PRESENT_MODE_FIFO_KHR;
     VkPresentModeKHR modes[32];
     uint32_t count = (uint32_t)(sizeof(modes) / sizeof(modes[0]));
@@ -3841,7 +3850,7 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
             const VkResult acquire = T.vkAcquireNextImageKHR(g_hvk.dev, g_ps.sc, 50000000ull,
                 f->lsfg_acquired[i], VK_NULL_HANDLE, &image_index);
             if (acquire != VK_SUCCESS && acquire != VK_SUBOPTIMAL_KHR) {
-                if (acquire == VK_ERROR_OUT_OF_DATE_KHR || acquire == VK_SUBOPTIMAL_KHR)
+                if (acquire == VK_ERROR_OUT_OF_DATE_KHR)
                     g_ps.stale = true;
                 else if (acquire == VK_ERROR_SURFACE_LOST_KHR)
                     g_ps.stale = true;
