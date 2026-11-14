@@ -1637,8 +1637,10 @@ static bool lsfg_gamma_dispatch(VkCommandBuffer cb, uint64_t frame_serial, unsig
         T.vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_COMPUTE, g_ps.lsfg_pipelines[2]);
         T.vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_COMPUTE,
             g_ps.lsfg_pipeline_layouts[2], 0, 1, &set, 0, NULL);
-        const uint32_t w = MAX(1u, (g_ps.lsfg_flow_w >> level) + 3u) >> 2;
-        const uint32_t h = MAX(1u, (g_ps.lsfg_flow_h >> level) + 3u) >> 2;
+        const uint32_t level_w = MAX(1u, g_ps.lsfg_flow_w >> level);
+        const uint32_t level_h = MAX(1u, g_ps.lsfg_flow_h >> level);
+        const uint32_t w = MAX(1u, (level_w + 3u) >> 2);
+        const uint32_t h = MAX(1u, (level_h + 3u) >> 2);
         const uint32_t gx = (w + 7u) >> 3, gy = (h + 7u) >> 3;
         if (!gx || !gy) return false;
         T.vkCmdDispatch(cb, gx, gy, 1);
