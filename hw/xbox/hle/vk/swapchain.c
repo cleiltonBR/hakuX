@@ -71,7 +71,10 @@ static struct {
     struct VolkDeviceTable t;
     bool inited, failed;
     VkShaderModule lsfg_modules[25];
-    bool lsfg_modules_ready, lsfg_modules_failed;
+    VkDescriptorSetLayout lsfg_set_layouts[25];
+    VkPipelineLayout lsfg_pipeline_layouts[25];
+    VkPipeline lsfg_pipelines[25];
+    bool lsfg_modules_ready, lsfg_modules_failed, lsfg_pipelines_ready;
     VkSemaphore tl;             /* timeline: each submit's value */
     uint64_t submitted;
     VkSampler smp;
@@ -145,21 +148,155 @@ static struct {
 /* Create the user's validated SPIR-V modules on this Vulkan device. This is
  * deliberately separate from DLL parsing: the PE is never executed, and
  * every module is owned by the presenter device for its lifetime. */
+typedef struct LsfgPassSpec {
+    uint32_t id;
+    uint8_t uniform_buffers, samplers, sampled_images, storage_images;
+} LsfgPassSpec;
+
+/* Descriptor order and counts mirror EmuCoreX's LsfgPass declarations.
+ * Binding numbers are dense because lsfg_shader.cpp adopts/renumbers SPIR-V. */
+static const LsfgPassSpec k_lsfg_passes[25] = {
+    {255, 1, 1, 1, 7},  /* mipmap pyramid */
+    {256, 1, 2, 5, 1},  /* generated output */
+    {280, 1, 2, 5, 3},  /* gamma[0] / delta[0] */
+    {281, 1, 2, 6, 1},  /* delta[5] */
+    {282, 0, 1, 3, 2},  /* gamma[1] */
+    {283, 0, 1, 2, 2},  /* gamma[2] */
+    {284, 0, 1, 2, 2},  /* gamma[3] */
+    {285, 1, 2, 4, 1},  /* gamma[4] */
+    {286, 0, 1, 3, 2},  /* delta[1] */
+    {287, 0, 1, 2, 2},  /* delta[2] */
+    {288, 0, 1, 2, 2},  /* delta[3] */
+    {289, 1, 2, 4, 1},  /* delta[4] */
+    {290, 0, 1, 1, 1},  /* alpha[0] */
+    {291, 0, 1, 1, 1},  /* alpha[1] */
+    {292, 0, 1, 1, 2},  /* alpha[2] */
+    {293, 0, 1, 2, 2},  /* alpha[3] */
+    {294, 0, 1, 1, 1},  /* delta[6] */
+    {295, 0, 1, 1, 1},  /* delta[7] */
+    {296, 0, 1, 1, 1},  /* delta[8] */
+    {297, 1, 2, 2, 1},  /* delta[9] */
+    {298, 0, 1, 6, 2},  /* beta[0] */
+    {299, 0, 1, 2, 2},  /* beta[1] */
+    {300, 0, 1, 2, 2},  /* beta[2] */
+    {301, 0, 1, 2, 2},  /* beta[3] */
+    {302, 1, 1, 2, 6},  /* beta[4] */
+};
+
+static void lsfg_pipeline_destroy(void)
+{
+    for (unsigned i = 0; i < ARRAY_SIZE(k_lsfg_passes); ++i) {
+        if (g_ps.lsfg_pipelines[i]) {
+            T.vkDestroyPipeline(g_hvk.dev, g_ps.lsfg_pipelines[i], NULL);
+            g_ps.lsfg_pipelines[i] = VK_NULL_HANDLE;
+        }
+        if (g_ps.lsfg_pipeline_layouts[i]) {
+            T.vkDestroyPipelineLayout(g_hvk.dev, g_ps.lsfg_pipeline_layouts[i], NULL);
+            g_ps.lsfg_pipeline_layouts[i] = VK_NULL_HANDLE;
+        }
+        if (g_ps.lsfg_set_layouts[i]) {
+            T.vkDestroyDescriptorSetLayout(g_hvk.dev, g_ps.lsfg_set_layouts[i], NULL);
+            g_ps.lsfg_set_layouts[i] = VK_NULL_HANDLE;
+        }
+    }
+    g_ps.lsfg_pipelines_ready = false;
+}
+
+static bool lsfg_pipelines_init(void)
+{
+    if (g_ps.lsfg_pipelines_ready) return true;
+    if (!g_ps.lsfg_modules_ready || !g_hvk.caps.lsfg_memory_model ||
+        !g_hvk.caps.lsfg_null_descriptor) return false;
+
+    for (unsigned i = 0; i < ARRAY_SIZE(k_lsfg_passes); ++i) {
+        const LsfgPassSpec *spec = &k_lsfg_passes[i];
+        VkDescriptorSetLayoutBinding bindings[16];
+        uint32_t n = 0;
+        const uint32_t counts[4] = {
+            spec->uniform_buffers, spec->samplers,
+            spec->sampled_images, spec->storage_images
+        };
+        const VkDescriptorType types[4] = {
+            VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_DESCRIPTOR_TYPE_SAMPLER,
+            VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE
+        };
+        for (unsigned t = 0; t < ARRAY_SIZE(counts); ++t) {
+            for (uint32_t j = 0; j < counts[t]; ++j) {
+                if (n >= ARRAY_SIZE(bindings)) goto fail;
+                bindings[n] = (VkDescriptorSetLayoutBinding) {
+                    .binding = n,
+                    .descriptorType = types[t],
+                    .descriptorCount = 1,
+                    .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT
+                };
+                ++n;
+            }
+        }
+        VkDescriptorSetLayoutCreateInfo dci = {
+            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+            .bindingCount = n,
+            .pBindings = bindings
+        };
+        VkResult r = T.vkCreateDescriptorSetLayout(g_hvk.dev, &dci, NULL,
+                                                    &g_ps.lsfg_set_layouts[i]);
+        if (r != VK_SUCCESS) {
+            hle_log("hakuX-lsfg", "descriptor layout creation failed for shader %u: %d", spec->id, r);
+            goto fail;
+        }
+        VkPipelineLayoutCreateInfo lci = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+            .setLayoutCount = 1,
+            .pSetLayouts = &g_ps.lsfg_set_layouts[i]
+        };
+        r = T.vkCreatePipelineLayout(g_hvk.dev, &lci, NULL, &g_ps.lsfg_pipeline_layouts[i]);
+        if (r != VK_SUCCESS) {
+            hle_log("hakuX-lsfg", "pipeline layout creation failed for shader %u: %d", spec->id, r);
+            goto fail;
+        }
+        VkComputePipelineCreateInfo pci = {
+            .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
+            .stage = {
+                .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                .stage = VK_SHADER_STAGE_COMPUTE_BIT,
+                .module = g_ps.lsfg_modules[i],
+                .pName = "main"
+            },
+            .layout = g_ps.lsfg_pipeline_layouts[i]
+        };
+        r = T.vkCreateComputePipelines(g_hvk.dev, VK_NULL_HANDLE, 1, &pci, NULL,
+                                       &g_ps.lsfg_pipelines[i]);
+        if (r != VK_SUCCESS) {
+            hle_log("hakuX-lsfg", "compute pipeline creation failed for shader %u: %d", spec->id, r);
+            goto fail;
+        }
+    }
+    g_ps.lsfg_pipelines_ready = true;
+    hle_log("hakuX-lsfg", "created %u LSFG compute pipelines and descriptor layouts; dispatch is not enabled yet",
+            (unsigned)ARRAY_SIZE(k_lsfg_passes));
+    return true;
+
+fail:
+    lsfg_pipeline_destroy();
+    return false;
+}
+
 static bool lsfg_modules_init(void)
 {
-    static const uint32_t ids[25] = {
-        255, 256, 280, 281, 282, 283, 284, 285, 286, 287, 288, 289,
-        290, 291, 292, 293, 294, 295, 296, 297, 298, 299, 300, 301, 302
-    };
     if (g_ps.lsfg_modules_ready) return true;
-    if (g_ps.lsfg_modules_failed || hle_lsfg_shader_count() != ARRAY_SIZE(ids)) return false;
+    if (g_ps.lsfg_modules_failed || hle_lsfg_shader_count() != ARRAY_SIZE(k_lsfg_passes)) return false;
+    if (!g_hvk.caps.lsfg_memory_model || !g_hvk.caps.lsfg_null_descriptor) {
+        hle_log("hakuX-lsfg", "device lacks Vulkan memory model or nullDescriptor; LSFG disabled");
+        g_ps.lsfg_modules_failed = true;
+        return false;
+    }
 
-    for (unsigned i = 0; i < ARRAY_SIZE(ids); ++i) {
+    for (unsigned i = 0; i < ARRAY_SIZE(k_lsfg_passes); ++i) {
         const uint32_t *words = NULL;
         size_t count = 0;
-        if (!hle_lsfg_get_shader(ids[i], &words, &count) || !words ||
+        const uint32_t id = k_lsfg_passes[i].id;
+        if (!hle_lsfg_get_shader(id, &words, &count) || !words ||
             count < 5 || count > SIZE_MAX / sizeof(uint32_t)) {
-            hle_log("hakuX-lsfg", "shader %u is missing or invalid; Vulkan modules disabled", ids[i]);
+            hle_log("hakuX-lsfg", "shader %u is missing or invalid; Vulkan modules disabled", id);
             goto fail;
         }
         VkShaderModuleCreateInfo ci = {
@@ -169,17 +306,16 @@ static bool lsfg_modules_init(void)
         };
         const VkResult result = T.vkCreateShaderModule(g_hvk.dev, &ci, NULL, &g_ps.lsfg_modules[i]);
         if (result != VK_SUCCESS) {
-            hle_log("hakuX-lsfg", "vkCreateShaderModule failed for resource %u: %d", ids[i], result);
+            hle_log("hakuX-lsfg", "vkCreateShaderModule failed for resource %u: %d", id, result);
             goto fail;
         }
     }
     g_ps.lsfg_modules_ready = true;
-    hle_log("hakuX-lsfg", "Vulkan accepted all %u LSFG shader modules; compute pipelines are not built yet",
-            (unsigned)ARRAY_SIZE(ids));
+    hle_log("hakuX-lsfg", "Vulkan accepted all %u LSFG shader modules", (unsigned)ARRAY_SIZE(k_lsfg_passes));
     return true;
 
 fail:
-    for (unsigned i = 0; i < ARRAY_SIZE(ids); ++i) {
+    for (unsigned i = 0; i < ARRAY_SIZE(k_lsfg_passes); ++i) {
         if (g_ps.lsfg_modules[i]) {
             T.vkDestroyShaderModule(g_hvk.dev, g_ps.lsfg_modules[i], NULL);
             g_ps.lsfg_modules[i] = VK_NULL_HANDLE;
@@ -1628,7 +1764,8 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
     VkCommandBufferBeginInfo bi = { .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
                                     .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT };
     T.vkBeginCommandBuffer(cb, &bi);
-    if (g_ps.have && hle_lsfg_shader_count() == 25) lsfg_modules_init();
+    if (g_ps.have && hle_lsfg_shader_count() == ARRAY_SIZE(k_lsfg_passes) &&
+        lsfg_modules_init()) lsfg_pipelines_init();
     VkImageView src = g_ps.have ? g_ps.f.view : VK_NULL_HANDLE;
     bool fxaa_done = false;
     /* The frame's writes need no barrier here: each writer of a display
