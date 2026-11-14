@@ -10,8 +10,12 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationRail
+import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import android.content.res.Configuration
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -102,6 +106,7 @@ fun HakuXApp(
   // A newer release on GitHub, looked for once as the app's screens start: told in a toast, the
   // library's update button then shows it (Updates).
   val context = LocalContext.current
+  val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
   LaunchedEffect(Unit) {
     Updates.checkAtStart(context)?.let {
       Toast.makeText(context, context.getString(R.string.update_toast, it.version), Toast.LENGTH_LONG).show()
@@ -120,26 +125,20 @@ fun HakuXApp(
   val showMainTabs = currentRoute in setOf(Routes.LIBRARY, Routes.STORE, Routes.DOWNLOADS)
   Scaffold(
     bottomBar = {
-      if (showMainTabs) {
+      if (showMainTabs && !landscape) {
         NavigationBar {
-          NavigationBarItem(
-            selected = currentRoute == Routes.LIBRARY,
-            onClick = { nav.navigate(Routes.LIBRARY) { launchSingleTop = true; restoreState = true } },
-            icon = { Icon(Icons.Filled.Home, contentDescription = null) },
-            label = { Text("Biblioteca") },
-          )
-          NavigationBarItem(
-            selected = currentRoute == Routes.STORE,
-            onClick = { nav.navigate(Routes.STORE) { launchSingleTop = true; restoreState = true } },
-            icon = { Icon(Icons.Filled.Search, contentDescription = null) },
-            label = { Text("Loja") },
-          )
-          NavigationBarItem(
-            selected = currentRoute == Routes.DOWNLOADS,
-            onClick = { nav.navigate(Routes.DOWNLOADS) { launchSingleTop = true; restoreState = true } },
-            icon = { Icon(Icons.Filled.Refresh, contentDescription = null) },
-            label = { Text("Downloads") },
-          )
+          NavigationBarItem(selected = currentRoute == Routes.LIBRARY, onClick = { nav.navigate(Routes.LIBRARY) { launchSingleTop = true; restoreState = true } }, icon = { Icon(Icons.Filled.Home, contentDescription = null) }, label = { Text("Biblioteca") })
+          NavigationBarItem(selected = currentRoute == Routes.STORE, onClick = { nav.navigate(Routes.STORE) { launchSingleTop = true; restoreState = true } }, icon = { Icon(Icons.Filled.Search, contentDescription = null) }, label = { Text("Loja") })
+          NavigationBarItem(selected = currentRoute == Routes.DOWNLOADS, onClick = { nav.navigate(Routes.DOWNLOADS) { launchSingleTop = true; restoreState = true } }, icon = { Icon(Icons.Filled.Refresh, contentDescription = null) }, label = { Text("Downloads") })
+        }
+      }
+    },
+    navigationRail = {
+      if (showMainTabs && landscape) {
+        NavigationRail {
+          NavigationRailItem(selected = currentRoute == Routes.LIBRARY, onClick = { nav.navigate(Routes.LIBRARY) { launchSingleTop = true; restoreState = true } }, icon = { Icon(Icons.Filled.Home, contentDescription = "Biblioteca") }, label = { Text("Biblioteca") })
+          NavigationRailItem(selected = currentRoute == Routes.STORE, onClick = { nav.navigate(Routes.STORE) { launchSingleTop = true; restoreState = true } }, icon = { Icon(Icons.Filled.Search, contentDescription = "Loja") }, label = { Text("Loja") })
+          NavigationRailItem(selected = currentRoute == Routes.DOWNLOADS, onClick = { nav.navigate(Routes.DOWNLOADS) { launchSingleTop = true; restoreState = true } }, icon = { Icon(Icons.Filled.Refresh, contentDescription = "Downloads") }, label = { Text("Downloads") })
         }
       }
     },
