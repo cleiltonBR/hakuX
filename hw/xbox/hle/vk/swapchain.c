@@ -341,6 +341,9 @@ fail:
 }
 
 static void idle(void);
+static void barrier(VkCommandBuffer cb, VkImage img, VkImageLayout from, VkImageLayout to,
+                    VkPipelineStageFlags2 src, VkAccessFlags2 src_access, VkPipelineStageFlags2 dst,
+                    VkAccessFlags2 dst_access);
 
 static void lsfg_history_drop(void)
 {
@@ -482,9 +485,10 @@ static bool lsfg_history_capture(VkCommandBuffer cb)
 
     g_ps.lsfg_history_layout[index] = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     g_ps.lsfg_history_last_serial = g_ps.serial;
+    const bool first_pair = g_ps.lsfg_history_count == 1;
     if (g_ps.lsfg_history_count < ARRAY_SIZE(g_ps.lsfg_history))
         g_ps.lsfg_history_count++;
-    if (g_ps.lsfg_history_count == 2)
+    if (first_pair)
         hle_log("hakuX-lsfg", "temporal capture active: two distinct RGBA8 frames available (%ux%u)",
                 g_ps.f.w, g_ps.f.h);
     return true;
