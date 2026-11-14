@@ -11,6 +11,8 @@
 #include "native/dev/dev.h"
 #include "hw/xbox/hle/vk/display.h"
 #include "hw/xbox/hle/vk/swapchain.h"
+#include "hw/xbox/hle/vk/vkdev.h"
+#include "hw/xbox/hle/vk/lsfg_native.h"
 
 #include <string.h>
 #include <sys/system_properties.h>
@@ -25,6 +27,9 @@ static bool g_cas;
 static float g_cas_sharpness = 0.2f;
 static bool g_nis;
 static float g_nis_sharpness = 0.5f;
+static char *g_lsfg_dll_path;
+static int g_lsfg_multiplier = 2, g_lsfg_flow_scale = 100;
+static bool g_lsfg_performance, g_lsfg_load_attempted;
 static bool g_shown;
 
 /* Frame rate from the HLE GPU's presented frames. */
@@ -75,6 +80,34 @@ void nc_present_set_nis(bool on, float sharpness)
     if (sharpness < 0.0f) sharpness = 0.0f;
     if (sharpness > 1.0f) sharpness = 1.0f;
     g_nis_sharpness = sharpness;
+}
+
+void nc_present_set_lsfg(const char *path, int multiplier, bool performance, int flow_scale)
+{
+    free(g_lsfg_dll_path);
+    g_lsfg_dll_path = path && path[0] ? strdup(path) : NULL;
+    g_lsfg_multiplier = multiplier < 2 ? 2 : multiplier > 4 ? 4 : multiplier;
+    g_lsfg_performance = performance;
+    g_lsfg_flow_scale = flow_scale < 25 ? 25 : flow_scale > 100 ? 100 : flow_scale;
+    g_lsfg_load_attempted = false;
+}
+
+static void lsfg_load_when_vulkan_ready(void)
+{
+    if (g_lsfg_load_attempted || !g_lsfg_dll_path || !hle_vk_ready()) return;
+    g_lsfg_load_attempted = true;
+    char error[256] = {0};
+    const bool fp16_available = g_hvk.caps.lsfg_fp16;
+    const int ok = hle_lsfg_load_shaders(g_lsfg_dll_path, fp16_available ? 1 : 0,
+                                         g_lsfg_performance && fp16_available ? 1 : 0,
+                                         error, sizeof(error));
+    if (ok) {
+        nc_log("hakuX-lsfg", "Lossless.dll loaded: %d SPIR-V modules, FP16 %s, multiplier %dx, performance %s, flow scale %d%%",
+               hle_lsfg_shader_count(), fp16_available && g_lsfg_performance ? "selected" : "not selected",
+               g_lsfg_multiplier, g_lsfg_performance ? "on" : "off", g_lsfg_flow_scale);
+    } else {
+        nc_log("hakuX-lsfg", "Lossless.dll shader load failed: %s; normal presentation remains active", error);
+    }
 }
 
 void nc_present_set_aspect(int mode)
@@ -210,6 +243,7 @@ bool nc_present_frame(struct ANativeWindow *win)
         return true;
     }
     uint32_t ww = 0, wh = 0, fw = 0, fh = 0;
+    lsfg_load_when_vulkan_ready();
     if (!hle_present_begin(win, &ww, &wh)) {
         return false;
     }
