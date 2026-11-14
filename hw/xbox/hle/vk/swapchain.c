@@ -354,9 +354,9 @@ static bool lsfg_pipelines_init(void)
     }
     /* Alpha: seven mip levels, each with three early-stage sets and
      * three temporal-output sets (sampler + sampled/storage images). */
-    descriptor_totals[1] += 7u * 4u;
-    descriptor_totals[2] += 7u * 5u;
-    descriptor_totals[3] += 7u * 6u;
+    descriptor_totals[1] += 7u * 6u;
+    descriptor_totals[2] += 7u * 9u;
+    descriptor_totals[3] += 7u * 10u;
     const VkDescriptorType descriptor_types[4] = {
         VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_DESCRIPTOR_TYPE_SAMPLER,
         VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE
@@ -835,11 +835,13 @@ static bool lsfg_mipmap_dispatch(VkCommandBuffer cb, unsigned history_slot)
 
     for (unsigned i = 0; i < ARRAY_SIZE(g_ps.lsfg_flow); ++i) {
         const VkImageLayout old = g_ps.lsfg_flow_layout[i];
+        const VkAccessFlags2 src_access = old == VK_IMAGE_LAYOUT_UNDEFINED ? 0 :
+            old == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL ? VK_ACCESS_2_SHADER_SAMPLED_READ_BIT :
+                                                              VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT;
         barrier(cb, g_ps.lsfg_flow[i], old, VK_IMAGE_LAYOUT_GENERAL,
                 old == VK_IMAGE_LAYOUT_UNDEFINED ? VK_PIPELINE_STAGE_2_NONE :
                     VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                old == VK_IMAGE_LAYOUT_UNDEFINED ? 0 : VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
+                src_access, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
         g_ps.lsfg_flow_layout[i] = VK_IMAGE_LAYOUT_GENERAL;
     }
 
@@ -1139,6 +1141,7 @@ static bool lsfg_alpha_dispatch(VkCommandBuffer cb, uint64_t frame_serial)
                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                 VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
                 VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
+        g_ps.lsfg_flow_layout[level] = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         lsfg_alpha_transition(cb, &a->temp1, VK_IMAGE_LAYOUT_GENERAL,
                               VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
         T.vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_COMPUTE, g_ps.lsfg_pipelines[12]);
