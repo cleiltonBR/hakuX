@@ -6,11 +6,14 @@
  * Resource layout and shader IDs follow EmuCoreX / lsfg-vk (GPL-3.0-or-later).
  */
 #include "hw/xbox/hle/vk/lsfg_shader.h"
+#include "hw/xbox/hle/vk/lsfg_native.h"
 
 #include <algorithm>
 #include <cstring>
 #include <fstream>
 #include <limits>
+#include <mutex>
+#include <cstdio>
 #include <span>
 
 namespace HleLsfg {
@@ -237,3 +240,59 @@ bool SelectSpirvModules(
   return true;
 }
 } // namespace HleLsfg
+
+
+/* C ABI used by the Android core. Shader modules are retained so the Vulkan
+ * presenter can consume them without reopening or reparsing Lossless.dll. */
+namespace {
+std::mutex g_lsfg_mutex;
+std::map<uint32_t, std::vector<uint32_t>> g_lsfg_modules;
+std::string g_lsfg_error;
+}
+
+extern "C" int hle_lsfg_load_shaders(const char *path, int allow_fp16, int prefer_fp16,
+                                      char *error, size_t error_capacity) {
+  std::map<uint32_t, std::vector<uint8_t>> resources;
+  std::map<uint32_t, std::vector<uint32_t>> modules;
+  std::string reason;
+  bool fp16 = false;
+  const bool ok = HleLsfg::ReadResources(path, resources, &reason) &&
+      HleLsfg::SelectSpirvModules(resources, allow_fp16 != 0, prefer_fp16 != 0,
+                                  modules, &fp16, &reason);
+  {
+    std::lock_guard<std::mutex> lock(g_lsfg_mutex);
+    if (ok) {
+      g_lsfg_modules.swap(modules);
+      g_lsfg_error.clear();
+    } else {
+      g_lsfg_modules.clear();
+      g_lsfg_error = reason.empty() ? "Lossless.dll shader parsing failed" : reason;
+    }
+    if (error && error_capacity) {
+      const std::string &message = ok ? std::string() : g_lsfg_error;
+      std::snprintf(error, error_capacity, "%s", message.c_str());
+    }
+  }
+  return ok ? 1 : 0;
+}
+
+extern "C" void hle_lsfg_clear_shaders(void) {
+  std::lock_guard<std::mutex> lock(g_lsfg_mutex);
+  g_lsfg_modules.clear();
+  g_lsfg_error.clear();
+}
+
+extern "C" int hle_lsfg_shader_count(void) {
+  std::lock_guard<std::mutex> lock(g_lsfg_mutex);
+  return static_cast<int>(g_lsfg_modules.size());
+}
+
+extern "C" int hle_lsfg_get_shader(uint32_t id, const uint32_t **words, size_t *word_count) {
+  if (!words || !word_count) return 0;
+  std::lock_guard<std::mutex> lock(g_lsfg_mutex);
+  const auto it = g_lsfg_modules.find(id);
+  if (it == g_lsfg_modules.end()) return 0;
+  *words = it->second.data();
+  *word_count = it->second.size();
+  return 1;
+}
