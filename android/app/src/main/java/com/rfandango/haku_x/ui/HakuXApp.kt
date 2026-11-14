@@ -4,7 +4,6 @@ import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.weight
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Home
@@ -259,4 +258,5 @@ fun HakuXApp(
     }
   }
   }
+}
 }
