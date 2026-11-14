@@ -1543,7 +1543,7 @@ static bool lsfg_gamma_ensure(void)
                                            VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT;
     if ((fp.optimalTilingFeatures & required) != required) {
         hle_log("hakuX-lsfg", "RGBA16F lacks sampled/storage support; Gamma disabled");
-        return false;
+        goto fail;
     }
 
     for (unsigned i = 0; i < ARRAY_SIZE(g_ps.lsfg_gamma); ++i) {
@@ -1562,9 +1562,11 @@ static bool lsfg_gamma_ensure(void)
         if (!lsfg_beta_image_make(&g->output, w, h, VK_FORMAT_R16G16B16A16_SFLOAT)) goto fail;
     }
 
+    const int scale = g_ps.lsfg_flow_scale < 25 ? 25 :
+                      g_ps.lsfg_flow_scale > 100 ? 100 : g_ps.lsfg_flow_scale;
     for (unsigned slot = 0; slot < 6; ++slot) {
-        if (!lsfg_gamma_make_constants(slot, false, g_ps.lsfg_flow_scale) ||
-            !lsfg_gamma_make_constants(slot, true, g_ps.lsfg_flow_scale)) goto fail;
+        if (!lsfg_gamma_make_constants(slot, false, scale) ||
+            !lsfg_gamma_make_constants(slot, true, scale)) goto fail;
     }
 
     for (unsigned i = 0; i < ARRAY_SIZE(g_ps.lsfg_gamma); ++i) {
