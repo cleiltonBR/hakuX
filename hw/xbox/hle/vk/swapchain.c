@@ -74,7 +74,9 @@ static struct {
     VkDescriptorSetLayout lsfg_set_layouts[25];
     VkPipelineLayout lsfg_pipeline_layouts[25];
     VkPipeline lsfg_pipelines[25];
-    bool lsfg_modules_ready, lsfg_modules_failed, lsfg_pipelines_ready;
+    VkDescriptorPool lsfg_descriptor_pool;
+    VkDescriptorSet lsfg_descriptor_sets[25];
+    bool lsfg_modules_ready, lsfg_modules_failed, lsfg_pipelines_ready, lsfg_pipelines_failed;
     VkSemaphore tl;             /* timeline: each submit's value */
     uint64_t submitted;
     VkSampler smp;
@@ -185,6 +187,11 @@ static const LsfgPassSpec k_lsfg_passes[25] = {
 
 static void lsfg_pipeline_destroy(void)
 {
+    if (g_ps.lsfg_descriptor_pool) {
+        T.vkDestroyDescriptorPool(g_hvk.dev, g_ps.lsfg_descriptor_pool, NULL);
+        g_ps.lsfg_descriptor_pool = VK_NULL_HANDLE;
+        memset(g_ps.lsfg_descriptor_sets, 0, sizeof(g_ps.lsfg_descriptor_sets));
+    }
     for (unsigned i = 0; i < ARRAY_SIZE(k_lsfg_passes); ++i) {
         if (g_ps.lsfg_pipelines[i]) {
             T.vkDestroyPipeline(g_hvk.dev, g_ps.lsfg_pipelines[i], NULL);
@@ -205,6 +212,7 @@ static void lsfg_pipeline_destroy(void)
 static bool lsfg_pipelines_init(void)
 {
     if (g_ps.lsfg_pipelines_ready) return true;
+    if (g_ps.lsfg_pipelines_failed) return false;
     if (!g_ps.lsfg_modules_ready || !g_hvk.caps.lsfg_memory_model ||
         !g_hvk.caps.lsfg_null_descriptor) return false;
 
@@ -270,13 +278,57 @@ static bool lsfg_pipelines_init(void)
             goto fail;
         }
     }
+    uint32_t descriptor_totals[4] = { 0, 0, 0, 0 };
+    for (unsigned i = 0; i < ARRAY_SIZE(k_lsfg_passes); ++i) {
+        descriptor_totals[0] += k_lsfg_passes[i].uniform_buffers;
+        descriptor_totals[1] += k_lsfg_passes[i].samplers;
+        descriptor_totals[2] += k_lsfg_passes[i].sampled_images;
+        descriptor_totals[3] += k_lsfg_passes[i].storage_images;
+    }
+    const VkDescriptorType descriptor_types[4] = {
+        VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_DESCRIPTOR_TYPE_SAMPLER,
+        VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE
+    };
+    VkDescriptorPoolSize pool_sizes[4];
+    for (unsigned i = 0; i < ARRAY_SIZE(pool_sizes); ++i) {
+        pool_sizes[i] = (VkDescriptorPoolSize) {
+            .type = descriptor_types[i], .descriptorCount = descriptor_totals[i]
+        };
+    }
+    VkDescriptorPoolCreateInfo dpci = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+        .maxSets = ARRAY_SIZE(k_lsfg_passes),
+        .poolSizeCount = ARRAY_SIZE(pool_sizes),
+        .pPoolSizes = pool_sizes
+    };
+    VkResult r = T.vkCreateDescriptorPool(g_hvk.dev, &dpci, NULL,
+                                           &g_ps.lsfg_descriptor_pool);
+    if (r != VK_SUCCESS) {
+        hle_log("hakuX-lsfg", "descriptor pool creation failed: %d", r);
+        goto fail;
+    }
+    VkDescriptorSetLayout set_layouts[ARRAY_SIZE(k_lsfg_passes)];
+    for (unsigned i = 0; i < ARRAY_SIZE(set_layouts); ++i)
+        set_layouts[i] = g_ps.lsfg_set_layouts[i];
+    VkDescriptorSetAllocateInfo dsai = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool = g_ps.lsfg_descriptor_pool,
+        .descriptorSetCount = ARRAY_SIZE(set_layouts),
+        .pSetLayouts = set_layouts
+    };
+    r = T.vkAllocateDescriptorSets(g_hvk.dev, &dsai, g_ps.lsfg_descriptor_sets);
+    if (r != VK_SUCCESS) {
+        hle_log("hakuX-lsfg", "descriptor set allocation failed: %d", r);
+        goto fail;
+    }
     g_ps.lsfg_pipelines_ready = true;
-    hle_log("hakuX-lsfg", "created %u LSFG compute pipelines and descriptor layouts; dispatch is not enabled yet",
+    hle_log("hakuX-lsfg", "created %u LSFG compute pipelines and reserved descriptor sets; dispatch is not enabled yet",
             (unsigned)ARRAY_SIZE(k_lsfg_passes));
     return true;
 
 fail:
     lsfg_pipeline_destroy();
+    g_ps.lsfg_pipelines_failed = true;
     return false;
 }
 
