@@ -197,7 +197,7 @@ fun SettingsScreen(
       }
       Row(Modifier.fillMaxSize().padding(horizontal = 8.dp, vertical = 4.dp)) {
         Column(
-          Modifier.width(116.dp).fillMaxSize().clip(RoundedCornerShape(12.dp))
+          Modifier.width(116.dp).fillMaxSize().verticalScroll(rememberScrollState()).clip(RoundedCornerShape(12.dp))
             .background(Color(0xFF09110B)).border(1.dp, Color(0xFF284B30), RoundedCornerShape(12.dp))
             .padding(5.dp),
           verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(5.dp),
