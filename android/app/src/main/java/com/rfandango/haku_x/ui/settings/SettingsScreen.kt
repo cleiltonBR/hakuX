@@ -106,6 +106,7 @@ fun SettingsScreen(
   var prebuildShaders by remember { mutableStateOf(prefs.prebuildShaders) }
   var consoleTiming by remember { mutableStateOf(prefs.consoleTiming) }
   var showFps by remember { mutableStateOf(prefs.showFps) }
+  var libraryCoverScale by remember { mutableStateOf(prefs.libraryCoverScale) }
   var automatic3dCovers by remember { mutableStateOf(prefs.automatic3dCovers) }
   var showHitches by remember { mutableStateOf(prefs.showHitches) }
   var scaleHalfSteps by remember { mutableIntStateOf(prefs.renderScaleHalfSteps) }
@@ -285,6 +286,25 @@ fun SettingsScreen(
 
       if (selectedSettingsCategory == "display") {
       Section(stringResource(R.string.settings_section_display))
+      ListItem(
+        headlineContent = { Text("Tamanho das capas") },
+        supportingContent = {
+          Column {
+            Text("${(libraryCoverScale * 100).toInt()}%", color = MaterialTheme.colorScheme.primary)
+            Slider(
+              value = libraryCoverScale,
+              onValueChange = { libraryCoverScale = it },
+              onValueChangeFinished = { prefs.libraryCoverScale = libraryCoverScale },
+              valueRange = 0.5f..2.0f,
+              steps = 14,
+            )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween) {
+              Text("50%", style = MaterialTheme.typography.labelSmall)
+              Text("200%", style = MaterialTheme.typography.labelSmall)
+            }
+          }
+        },
+      )
       ListItem(
         headlineContent = { Text(stringResource(R.string.settings_theme)) },
         supportingContent = { Text(stringResource(themeLabel(theme))) },
