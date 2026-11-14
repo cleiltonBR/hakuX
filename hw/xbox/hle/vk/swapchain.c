@@ -79,7 +79,10 @@ static struct {
     VkImage lsfg_history[6];
     VkDeviceMemory lsfg_history_mem[6];
     VkImageView lsfg_history_view[6];
+    VkImageLayout lsfg_history_layout[6];
     uint32_t lsfg_history_w, lsfg_history_h;
+    uint64_t lsfg_history_last_serial;
+    uint32_t lsfg_history_count;
     bool lsfg_history_ready, lsfg_history_failed;
     bool lsfg_modules_ready, lsfg_modules_failed, lsfg_pipelines_ready, lsfg_pipelines_failed;
     VkSemaphore tl;             /* timeline: each submit's value */
@@ -351,8 +354,11 @@ static void lsfg_history_drop(void)
         g_ps.lsfg_history_view[i] = VK_NULL_HANDLE;
         g_ps.lsfg_history[i] = VK_NULL_HANDLE;
         g_ps.lsfg_history_mem[i] = VK_NULL_HANDLE;
+        g_ps.lsfg_history_layout[i] = VK_IMAGE_LAYOUT_UNDEFINED;
     }
     g_ps.lsfg_history_w = g_ps.lsfg_history_h = 0;
+    g_ps.lsfg_history_last_serial = 0;
+    g_ps.lsfg_history_count = 0;
     g_ps.lsfg_history_ready = false;
 }
 
@@ -368,8 +374,7 @@ static bool lsfg_history_make_image(uint32_t w, uint32_t h, unsigned index)
         .arrayLayers = 1,
         .samples = VK_SAMPLE_COUNT_1_BIT,
         .tiling = VK_IMAGE_TILING_OPTIMAL,
-        .usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |
-                 VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+        .usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
         .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED
     };
@@ -437,6 +442,51 @@ static bool lsfg_history_ensure(uint32_t w, uint32_t h)
     g_ps.lsfg_history_ready = true;
     g_ps.lsfg_history_failed = false;
     hle_log("hakuX-lsfg", "allocated six RGBA8 temporal history images at %ux%u", w, h);
+    return true;
+}
+
+/* Copy each newly completed display frame into the temporal ring. The
+ * display slots are RGBA8 and already include the guest render/gamma work.
+ * Capture runs in the presenter's command buffer, on the same queue, while
+ * hle_disp_use_begin keeps the source slot alive. */
+static bool lsfg_history_capture(VkCommandBuffer cb)
+{
+    if (!g_ps.have || !g_ps.lsfg_history_ready ||
+        g_ps.lsfg_history_last_serial == g_ps.serial) return false;
+
+    const unsigned index = (unsigned)(g_ps.serial % ARRAY_SIZE(g_ps.lsfg_history));
+    const VkImageLayout old_layout = g_ps.lsfg_history_layout[index];
+    barrier(cb, g_ps.f.img, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
+            VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_READ_BIT);
+    barrier(cb, g_ps.lsfg_history[index], old_layout, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            old_layout == VK_IMAGE_LAYOUT_UNDEFINED ? VK_PIPELINE_STAGE_2_NONE : VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+            old_layout == VK_IMAGE_LAYOUT_UNDEFINED ? 0 : VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
+            VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT);
+    VkImageCopy copy = {
+        .srcSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 },
+        .dstSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 },
+        .extent = { g_ps.f.w, g_ps.f.h, 1 }
+    };
+    T.vkCmdCopyImage(cb, g_ps.f.img, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                     g_ps.lsfg_history[index], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
+    barrier(cb, g_ps.lsfg_history[index], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
+            VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
+    barrier(cb, g_ps.f.img, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_READ_BIT,
+            VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
+
+    g_ps.lsfg_history_layout[index] = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    g_ps.lsfg_history_last_serial = g_ps.serial;
+    if (g_ps.lsfg_history_count < ARRAY_SIZE(g_ps.lsfg_history))
+        g_ps.lsfg_history_count++;
+    if (g_ps.lsfg_history_count == 2)
+        hle_log("hakuX-lsfg", "temporal capture active: two distinct RGBA8 frames available (%ux%u)",
+                g_ps.f.w, g_ps.f.h);
     return true;
 }
 
@@ -1928,6 +1978,8 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
         lsfg_modules_init() && lsfg_pipelines_init())
         lsfg_history_ensure(g_ps.f.w, g_ps.f.h);
     VkImageView src = g_ps.have ? g_ps.f.view : VK_NULL_HANDLE;
+    if (g_ps.have && g_ps.lsfg_history_ready)
+        lsfg_history_capture(cb);
     bool fxaa_done = false;
     /* The frame's writes need no barrier here: each writer of a display
      * image (the swap's blit, the gamma pass, the overlay) ends with one
