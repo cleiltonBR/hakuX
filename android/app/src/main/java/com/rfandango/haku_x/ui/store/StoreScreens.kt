@@ -2,6 +2,7 @@ package com.rfandango.haku_x.ui.store
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
+import android.content.res.Configuration
 import android.net.Uri
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
@@ -57,6 +58,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import android.graphics.Bitmap
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -78,6 +80,7 @@ import kotlinx.coroutines.withContext
 @Composable
 fun StoreScreen() {
   val context = LocalContext.current
+  val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
   val scope = rememberCoroutineScope()
   val uriHandler = LocalUriHandler.current
   var query by remember { mutableStateOf("") }
@@ -168,8 +171,10 @@ fun StoreScreen() {
     }
     if (selectedStoreTab == "catalog") {
     Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
-      Text("Biblioteca Xbox Clássico", style = MaterialTheme.typography.titleLarge)
-      Text("Catálogo online · ${results.size} jogos carregados", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+      if (!landscape) {
+        Text("Biblioteca Xbox Clássico", style = MaterialTheme.typography.titleLarge)
+        Text("Catálogo online · ${results.size} jogos carregados", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+      }
     }
     Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
       OutlinedTextField(value = query, onValueChange = { query = it }, modifier = Modifier.weight(1f).height(56.dp), singleLine = true, textStyle = MaterialTheme.typography.bodySmall, label = { Text("Pesquisar", style = MaterialTheme.typography.labelSmall) }, placeholder = { Text("Nome do jogo", style = MaterialTheme.typography.bodySmall) })
