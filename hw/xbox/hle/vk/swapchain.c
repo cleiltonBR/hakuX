@@ -337,6 +337,8 @@ fail:
     return false;
 }
 
+static void idle(void);
+
 static void lsfg_history_drop(void)
 {
     for (unsigned i = 0; i < ARRAY_SIZE(g_ps.lsfg_history); ++i) {
