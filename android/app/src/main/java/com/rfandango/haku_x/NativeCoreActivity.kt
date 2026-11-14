@@ -77,6 +77,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
   private var fpsView: TextView? = null
   private var hitchView: TextView? = null
   private var nisView: TextView? = null
+  private var lsfgView: TextView? = null
   /* the settings' overlays, read as the game comes back (onResume) */
   private var fpsOn = false
   private var ramOn = false
@@ -84,6 +85,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
   private var nisOn = true
   private var casOn = true
   private var gpuOn = true
+  private var lsfgOverlayOn = true
   private var hitchesOn = false
   private val fpsHandler = Handler(Looper.getMainLooper())
   /** The overlays' redraws and the game's GPU work (the controls' and the lines below). */
@@ -116,6 +118,18 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
       }
       fpsView?.let { v ->
         v.text = metrics.joinToString("   |   ")
+        v.setTextColor(Color.rgb(16, 124, 16))
+      }
+      lsfgView?.let { v ->
+        val prefs = AppPrefs(this)
+        val available = prefs.lsfgDllPath.isNotBlank() && File(prefs.lsfgDllPath).isFile
+        v.text = if (prefs.lsfgEnabled && available) {
+          "LSFG: ATIVADO • ${prefs.lsfgMultiplier}×"
+        } else if (prefs.lsfgEnabled) {
+          "LSFG: ATIVADO • DLL AUSENTE"
+        } else {
+          "LSFG: DESATIVADO"
+        }
         v.setTextColor(Color.rgb(16, 124, 16))
       }
       nisView?.let { v ->
@@ -536,7 +550,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     hitchesOn = BuildConfig.DEBUG && prefs.getBoolean(PREF_SHOW_HITCHES, true)
     if (!hitchesOn) hitchView?.visibility = View.GONE
     fpsHandler.removeCallbacks(fpsRunnable)
-    if (fpsOn || ramOn || fsrOn || nisOn || casOn || gpuOn || hitchesOn || BuildConfig.DEBUG) {
+    if (fpsOn || ramOn || fsrOn || nisOn || casOn || gpuOn || lsfgOverlayOn || hitchesOn || BuildConfig.DEBUG) {
       fpsHandler.postDelayed(fpsRunnable, FPS_INTERVAL_MS)
     }
     fpsHandler.removeCallbacks(fatalRunnable)
@@ -719,6 +733,30 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     }
     mLayout?.addView(nis, nisParams)
     nisView = nis
+
+    // Match the existing performance overlays and anchor LSFG at the upper-right.
+    val lsfg = TextView(this).apply {
+      id = View.generateViewId()
+      text = "LSFG: --"
+      setTextColor(Color.rgb(16, 124, 16))
+      setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+      typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD)
+      letterSpacing = 0.025f
+      setPadding(0, 0, 0, 0)
+      maxLines = 2
+      gravity = android.view.Gravity.END
+      textAlignment = View.TEXT_ALIGNMENT_VIEW_END
+    }
+    val lsfgParams = RelativeLayout.LayoutParams(
+      RelativeLayout.LayoutParams.WRAP_CONTENT,
+      RelativeLayout.LayoutParams.WRAP_CONTENT,
+    ).apply {
+      addRule(RelativeLayout.ALIGN_PARENT_TOP)
+      addRule(RelativeLayout.ALIGN_PARENT_END)
+      marginEnd = (8f * resources.displayMetrics.density).toInt()
+    }
+    mLayout?.addView(lsfg, lsfgParams)
+    lsfgView = lsfg
     reloadOverlayPreferences()
   }
 
@@ -731,9 +769,11 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     nisOn = prefs.getBoolean("overlay_show_nis", true)
     casOn = prefs.getBoolean("overlay_show_cas", true)
     gpuOn = prefs.getBoolean("overlay_show_gpu", true)
+    lsfgOverlayOn = prefs.getBoolean("overlay_show_lsfg", true)
     hitchesOn = BuildConfig.DEBUG && prefs.getBoolean(PREF_SHOW_HITCHES, true)
     fpsView?.visibility = if (fpsOn || ramOn) View.VISIBLE else View.GONE
     nisView?.visibility = if (fsrOn || nisOn || casOn || gpuOn) View.VISIBLE else View.GONE
+    lsfgView?.visibility = if (lsfgOverlayOn) View.VISIBLE else View.GONE
     hitchView?.visibility = if (hitchesOn) View.VISIBLE else View.GONE
   }
 
@@ -1384,7 +1424,8 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
       OverlayChoice("FSR", "Modo FidelityFX e resolução de saída", "overlay_show_fsr", true),
       OverlayChoice("NIS", "Estado do NIS e dimensões de entrada/saída", "overlay_show_nis", true),
       OverlayChoice("CAS", "Estado do CAS/RCAS e intensidade de nitidez", "overlay_show_cas", true),
-      OverlayChoice("GPU e diagnóstico", "Disponibilidade da GPU e motivo de não execução", "overlay_show_gpu", true)
+      OverlayChoice("GPU e diagnóstico", "Disponibilidade da GPU e motivo de não execução", "overlay_show_gpu", true),
+      OverlayChoice("Overlay do LSFG", "Mostrar ou ocultar o indicador de geração de quadros no canto superior direito", "overlay_show_lsfg", true)
     )
     fun render() {
       val entries = mutableListOf<Pair<String, String>>()
