@@ -132,6 +132,7 @@ static struct {
     uint32_t lsfg_gamma_flow_w, lsfg_gamma_flow_h;
     bool lsfg_gamma_sets_allocated, lsfg_gamma_ready;
     VkSampler lsfg_beta_sampler;
+    VkSampler lsfg_beta_border_sampler;
     VkSampler lsfg_gamma_border_sampler;
     VkBuffer lsfg_beta_constants_buffer;
     VkDeviceMemory lsfg_beta_constants_memory;
@@ -1173,6 +1174,8 @@ static void lsfg_beta_drop(void)
         lsfg_alpha_image_drop(&g_ps.lsfg_beta_outputs[i]);
     if (g_ps.lsfg_beta_sampler)
         T.vkDestroySampler(g_hvk.dev, g_ps.lsfg_beta_sampler, NULL);
+    if (g_ps.lsfg_beta_border_sampler)
+        T.vkDestroySampler(g_hvk.dev, g_ps.lsfg_beta_border_sampler, NULL);
     if (g_ps.lsfg_beta_constants_map)
         T.vkUnmapMemory(g_hvk.dev, g_ps.lsfg_beta_constants_memory);
     if (g_ps.lsfg_beta_constants_buffer)
@@ -1180,6 +1183,7 @@ static void lsfg_beta_drop(void)
     if (g_ps.lsfg_beta_constants_memory)
         T.vkFreeMemory(g_hvk.dev, g_ps.lsfg_beta_constants_memory, NULL);
     g_ps.lsfg_beta_sampler = VK_NULL_HANDLE;
+    g_ps.lsfg_beta_border_sampler = VK_NULL_HANDLE;
     g_ps.lsfg_beta_constants_buffer = VK_NULL_HANDLE;
     g_ps.lsfg_beta_constants_memory = VK_NULL_HANDLE;
     g_ps.lsfg_beta_constants_map = NULL;
@@ -1341,6 +1345,20 @@ static bool lsfg_beta_ensure(void)
     if (T.vkCreateSampler(g_hvk.dev, &sci, NULL, &g_ps.lsfg_beta_sampler) != VK_SUCCESS)
         goto fail;
 
+    VkSamplerCreateInfo border_sci = {
+        .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+        .magFilter = VK_FILTER_LINEAR, .minFilter = VK_FILTER_LINEAR,
+        .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
+        .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
+        .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
+        .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
+        .maxAnisotropy = 1.0f,
+        .borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE,
+        .minLod = 0.0f, .maxLod = 0.0f
+    };
+    if (T.vkCreateSampler(g_hvk.dev, &border_sci, NULL,
+                          &g_ps.lsfg_beta_border_sampler) != VK_SUCCESS) goto fail;
+
     VkImageView sampled[6], storage[6];
     for (unsigned slot = 0; slot < 3; ++slot) {
         unsigned n = 0;
@@ -1352,27 +1370,27 @@ static bool lsfg_beta_ensure(void)
             sampled[n++] = g_ps.lsfg_alpha[0].outputs[slot][pair].view;
         storage[0] = g_ps.lsfg_beta_temp1[0].view;
         storage[1] = g_ps.lsfg_beta_temp1[1].view;
-        lsfg_beta_write_set(g_ps.lsfg_beta_sets[slot], g_ps.lsfg_sampler,
+        lsfg_beta_write_set(g_ps.lsfg_beta_sets[slot], g_ps.lsfg_beta_border_sampler,
                             sampled, 6, storage, 2, false);
     }
     for (unsigned i = 0; i < 2; ++i) sampled[i] = g_ps.lsfg_beta_temp1[i].view;
     storage[0] = g_ps.lsfg_beta_temp2[0].view;
     storage[1] = g_ps.lsfg_beta_temp2[1].view;
-    lsfg_beta_write_set(g_ps.lsfg_beta_sets[3], g_ps.lsfg_beta_sampler,
+    lsfg_beta_write_set(g_ps.lsfg_beta_sets[3], g_ps.lsfg_sampler,
                         sampled, 2, storage, 2, false);
     for (unsigned i = 0; i < 2; ++i) sampled[i] = g_ps.lsfg_beta_temp2[i].view;
     storage[0] = g_ps.lsfg_beta_temp1[0].view;
     storage[1] = g_ps.lsfg_beta_temp1[1].view;
-    lsfg_beta_write_set(g_ps.lsfg_beta_sets[4], g_ps.lsfg_beta_sampler,
+    lsfg_beta_write_set(g_ps.lsfg_beta_sets[4], g_ps.lsfg_sampler,
                         sampled, 2, storage, 2, false);
     for (unsigned i = 0; i < 2; ++i) sampled[i] = g_ps.lsfg_beta_temp1[i].view;
     storage[0] = g_ps.lsfg_beta_temp2[0].view;
     storage[1] = g_ps.lsfg_beta_temp2[1].view;
-    lsfg_beta_write_set(g_ps.lsfg_beta_sets[5], g_ps.lsfg_beta_sampler,
+    lsfg_beta_write_set(g_ps.lsfg_beta_sets[5], g_ps.lsfg_sampler,
                         sampled, 2, storage, 2, false);
     for (unsigned i = 0; i < 2; ++i) sampled[i] = g_ps.lsfg_beta_temp2[i].view;
     for (unsigned i = 0; i < 6; ++i) storage[i] = g_ps.lsfg_beta_outputs[i].view;
-    lsfg_beta_write_set(g_ps.lsfg_beta_sets[6], g_ps.lsfg_beta_sampler,
+    lsfg_beta_write_set(g_ps.lsfg_beta_sets[6], g_ps.lsfg_sampler,
                         sampled, 2, storage, 6, true);
     g_ps.lsfg_beta_ready = true;
     hle_log("hakuX-lsfg", "Beta resources ready: five compute passes, three temporal sets, six flow outputs");
