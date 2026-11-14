@@ -1243,6 +1243,9 @@ fail:
     return false;
 }
 
+static void lsfg_alpha_transition(VkCommandBuffer cb, LsfgAlphaImage *image,
+                                  VkImageLayout target, VkAccessFlags2 dst_access);
+
 static void lsfg_beta_transition(VkCommandBuffer cb, LsfgAlphaImage *image,
                                  VkImageLayout target, VkAccessFlags2 dst_access)
 {
