@@ -4217,7 +4217,8 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
                 .pImageIndices = &lsfg_acquired_indices[i]
             };
             const VkResult generated_pr = T.vkQueuePresentKHR(g_hvk.queue, &generated_pi);
-            if (generated_pr == VK_SUCCESS || generated_pr == VK_SUBOPTIMAL_KHR)
+            if ((generated_pr == VK_SUCCESS || generated_pr == VK_SUBOPTIMAL_KHR) &&
+                lsfg_generated_ready[i])
                 lsfg_stats_record(true);
             if (generated_pr == VK_ERROR_OUT_OF_DATE_KHR ||
                 (generated_pr == VK_SUBOPTIMAL_KHR && g_ps.follows) ||
