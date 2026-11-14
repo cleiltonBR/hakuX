@@ -101,7 +101,7 @@ static struct {
     VkImageView lsfg_flow_view[7];
     VkImageLayout lsfg_flow_layout[7];
     LsfgAlphaLevel lsfg_alpha[7];
-    VkDescriptorSet lsfg_alpha_sets[7][6];
+    VkDescriptorSet lsfg_alpha_sets[7][9];
     uint32_t lsfg_alpha_w, lsfg_alpha_h;
     bool lsfg_alpha_ready, lsfg_alpha_sets_allocated;
 
@@ -417,9 +417,8 @@ static bool lsfg_pipelines_init(void)
         alpha_layouts[level * 9 + 0] = g_ps.lsfg_set_layouts[12];
         alpha_layouts[level * 9 + 1] = g_ps.lsfg_set_layouts[13];
         alpha_layouts[level * 9 + 2] = g_ps.lsfg_set_layouts[14];
-        alpha_layouts[level * 9 + 3] = g_ps.lsfg_set_layouts[15];
-        alpha_layouts[level * 9 + 4] = g_ps.lsfg_set_layouts[15];
-        alpha_layouts[level * 9 + 5] = g_ps.lsfg_set_layouts[15];
+        for (unsigned slot = 0; slot < 6; ++slot)
+            alpha_layouts[level * 9 + 3 + slot] = g_ps.lsfg_set_layouts[15];
     }
     VkDescriptorSetAllocateInfo alpha_dsai = {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
