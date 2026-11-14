@@ -121,7 +121,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
         v.setTextColor(Color.rgb(16, 124, 16))
       }
       lsfgView?.let { v ->
-        val prefs = AppPrefs(this)
+        val prefs = AppPrefs(this@NativeCoreActivity)
         val available = prefs.lsfgDllPath.isNotBlank() && File(prefs.lsfgDllPath).isFile
         v.text = if (prefs.lsfgEnabled && available) {
           "LSFG: ATIVADO • ${prefs.lsfgMultiplier}×"
