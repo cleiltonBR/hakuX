@@ -319,7 +319,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     /* LSFG shader resources are read from the user's private app-storage copy.
      * The DLL itself is never loaded as executable code. */
     val lsfgPrefs = AppPrefs(this)
-    if (lsfgPrefs.lsfgDllPath.isNotBlank()) {
+    if (lsfgPrefs.lsfgEnabled && lsfgPrefs.lsfgDllPath.isNotBlank()) {
       args += "lsfg_dll=${lsfgPrefs.lsfgDllPath}"
       args += "lsfg_multiplier=${lsfgPrefs.lsfgMultiplier}"
       args += "lsfg_performance=${if (lsfgPrefs.lsfgPerformanceMode) 1 else 0}"
@@ -1326,13 +1326,15 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     val prefs = AppPrefs(this)
     fun render() {
       val entries = listOf(
+        "Geração de quadros LSFG" to if (prefs.lsfgEnabled) "ATIVADA • toque para desativar" else "DESATIVADA • toque para ativar",
         "Multiplicador de quadros" to "${prefs.lsfgMultiplier}×",
         "Modo de desempenho" to if (prefs.lsfgPerformanceMode) "Desempenho" else "Qualidade",
         "Flow Scale" to "${prefs.lsfgFlowScalePercent}%"
       )
       showSeriesXMenu("LSFG • Geração de quadros", entries) { index ->
         when (index) {
-          0 -> showSeriesXSlider(
+          0 -> { prefs.lsfgEnabled = !prefs.lsfgEnabled; render() }
+          1 -> showSeriesXSlider(
             "Multiplicador de quadros",
             prefs.lsfgMultiplier - 2,
             2,
@@ -1343,7 +1345,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
             prefs.lsfgMultiplier = it + 2
             render()
           }
-          1 -> showSeriesXChoices(
+          2 -> showSeriesXChoices(
             "Modo de desempenho",
             listOf("Qualidade", "Desempenho"),
             if (prefs.lsfgPerformanceMode) 1 else 0,
@@ -1351,7 +1353,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
             prefs.lsfgPerformanceMode = it == 1
             render()
           }
-          2 -> {
+          3 -> {
             val values = listOf(25, 50, 75, 100)
             val selected = values.indexOf(prefs.lsfgFlowScalePercent).coerceAtLeast(0)
             showSeriesXSlider(
