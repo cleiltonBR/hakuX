@@ -84,6 +84,7 @@ typedef struct HleCaps {
                                    hle_draw_fb_stages) */
     bool exec_props, aniso;
     bool lsfg_memory_model;       /* Vulkan memory model required by LSFG compute shaders */
+    bool lsfg_fp16;               /* shaderFloat16 queried and enabled for LSFG variants */
     bool lsfg_null_descriptor;    /* VK_EXT_robustness2 nullDescriptor required by LSFG */
     bool host_query_reset, occl_precise;        /* visibility tests */
     bool wide_lines;            /* enabled when present: every pipeline draws 1.0-wide
