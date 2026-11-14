@@ -57,7 +57,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -148,7 +147,7 @@ fun LibraryScreen(
   val state by vm.state.collectAsStateWithLifecycle()
   val context = LocalContext.current
   val prefs = remember { com.rfandango.haku_x.data.AppPrefs(context) }
-  var coverScale by remember { mutableStateOf(prefs.libraryCoverScale) }
+  val coverScale = prefs.libraryCoverScale
   val update by Updates.available.collectAsStateWithLifecycle()
   var updateDialog by remember { mutableStateOf(false) }
   var dashboardAsk by remember { mutableStateOf(false) }
@@ -200,55 +199,31 @@ fun LibraryScreen(
         }
       }
       Row(
-        Modifier.fillMaxWidth()
-          .padding(horizontal = 12.dp, vertical = if (screenLandscape) 2.dp else 0.dp)
-          .then(if (screenLandscape) Modifier.height(48.dp) else Modifier),
+        Modifier.fillMaxWidth().padding(vertical = 2.dp),
+        horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-      ) {
-        listOf("grid" to Icons.Filled.Build, "list" to Icons.Filled.Home, "carousel" to Icons.Filled.PlayArrow).forEach { (mode, image) ->
-          val selected = state.viewMode == mode
-          IconButton(
-            onClick = { vm.setViewMode(mode) },
-            modifier = Modifier.weight(1f).clip(RoundedCornerShape(10.dp))
-              .background(if (selected) Color(0xFF18351C) else Color.Transparent)
-              .border(1.dp, if (selected) Color(0xFF5EAA63) else MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp)),
-          ) {
-            Icon(image, contentDescription = mode, tint = if (selected) Color(0xFF9BE69A) else MaterialTheme.colorScheme.onSurfaceVariant)
-          }
-        }
-      }
-      if (!screenLandscape) Column(
-        Modifier.fillMaxWidth()
-          .padding(horizontal = 12.dp, vertical = 6.dp)
-          .clip(RoundedCornerShape(12.dp))
-          .background(Color(0xFF101B12))
-          .border(1.dp, Color(0xFF397A40), RoundedCornerShape(12.dp))
-          .padding(horizontal = 14.dp, vertical = if (screenLandscape) 4.dp else 8.dp),
       ) {
         Row(
-          Modifier.fillMaxWidth(),
+          modifier = Modifier.clip(RoundedCornerShape(12.dp))
+            .background(Color(0xFF0B140D))
+            .border(1.dp, Color(0xFF284B30), RoundedCornerShape(12.dp))
+            .padding(3.dp),
+          horizontalArrangement = Arrangement.spacedBy(3.dp),
           verticalAlignment = Alignment.CenterVertically,
-          horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-          Text("TAMANHO DAS CAPAS", style = MaterialTheme.typography.labelMedium, color = Color(0xFFB8E8B8))
-          Text(
-            "${(coverScale * 100).toInt()}%",
-            style = MaterialTheme.typography.labelLarge,
-            color = Color(0xFF9BE69A),
-          )
-        }
-        Slider(
-          value = coverScale,
-          onValueChange = { coverScale = it },
-          onValueChangeFinished = { prefs.libraryCoverScale = coverScale },
-          valueRange = 0.5f..2.0f,
-          steps = 14,
-          modifier = Modifier.fillMaxWidth(),
-        )
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-          Text("50%", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-          Text("200%", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+          listOf("grid", "list", "carousel").forEach { mode ->
+            val selected = state.viewMode == mode
+            IconButton(
+              onClick = { vm.setViewMode(mode) },
+              modifier = Modifier.size(40.dp).clip(RoundedCornerShape(9.dp))
+                .background(if (selected) Color(0xFF183F20) else Color.Transparent),
+            ) {
+              LibraryViewModeIcon(
+                mode = mode,
+                tint = if (selected) Color(0xFF9BFF91) else MaterialTheme.colorScheme.onSurfaceVariant,
+              )
+            }
+          }
         }
       }
       // The pull's indicator follows the refresh (under the loading dialog):
@@ -293,6 +268,40 @@ fun LibraryScreen(
     )
   }
   state.dashboardInstall?.let { DashboardInstallDialog(it, onStart = onDashboard, onDismiss = vm::dismissDashboardInstall) }
+}
+
+/** Compact, purpose-drawn symbols for the three library layouts. */
+@Composable
+private fun LibraryViewModeIcon(mode: String, tint: Color) {
+  androidx.compose.foundation.Canvas(Modifier.size(22.dp)) {
+    val stroke = 1.8.dp.toPx()
+    val gap = 2.2.dp.toPx()
+    when (mode) {
+      "grid" -> {
+        val cell = (size.width - gap) / 2f
+        for (row in 0..1) for (column in 0..1) {
+          drawRoundRect(
+            color = tint,
+            topLeft = androidx.compose.ui.geometry.Offset(column * (cell + gap), row * (cell + gap)),
+            size = androidx.compose.ui.geometry.Size(cell, cell),
+            cornerRadius = androidx.compose.ui.geometry.CornerRadius(2.dp.toPx()),
+            style = androidx.compose.ui.graphics.drawscope.Stroke(stroke),
+          )
+        }
+      }
+      "list" -> {
+        for (row in 0..2) {
+          val y = row * (size.height / 3f) + 3.dp.toPx()
+          drawCircle(tint, radius = 1.5.dp.toPx(), center = androidx.compose.ui.geometry.Offset(2.dp.toPx(), y))
+          drawLine(tint, androidx.compose.ui.geometry.Offset(7.dp.toPx(), y), androidx.compose.ui.geometry.Offset(size.width - 1.dp.toPx(), y), strokeWidth = stroke)
+        }
+      }
+      else -> {
+        drawRoundRect(tint.copy(alpha = 0.55f), topLeft = androidx.compose.ui.geometry.Offset(1.dp.toPx(), 4.dp.toPx()), size = androidx.compose.ui.geometry.Size(13.dp.toPx(), 15.dp.toPx()), cornerRadius = androidx.compose.ui.geometry.CornerRadius(2.dp.toPx()), style = androidx.compose.ui.graphics.drawscope.Stroke(stroke))
+        drawRoundRect(tint, topLeft = androidx.compose.ui.geometry.Offset(7.dp.toPx(), 2.dp.toPx()), size = androidx.compose.ui.geometry.Size(14.dp.toPx(), 17.dp.toPx()), cornerRadius = androidx.compose.ui.geometry.CornerRadius(2.dp.toPx()), style = androidx.compose.ui.graphics.drawscope.Stroke(stroke))
+      }
+    }
+  }
 }
 
 /** The dashboard's install from its zip: its progress, then installed (to start now) or why not. */
