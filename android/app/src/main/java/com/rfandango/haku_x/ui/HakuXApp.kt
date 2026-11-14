@@ -3,6 +3,8 @@ package com.rfandango.haku_x.ui
 import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.weight
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Home
@@ -134,7 +136,7 @@ fun HakuXApp(
       }
     },
   ) { contentPadding ->
-  androidx.compose.foundation.layout.Row(Modifier.fillMaxSize()) {
+  androidx.compose.foundation.layout.Row(androidx.compose.ui.Modifier.fillMaxSize()) {
     if (showMainTabs && landscape) {
       NavigationRail {
         NavigationRailItem(selected = currentRoute == Routes.LIBRARY, onClick = { nav.navigate(Routes.LIBRARY) { launchSingleTop = true; restoreState = true } }, icon = { Icon(Icons.Filled.Home, contentDescription = "Biblioteca") }, label = { Text("Biblioteca") })
