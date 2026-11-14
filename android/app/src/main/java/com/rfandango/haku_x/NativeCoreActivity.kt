@@ -316,6 +316,15 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     args += "cas_sharpness=${settings.casSharpness}"
     args += "nis=${if (settings.nis) 1 else 0}"
     args += "nis_sharpness=${settings.nisSharpness}"
+    /* LSFG shader resources are read from the user's private app-storage copy.
+     * The DLL itself is never loaded as executable code. */
+    val lsfgPrefs = AppPrefs(this)
+    if (lsfgPrefs.lsfgDllPath.isNotBlank()) {
+      args += "lsfg_dll=${lsfgPrefs.lsfgDllPath}"
+      args += "lsfg_multiplier=${lsfgPrefs.lsfgMultiplier}"
+      args += "lsfg_performance=${if (lsfgPrefs.lsfgPerformanceMode) 1 else 0}"
+      args += "lsfg_flow_scale=${lsfgPrefs.lsfgFlowScalePercent}"
+    }
     args += "aniso=${if (AppPrefs(this).anisotropyEnabled) 1 else 0}"
     args += "aniso_level=${AppPrefs(this).anisotropyLevel}"
     /* The console's video settings (widescreen, 480p/720p/1080i, the cable)
