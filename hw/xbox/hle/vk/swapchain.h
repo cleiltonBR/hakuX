@@ -20,6 +20,8 @@ enum { HLE_UPSCALE_BILINEAR, HLE_UPSCALE_SGSR, HLE_UPSCALE_FSR };
  * it, the panel keeping the image. A 30 fps title on a 120 Hz panel drew,
  * submitted and presented each frame four times. */
 bool hle_present_unchanged(struct ANativeWindow *win, uint64_t key);
+/* LSFG runtime options shared with the Vulkan frame-generation chain. */
+void hle_present_set_lsfg(int multiplier, bool performance, int flow_scale);
 
 /* Each display refresh, on the window's thread, these three in order.
  * begin: an image of win's swapchain (made or remade as the window comes,
