@@ -76,6 +76,7 @@ static struct {
     VkPipeline lsfg_pipelines[25];
     VkDescriptorPool lsfg_descriptor_pool;
     VkDescriptorSet lsfg_descriptor_sets[25];
+    VkDescriptorSet lsfg_mipmap_sets[6];
     VkImage lsfg_history[6];
     VkDeviceMemory lsfg_history_mem[6];
     VkImageView lsfg_history_view[6];
@@ -85,6 +86,7 @@ static struct {
     VkImage lsfg_flow[7];
     VkDeviceMemory lsfg_flow_mem[7];
     VkImageView lsfg_flow_view[7];
+    VkImageLayout lsfg_flow_layout[7];
     uint32_t lsfg_flow_w, lsfg_flow_h;
     int lsfg_flow_scale_allocated;
     bool lsfg_flow_ready, lsfg_flow_failed;
@@ -92,7 +94,8 @@ static struct {
     VkDeviceMemory lsfg_constants_memory;
     uint8_t *lsfg_constants_map;
     VkSampler lsfg_sampler;
-    bool lsfg_mipmap_descriptors_ready;
+    bool lsfg_mipmap_descriptors_ready, lsfg_mipmap_sets_ready;
+    int lsfg_constants_flow_scale;
     uint64_t lsfg_history_last_serial;
     uint32_t lsfg_history_count;
     bool lsfg_history_ready, lsfg_history_failed;
@@ -226,6 +229,7 @@ static void lsfg_pipeline_destroy(void)
         T.vkDestroyDescriptorPool(g_hvk.dev, g_ps.lsfg_descriptor_pool, NULL);
         g_ps.lsfg_descriptor_pool = VK_NULL_HANDLE;
         memset(g_ps.lsfg_descriptor_sets, 0, sizeof(g_ps.lsfg_descriptor_sets));
+        memset(g_ps.lsfg_mipmap_sets, 0, sizeof(g_ps.lsfg_mipmap_sets));
     }
     for (unsigned i = 0; i < ARRAY_SIZE(k_lsfg_passes); ++i) {
         if (g_ps.lsfg_pipelines[i]) {
@@ -320,6 +324,13 @@ static bool lsfg_pipelines_init(void)
         descriptor_totals[2] += k_lsfg_passes[i].sampled_images;
         descriptor_totals[3] += k_lsfg_passes[i].storage_images;
     }
+    /* Six persistent mipmap sets map one-to-one to the six history images. */
+    for (unsigned i = 1; i < ARRAY_SIZE(g_ps.lsfg_mipmap_sets); ++i) {
+        descriptor_totals[0] += k_lsfg_passes[0].uniform_buffers;
+        descriptor_totals[1] += k_lsfg_passes[0].samplers;
+        descriptor_totals[2] += k_lsfg_passes[0].sampled_images;
+        descriptor_totals[3] += k_lsfg_passes[0].storage_images;
+    }
     const VkDescriptorType descriptor_types[4] = {
         VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_DESCRIPTOR_TYPE_SAMPLER,
         VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE
@@ -332,7 +343,7 @@ static bool lsfg_pipelines_init(void)
     }
     VkDescriptorPoolCreateInfo dpci = {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-        .maxSets = ARRAY_SIZE(k_lsfg_passes),
+        .maxSets = ARRAY_SIZE(k_lsfg_passes) + ARRAY_SIZE(g_ps.lsfg_mipmap_sets) - 1,
         .poolSizeCount = ARRAY_SIZE(pool_sizes),
         .pPoolSizes = pool_sizes
     };
@@ -356,6 +367,24 @@ static bool lsfg_pipelines_init(void)
         hle_log("hakuX-lsfg", "descriptor set allocation failed: %d", r);
         goto fail;
     }
+    g_ps.lsfg_mipmap_sets[0] = g_ps.lsfg_descriptor_sets[0];
+    VkDescriptorSetLayout extra_mipmap_layouts[ARRAY_SIZE(g_ps.lsfg_mipmap_sets) - 1];
+    VkDescriptorSet extra_mipmap_sets[ARRAY_SIZE(g_ps.lsfg_mipmap_sets) - 1];
+    for (unsigned i = 0; i < ARRAY_SIZE(extra_mipmap_layouts); ++i)
+        extra_mipmap_layouts[i] = g_ps.lsfg_set_layouts[0];
+    VkDescriptorSetAllocateInfo extra_dsai = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool = g_ps.lsfg_descriptor_pool,
+        .descriptorSetCount = ARRAY_SIZE(extra_mipmap_layouts),
+        .pSetLayouts = extra_mipmap_layouts
+    };
+    r = T.vkAllocateDescriptorSets(g_hvk.dev, &extra_dsai, extra_mipmap_sets);
+    if (r != VK_SUCCESS) {
+        hle_log("hakuX-lsfg", "six-slot mipmap descriptor allocation failed: %d", r);
+        goto fail;
+    }
+    for (unsigned i = 1; i < ARRAY_SIZE(g_ps.lsfg_mipmap_sets); ++i)
+        g_ps.lsfg_mipmap_sets[i] = extra_mipmap_sets[i - 1];
     g_ps.lsfg_pipelines_ready = true;
     hle_log("hakuX-lsfg", "created %u LSFG compute pipelines and reserved descriptor sets; dispatch is not enabled yet",
             (unsigned)ARRAY_SIZE(k_lsfg_passes));
@@ -390,6 +419,7 @@ static void lsfg_history_drop(void)
     g_ps.lsfg_history_last_serial = 0;
     g_ps.lsfg_history_count = 0;
     g_ps.lsfg_history_ready = false;
+    g_ps.lsfg_mipmap_sets_ready = false;
 }
 
 static bool lsfg_history_make_image(uint32_t w, uint32_t h, unsigned index)
@@ -494,6 +524,9 @@ static void lsfg_flow_drop(void)
     g_ps.lsfg_flow_w = g_ps.lsfg_flow_h = 0;
     g_ps.lsfg_flow_scale_allocated = 0;
     g_ps.lsfg_flow_ready = false;
+    g_ps.lsfg_mipmap_sets_ready = false;
+    for (unsigned i = 0; i < ARRAY_SIZE(g_ps.lsfg_flow_layout); ++i)
+        g_ps.lsfg_flow_layout[i] = VK_IMAGE_LAYOUT_UNDEFINED;
 }
 
 static bool lsfg_flow_make_image(uint32_t w, uint32_t h, unsigned index)
@@ -598,7 +631,27 @@ typedef struct LsfgConstants {
 
 static bool lsfg_mipmap_resources_init(void)
 {
-    if (g_ps.lsfg_mipmap_descriptors_ready) return true;
+    if (g_ps.lsfg_mipmap_descriptors_ready) {
+        int scale = g_ps.lsfg_flow_scale < 25 ? 25 :
+                    g_ps.lsfg_flow_scale > 100 ? 100 : g_ps.lsfg_flow_scale;
+        if (g_ps.lsfg_constants_flow_scale != scale) {
+            if (g_ps.lsfg_constants_flow_scale) idle();
+            LsfgConstants constants = {
+                .input_offset = { 0, 0 },
+                .first_iter = 1,
+                .first_iter_s = 1,
+                .advanced_color_kind = 0,
+                .hdr_support = 0,
+                .resolution_inv_scale = 100.0f / (float)scale,
+                .timestamp = 0.0f,
+                .ui_threshold = 0.5f,
+                .padding = { 0, 0, 0 }
+            };
+            memcpy(g_ps.lsfg_constants_map, &constants, sizeof(constants));
+            g_ps.lsfg_constants_flow_scale = scale;
+        }
+        return true;
+    }
     VkBufferCreateInfo bci = {
         .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
         .size = sizeof(LsfgConstants),
@@ -645,12 +698,15 @@ static bool lsfg_mipmap_resources_init(void)
         .first_iter_s = 1,
         .advanced_color_kind = 0,
         .hdr_support = 0,
-        .resolution_inv_scale = 1.0f,
+        .resolution_inv_scale = 100.0f / (float)(g_ps.lsfg_flow_scale < 25 ? 25 :
+                                    g_ps.lsfg_flow_scale > 100 ? 100 : g_ps.lsfg_flow_scale),
         .timestamp = 0.0f,
-        .ui_threshold = 0.0f,
+        .ui_threshold = 0.5f,
         .padding = { 0, 0, 0 }
     };
     memcpy(g_ps.lsfg_constants_map, &constants, sizeof(constants));
+    g_ps.lsfg_constants_flow_scale = g_ps.lsfg_flow_scale < 25 ? 25 :
+                                     g_ps.lsfg_flow_scale > 100 ? 100 : g_ps.lsfg_flow_scale;
     g_ps.lsfg_mipmap_descriptors_ready = true;
     hle_log("hakuX-lsfg", "mipmap constants buffer and linear clamp sampler ready");
     return true;
@@ -659,8 +715,9 @@ static bool lsfg_mipmap_resources_init(void)
 static bool lsfg_mipmap_descriptors_update(void)
 {
     if (!g_ps.lsfg_pipelines_ready || !g_ps.lsfg_flow_ready ||
-        !g_ps.have || !g_ps.f.view || !lsfg_mipmap_resources_init())
+        !g_ps.lsfg_history_ready || !lsfg_mipmap_resources_init())
         return false;
+    if (g_ps.lsfg_mipmap_sets_ready) return true;
 
     VkDescriptorBufferInfo buffer_info = {
         .buffer = g_ps.lsfg_constants_buffer,
@@ -668,53 +725,82 @@ static bool lsfg_mipmap_descriptors_update(void)
         .range = sizeof(LsfgConstants)
     };
     VkDescriptorImageInfo sampler_info = { .sampler = g_ps.lsfg_sampler };
-    VkDescriptorImageInfo sampled_info = {
-        .imageView = g_ps.f.view,
-        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-    };
     VkDescriptorImageInfo storage_infos[7];
     VkWriteDescriptorSet writes[10];
-    memset(storage_infos, 0, sizeof(storage_infos));
-    memset(writes, 0, sizeof(writes));
-    writes[0] = (VkWriteDescriptorSet) {
-        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-        .dstSet = g_ps.lsfg_descriptor_sets[0],
-        .dstBinding = 0,
-        .descriptorCount = 1,
-        .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-        .pBufferInfo = &buffer_info
-    };
-    writes[1] = (VkWriteDescriptorSet) {
-        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-        .dstSet = g_ps.lsfg_descriptor_sets[0],
-        .dstBinding = 1,
-        .descriptorCount = 1,
-        .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER,
-        .pImageInfo = &sampler_info
-    };
-    writes[2] = (VkWriteDescriptorSet) {
-        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-        .dstSet = g_ps.lsfg_descriptor_sets[0],
-        .dstBinding = 2,
-        .descriptorCount = 1,
-        .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-        .pImageInfo = &sampled_info
-    };
-    for (unsigned i = 0; i < ARRAY_SIZE(storage_infos); ++i) {
-        storage_infos[i] = (VkDescriptorImageInfo) {
-            .imageView = g_ps.lsfg_flow_view[i],
-            .imageLayout = VK_IMAGE_LAYOUT_GENERAL
+    for (unsigned slot = 0; slot < ARRAY_SIZE(g_ps.lsfg_mipmap_sets); ++slot) {
+        VkDescriptorImageInfo sampled_info = {
+            .imageView = g_ps.lsfg_history_view[slot],
+            .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
         };
-        writes[3 + i] = (VkWriteDescriptorSet) {
+        memset(storage_infos, 0, sizeof(storage_infos));
+        memset(writes, 0, sizeof(writes));
+        writes[0] = (VkWriteDescriptorSet) {
             .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-            .dstSet = g_ps.lsfg_descriptor_sets[0],
-            .dstBinding = 3 + i,
-            .descriptorCount = 1,
-            .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-            .pImageInfo = &storage_infos[i]
+            .dstSet = g_ps.lsfg_mipmap_sets[slot],
+            .dstBinding = 0, .descriptorCount = 1,
+            .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+            .pBufferInfo = &buffer_info
         };
+        writes[1] = (VkWriteDescriptorSet) {
+            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .dstSet = g_ps.lsfg_mipmap_sets[slot],
+            .dstBinding = 1, .descriptorCount = 1,
+            .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER,
+            .pImageInfo = &sampler_info
+        };
+        writes[2] = (VkWriteDescriptorSet) {
+            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .dstSet = g_ps.lsfg_mipmap_sets[slot],
+            .dstBinding = 2, .descriptorCount = 1,
+            .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+            .pImageInfo = &sampled_info
+        };
+        for (unsigned i = 0; i < ARRAY_SIZE(storage_infos); ++i) {
+            storage_infos[i] = (VkDescriptorImageInfo) {
+                .imageView = g_ps.lsfg_flow_view[i],
+                .imageLayout = VK_IMAGE_LAYOUT_GENERAL
+            };
+            writes[3 + i] = (VkWriteDescriptorSet) {
+                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .dstSet = g_ps.lsfg_mipmap_sets[slot],
+                .dstBinding = 3 + i, .descriptorCount = 1,
+                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+                .pImageInfo = &storage_infos[i]
+            };
+        }
+        T.vkUpdateDescriptorSets(g_hvk.dev, ARRAY_SIZE(writes), writes, 0, NULL);
     }
-    T.vkUpdateDescriptorSets(g_hvk.dev, ARRAY_SIZE(writes), writes, 0, NULL);
+    g_ps.lsfg_mipmap_sets_ready = true;
+    return true;
+}
+
+/* Run the first real LSFG compute pass once a distinct frame has been captured.
+ * The six descriptor sets are stable for the six-slot history ring, avoiding
+ * descriptor mutation while an earlier presenter command buffer is in flight. */
+static bool lsfg_mipmap_dispatch(VkCommandBuffer cb, unsigned history_slot)
+{
+    if (!g_ps.lsfg_pipelines_ready || !g_ps.lsfg_mipmap_sets_ready ||
+        !g_ps.lsfg_flow_ready || history_slot >= ARRAY_SIZE(g_ps.lsfg_mipmap_sets))
+        return false;
+
+    for (unsigned i = 0; i < ARRAY_SIZE(g_ps.lsfg_flow); ++i) {
+        const VkImageLayout old = g_ps.lsfg_flow_layout[i];
+        barrier(cb, g_ps.lsfg_flow[i], old, VK_IMAGE_LAYOUT_GENERAL,
+                old == VK_IMAGE_LAYOUT_UNDEFINED ? VK_PIPELINE_STAGE_2_NONE :
+                    VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                old == VK_IMAGE_LAYOUT_UNDEFINED ? 0 : VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
+        g_ps.lsfg_flow_layout[i] = VK_IMAGE_LAYOUT_GENERAL;
+    }
+
+    T.vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_COMPUTE, g_ps.lsfg_pipelines[0]);
+    VkDescriptorSet set = g_ps.lsfg_mipmap_sets[history_slot];
+    T.vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_COMPUTE,
+                              g_ps.lsfg_pipeline_layouts[0], 0, 1, &set, 0, NULL);
+    const uint32_t gx = (g_ps.lsfg_flow_w + 63u) >> 6;
+    const uint32_t gy = (g_ps.lsfg_flow_h + 63u) >> 6;
+    if (!gx || !gy) return false;
+    T.vkCmdDispatch(cb, gx, gy, 1);
     return true;
 }
 
@@ -2248,14 +2334,16 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
     VkCommandBufferBeginInfo bi = { .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
                                     .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT };
     T.vkBeginCommandBuffer(cb, &bi);
-    if (g_ps.have && hle_lsfg_shader_count() == ARRAY_SIZE(k_lsfg_passes) &&
+    bool lsfg_capture_ready = g_ps.have &&
+        hle_lsfg_shader_count() == ARRAY_SIZE(k_lsfg_passes) &&
         lsfg_modules_init() && lsfg_pipelines_init() &&
-        lsfg_history_ensure(g_ps.f.w, g_ps.f.h))
+        lsfg_history_ensure(g_ps.f.w, g_ps.f.h) &&
         lsfg_flow_ensure(g_ps.f.w, g_ps.f.h, g_ps.lsfg_flow_scale) &&
         lsfg_mipmap_descriptors_update();
     VkImageView src = g_ps.have ? g_ps.f.view : VK_NULL_HANDLE;
-    if (g_ps.have && g_ps.lsfg_history_ready)
-        lsfg_history_capture(cb);
+    if (lsfg_capture_ready && lsfg_history_capture(cb) &&
+        g_ps.lsfg_history_count >= 2)
+        lsfg_mipmap_dispatch(cb, (unsigned)(g_ps.serial % ARRAY_SIZE(g_ps.lsfg_mipmap_sets)));
     bool fxaa_done = false;
     /* The frame's writes need no barrier here: each writer of a display
      * image (the swap's blit, the gamma pass, the overlay) ends with one
