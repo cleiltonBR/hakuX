@@ -152,7 +152,17 @@ static struct {
      * key (hle_present_unchanged) */
     bool shown;
     uint64_t shown_key;
+    /* User settings consumed by the native LSFG resource chain. */
+    int lsfg_multiplier, lsfg_flow_scale;
+    bool lsfg_performance;
 } g_ps;
+
+void hle_present_set_lsfg(int multiplier, bool performance, int flow_scale)
+{
+    g_ps.lsfg_multiplier = multiplier < 2 ? 2 : multiplier > 4 ? 4 : multiplier;
+    g_ps.lsfg_performance = performance;
+    g_ps.lsfg_flow_scale = flow_scale < 25 ? 25 : flow_scale > 100 ? 100 : flow_scale;
+}
 
 /* Used by temporal capture before the presenter's helper implementation. */
 static void barrier(VkCommandBuffer cb, VkImage img, VkImageLayout from, VkImageLayout to,
