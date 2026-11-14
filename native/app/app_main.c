@@ -25,6 +25,7 @@
 #include "native/core/options.h"
 #ifdef CONFIG_VULKAN
 #include "hw/xbox/hle/vk/vkdev.h"
+#include "hw/xbox/hle/vk/swapchain.h"
 #endif
 #include "native/dev/usb.h"
 #include "native/kernel/kernel.h"
@@ -327,6 +328,16 @@ EXPORT JNIEXPORT jintArray JNICALL Java_com_rfandango_haku_1x_NativeCoreActivity
     nc_present_nis_status((int *)values);
     jintArray result = (*env)->NewIntArray(env, 14);
     if (result) (*env)->SetIntArrayRegion(env, result, 0, 14, values);
+    return result;
+}
+
+/* Measured LSFG input and output rates, sampled from successful Vulkan presents. */
+EXPORT JNIEXPORT jfloatArray JNICALL Java_com_rfandango_haku_1x_NativeCoreActivity_nativeGetLsfgStats(JNIEnv *env, jclass cls)
+{
+    float values[2] = {0.0f, 0.0f};
+    hle_present_lsfg_stats(&values[0], &values[1]);
+    jfloatArray result = (*env)->NewFloatArray(env, 2);
+    if (result) (*env)->SetFloatArrayRegion(env, result, 0, 2, values);
     return result;
 }
 
