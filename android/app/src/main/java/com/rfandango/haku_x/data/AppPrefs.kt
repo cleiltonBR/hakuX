@@ -182,6 +182,11 @@ class AppPrefs(context: Context) {
     get() = sp.getInt(NativeCoreActivity.PREF_ANISO_LEVEL, 16).coerceIn(1, 16)
     set(value) = sp.edit { putInt(NativeCoreActivity.PREF_ANISO_LEVEL, value.coerceIn(1, 16)) }
 
+  /** LSFG shader source imported by the user; the executable DLL is never loaded. */
+  var lsfgDllPath: String
+    get() = sp.getString(KEY_LSFG_DLL_PATH, "") ?: ""
+    set(value) = sp.edit { if (value.isBlank()) remove(KEY_LSFG_DLL_PATH) else putString(KEY_LSFG_DLL_PATH, value) }
+
   // The console's video settings, as its dashboard keeps them (EEPROM video
   // flags and the AV cable): games choose their display modes from these.
 
@@ -318,6 +323,7 @@ class AppPrefs(context: Context) {
     private const val KEY_LIBRARY_VIEW_MODE = "library_view_mode"
     private const val KEY_LIBRARY_COVER_SCALE = "library_cover_scale"
     private const val KEY_RENDER_SCALE_HALF = "render_scale_half"
+    private const val KEY_LSFG_DLL_PATH = "lsfg_dll_path"
     private const val KEY_CONSOLE_TIMING = "console_timing"
     private const val KEY_THEME = "app_theme"
     private const val KEY_TURNIP_NOTE = "turnip_note_shown"
