@@ -682,6 +682,11 @@ static void lsfg_alpha_drop(void);
 static void lsfg_beta_drop(void);
 static void lsfg_gamma_drop(void);
 static void lsfg_delta_drop(void);
+static void lsfg_gamma_write_set(VkDescriptorSet set, VkBuffer buffer,
+                                 VkSampler const *samplers, unsigned sampler_count,
+                                 VkImageView const *sampled, unsigned sampled_count,
+                                 VkImageView const *storage, unsigned storage_count,
+                                 bool constants);
 
 static void lsfg_flow_drop(void)
 {
