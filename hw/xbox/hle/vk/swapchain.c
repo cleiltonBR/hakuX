@@ -116,6 +116,7 @@ static struct {
     uint32_t lsfg_gamma_flow_w, lsfg_gamma_flow_h;
     bool lsfg_gamma_sets_allocated, lsfg_gamma_ready;
     VkSampler lsfg_beta_sampler;
+    VkSampler lsfg_gamma_border_sampler;
     VkBuffer lsfg_beta_constants_buffer;
     VkDeviceMemory lsfg_beta_constants_memory;
     uint8_t *lsfg_beta_constants_map;
@@ -1396,6 +1397,9 @@ static void lsfg_gamma_drop(void)
             lsfg_alpha_image_drop(&g->temp2[i]);
         lsfg_alpha_image_drop(&g->output);
     }
+    if (g_ps.lsfg_gamma_border_sampler)
+        T.vkDestroySampler(g_hvk.dev, g_ps.lsfg_gamma_border_sampler, NULL);
+    g_ps.lsfg_gamma_border_sampler = VK_NULL_HANDLE;
     for (unsigned slot = 0; slot < 6; ++slot) {
         for (unsigned first = 0; first < 2; ++first) {
             if (g_ps.lsfg_gamma_constants_map[slot][first])
@@ -1519,6 +1523,20 @@ static bool lsfg_gamma_ensure(void)
         lsfg_gamma_drop();
     }
 
+    VkSamplerCreateInfo border_sci = {
+        .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+        .magFilter = VK_FILTER_LINEAR, .minFilter = VK_FILTER_LINEAR,
+        .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
+        .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
+        .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
+        .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
+        .maxAnisotropy = 1.0f,
+        .borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE,
+        .minLod = 0.0f, .maxLod = 0.0f
+    };
+    if (T.vkCreateSampler(g_hvk.dev, &border_sci, NULL,
+                          &g_ps.lsfg_gamma_border_sampler) != VK_SUCCESS) goto fail;
+
     VkFormatProperties fp;
     vkGetPhysicalDeviceFormatProperties(g_hvk.phys, VK_FORMAT_R16G16B16A16_SFLOAT, &fp);
     const VkFormatFeatureFlags required = VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
@@ -1568,7 +1586,7 @@ static bool lsfg_gamma_ensure(void)
                 VkImageView storage[3] = {
                     g->temp1[0].view, g->temp1[1].view, g->temp1[2].view
                 };
-                VkSampler samplers[2] = { g_ps.lsfg_sampler, g_ps.lsfg_beta_sampler };
+                VkSampler samplers[2] = { g_ps.lsfg_gamma_border_sampler, g_ps.lsfg_beta_sampler };
                 lsfg_gamma_write_set(g_ps.lsfg_gamma_sets[i][slot][history], buffer,
                                      samplers, 2, sampled, 5, storage, 3, true);
             }
