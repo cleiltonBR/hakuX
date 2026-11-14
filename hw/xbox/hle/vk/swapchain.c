@@ -681,6 +681,7 @@ static bool lsfg_history_ensure(uint32_t w, uint32_t h)
 static void lsfg_alpha_drop(void);
 static void lsfg_beta_drop(void);
 static void lsfg_gamma_drop(void);
+static void lsfg_delta_drop(void);
 
 static void lsfg_flow_drop(void)
 {
@@ -1713,7 +1714,7 @@ static void lsfg_gamma_write_set(VkDescriptorSet set, VkBuffer buffer,
                                  VkImageView const *storage, unsigned storage_count,
                                  bool constants)
 {
-    VkDescriptorImageInfo infos[10];
+    VkDescriptorImageInfo infos[11];
     VkDescriptorBufferInfo buffer_info = {
         .buffer = buffer, .offset = 0, .range = sizeof(LsfgConstants)
     };
