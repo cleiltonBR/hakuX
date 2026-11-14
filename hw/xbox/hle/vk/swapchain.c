@@ -67,7 +67,7 @@ typedef struct LsfgAlphaImage {
 typedef struct LsfgAlphaLevel {
     LsfgAlphaImage temp1, temp2;
     LsfgAlphaImage temp3[2];
-    LsfgAlphaImage outputs[3][2];
+    LsfgAlphaImage outputs[6][2];
 } LsfgAlphaLevel;
 
 typedef struct PsFrame {
@@ -353,10 +353,10 @@ static bool lsfg_pipelines_init(void)
         descriptor_totals[3] += k_lsfg_passes[0].storage_images;
     }
     /* Alpha: seven mip levels, each with three early-stage sets and
-     * three temporal-output sets (sampler + sampled/storage images). */
-    descriptor_totals[1] += 7u * 6u;
-    descriptor_totals[2] += 7u * 9u;
-    descriptor_totals[3] += 7u * 10u;
+     * six temporal-output sets (sampler + sampled/storage images). */
+    descriptor_totals[1] += 7u * 9u;
+    descriptor_totals[2] += 7u * 15u;
+    descriptor_totals[3] += 7u * 16u;
     const VkDescriptorType descriptor_types[4] = {
         VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_DESCRIPTOR_TYPE_SAMPLER,
         VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE
@@ -369,7 +369,7 @@ static bool lsfg_pipelines_init(void)
     }
     VkDescriptorPoolCreateInfo dpci = {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-        .maxSets = ARRAY_SIZE(k_lsfg_passes) + ARRAY_SIZE(g_ps.lsfg_mipmap_sets) - 1 + 42,
+        .maxSets = ARRAY_SIZE(k_lsfg_passes) + ARRAY_SIZE(g_ps.lsfg_mipmap_sets) - 1 + 63,
         .poolSizeCount = ARRAY_SIZE(pool_sizes),
         .pPoolSizes = pool_sizes
     };
@@ -411,15 +411,15 @@ static bool lsfg_pipelines_init(void)
     }
     for (unsigned i = 1; i < ARRAY_SIZE(g_ps.lsfg_mipmap_sets); ++i)
         g_ps.lsfg_mipmap_sets[i] = extra_mipmap_sets[i - 1];
-    VkDescriptorSetLayout alpha_layouts[42];
-    VkDescriptorSet alpha_sets[42];
+    VkDescriptorSetLayout alpha_layouts[63];
+    VkDescriptorSet alpha_sets[63];
     for (unsigned level = 0; level < 7; ++level) {
-        alpha_layouts[level * 6 + 0] = g_ps.lsfg_set_layouts[12];
-        alpha_layouts[level * 6 + 1] = g_ps.lsfg_set_layouts[13];
-        alpha_layouts[level * 6 + 2] = g_ps.lsfg_set_layouts[14];
-        alpha_layouts[level * 6 + 3] = g_ps.lsfg_set_layouts[15];
-        alpha_layouts[level * 6 + 4] = g_ps.lsfg_set_layouts[15];
-        alpha_layouts[level * 6 + 5] = g_ps.lsfg_set_layouts[15];
+        alpha_layouts[level * 9 + 0] = g_ps.lsfg_set_layouts[12];
+        alpha_layouts[level * 9 + 1] = g_ps.lsfg_set_layouts[13];
+        alpha_layouts[level * 9 + 2] = g_ps.lsfg_set_layouts[14];
+        alpha_layouts[level * 9 + 3] = g_ps.lsfg_set_layouts[15];
+        alpha_layouts[level * 9 + 4] = g_ps.lsfg_set_layouts[15];
+        alpha_layouts[level * 9 + 5] = g_ps.lsfg_set_layouts[15];
     }
     VkDescriptorSetAllocateInfo alpha_dsai = {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
@@ -433,8 +433,8 @@ static bool lsfg_pipelines_init(void)
         goto fail;
     }
     for (unsigned level = 0; level < 7; ++level)
-        for (unsigned set = 0; set < 6; ++set)
-            g_ps.lsfg_alpha_sets[level][set] = alpha_sets[level * 6 + set];
+        for (unsigned set = 0; set < 9; ++set)
+            g_ps.lsfg_alpha_sets[level][set] = alpha_sets[level * 9 + set];
     g_ps.lsfg_alpha_sets_allocated = true;
     g_ps.lsfg_pipelines_ready = true;
     hle_log("hakuX-lsfg", "created %u LSFG compute pipelines and six history-indexed mipmap descriptor sets",
@@ -1002,7 +1002,7 @@ static void lsfg_alpha_drop(void)
         lsfg_alpha_image_drop(&a->temp2);
         for (unsigned i = 0; i < 2; ++i) {
             lsfg_alpha_image_drop(&a->temp3[i]);
-            for (unsigned slot = 0; slot < 3; ++slot)
+            for (unsigned slot = 0; slot < 6; ++slot)
                 lsfg_alpha_image_drop(&a->outputs[slot][i]);
         }
     }
@@ -1078,7 +1078,7 @@ static bool lsfg_alpha_ensure(void)
                   lsfg_alpha_image_make(&a->temp2, half_w, half_h);
         for (unsigned i = 0; ok && i < 2; ++i) {
             ok = lsfg_alpha_image_make(&a->temp3[i], quarter_w, quarter_h);
-            for (unsigned slot = 0; ok && slot < 3; ++slot)
+            for (unsigned slot = 0; ok && slot < 6; ++slot)
                 ok = lsfg_alpha_image_make(&a->outputs[slot][i], quarter_w, quarter_h);
         }
         if (!ok) {
@@ -1103,7 +1103,7 @@ static bool lsfg_alpha_ensure(void)
         lsfg_alpha_write_set(g_ps.lsfg_alpha_sets[level][2], sampled, 1, storage, 2);
         sampled[0] = a->temp3[0].view;
         sampled[1] = a->temp3[1].view;
-        for (unsigned slot = 0; slot < 3; ++slot) {
+        for (unsigned slot = 0; slot < 6; ++slot) {
             storage[0] = a->outputs[slot][0].view;
             storage[1] = a->outputs[slot][1].view;
             lsfg_alpha_write_set(g_ps.lsfg_alpha_sets[level][3 + slot], sampled, 2, storage, 2);
@@ -1133,7 +1133,7 @@ static void lsfg_alpha_transition(VkCommandBuffer cb, LsfgAlphaImage *image,
 static bool lsfg_alpha_dispatch(VkCommandBuffer cb, uint64_t frame_serial)
 {
     if (!g_ps.lsfg_alpha_ready || !g_ps.lsfg_pipelines_ready) return false;
-    const unsigned slot = (unsigned)(frame_serial % 3u);
+    const unsigned slot = (unsigned)(frame_serial % 6u);
     /* Alpha stages 0..2 produce the two quarter-resolution temporal inputs. */
     for (unsigned level = 0; level < 7; ++level) {
         LsfgAlphaLevel *a = &g_ps.lsfg_alpha[level];
