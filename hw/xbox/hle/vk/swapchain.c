@@ -230,7 +230,7 @@ static struct {
  * Input is the real frame; generated is each extra frame accepted by present. */
 static uint64_t g_lsfg_stats_start_ns;
 static uint64_t g_lsfg_stats_input, g_lsfg_stats_generated;
-static float g_lsfg_input_fps, g_lsfg_output_fps;
+static uint32_t g_lsfg_input_fps_bits, g_lsfg_output_fps_bits;
 
 static void lsfg_stats_record(bool generated)
 {
@@ -243,8 +243,11 @@ static void lsfg_stats_record(bool generated)
         const float seconds = (float)elapsed / 1000000000.0f;
         const float input = (float)g_lsfg_stats_input / seconds;
         const float output = (float)(g_lsfg_stats_input + g_lsfg_stats_generated) / seconds;
-        __atomic_store_n(&g_lsfg_input_fps, input, __ATOMIC_RELAXED);
-        __atomic_store_n(&g_lsfg_output_fps, output, __ATOMIC_RELAXED);
+        uint32_t input_bits, output_bits;
+        __builtin_memcpy(&input_bits, &input, sizeof(input_bits));
+        __builtin_memcpy(&output_bits, &output, sizeof(output_bits));
+        __atomic_store_n(&g_lsfg_input_fps_bits, input_bits, __ATOMIC_RELAXED);
+        __atomic_store_n(&g_lsfg_output_fps_bits, output_bits, __ATOMIC_RELAXED);
         g_lsfg_stats_input = 0;
         g_lsfg_stats_generated = 0;
         g_lsfg_stats_start_ns = now;
@@ -253,8 +256,10 @@ static void lsfg_stats_record(bool generated)
 
 void hle_present_lsfg_stats(float *input_fps, float *output_fps)
 {
-    if (input_fps) *input_fps = __atomic_load_n(&g_lsfg_input_fps, __ATOMIC_RELAXED);
-    if (output_fps) *output_fps = __atomic_load_n(&g_lsfg_output_fps, __ATOMIC_RELAXED);
+    uint32_t input_bits = __atomic_load_n(&g_lsfg_input_fps_bits, __ATOMIC_RELAXED);
+    uint32_t output_bits = __atomic_load_n(&g_lsfg_output_fps_bits, __ATOMIC_RELAXED);
+    if (input_fps) __builtin_memcpy(input_fps, &input_bits, sizeof(input_bits));
+    if (output_fps) __builtin_memcpy(output_fps, &output_bits, sizeof(output_bits));
 }
 
 void hle_present_set_lsfg(int multiplier, bool performance, int flow_scale)
