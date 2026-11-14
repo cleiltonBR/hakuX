@@ -1231,7 +1231,7 @@ static void lsfg_beta_write_set(VkDescriptorSet set, VkSampler sampler,
                                 VkImageView const *storage, unsigned storage_count,
                                 bool constants)
 {
-    VkDescriptorImageInfo infos[9];
+    VkDescriptorImageInfo infos[10];
     VkDescriptorBufferInfo buffer = {
         .buffer = g_ps.lsfg_beta_constants_buffer, .offset = 0, .range = sizeof(LsfgConstants)
     };
