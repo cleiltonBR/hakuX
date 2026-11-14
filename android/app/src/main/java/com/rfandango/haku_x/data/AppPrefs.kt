@@ -182,6 +182,11 @@ class AppPrefs(context: Context) {
     get() = sp.getInt(NativeCoreActivity.PREF_ANISO_LEVEL, 16).coerceIn(1, 16)
     set(value) = sp.edit { putInt(NativeCoreActivity.PREF_ANISO_LEVEL, value.coerceIn(1, 16)) }
 
+  /** Whether LSFG frame generation is passed to the native core on the next game start. */
+  var lsfgEnabled: Boolean
+    get() = sp.getBoolean(KEY_LSFG_ENABLED, true)
+    set(value) = sp.edit { putBoolean(KEY_LSFG_ENABLED, value) }
+
   /** LSFG output multiplier selected on the setup screen. */
   var lsfgMultiplier: Int
     get() = sp.getInt(KEY_LSFG_MULTIPLIER, 2).coerceIn(2, 4)
@@ -339,6 +344,7 @@ class AppPrefs(context: Context) {
     private const val KEY_LIBRARY_COVER_SCALE = "library_cover_scale"
     private const val KEY_RENDER_SCALE_HALF = "render_scale_half"
     private const val KEY_LSFG_DLL_PATH = "lsfg_dll_path"
+    private const val KEY_LSFG_ENABLED = "lsfg_enabled"
     private const val KEY_LSFG_MULTIPLIER = "lsfg_multiplier"
     private const val KEY_LSFG_PERFORMANCE = "lsfg_performance"
     private const val KEY_LSFG_FLOW_SCALE = "lsfg_flow_scale"
