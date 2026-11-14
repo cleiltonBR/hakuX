@@ -73,6 +73,7 @@ add_library(hakux_hle STATIC
   ${NC_HLE}/vk/display.c
   ${NC_HLE}/vk/swapchain.c
   ${NC_HLE}/vk/nis_coefficients.cpp
+  ${NC_HLE}/vk/lsfg_shader.cpp
   ${NC_HLE}/vk/batch.c
   ${NC_HLE}/vk/compat.c
   ${NC_HLE}/vk/draw.c
