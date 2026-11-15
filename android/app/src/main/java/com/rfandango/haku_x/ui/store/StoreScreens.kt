@@ -192,6 +192,18 @@ fun StoreScreen() {
           Text("Catálogo online · ${results.size} jogos carregados", style = MaterialTheme.typography.labelSmall, color = Color(0xFFB9C5BC))
         }
         androidx.compose.material3.OutlinedButton(
+          onClick = { selectedStoreTab = "vimm" },
+          shape = RoundedCornerShape(18.dp),
+          border = BorderStroke(1.dp, Color(0xFF39FF14)),
+          contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 8.dp),
+        ) {
+          Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text("V", color = Color(0xFF39FF14), style = MaterialTheme.typography.titleLarge)
+            Text("Vimm's", color = Color.White, style = MaterialTheme.typography.labelSmall)
+            Text("Lair", color = Color.White, style = MaterialTheme.typography.labelSmall)
+          }
+        }
+        androidx.compose.material3.OutlinedButton(
           onClick = { selectedStoreTab = "link" },
           shape = RoundedCornerShape(18.dp),
           border = BorderStroke(1.dp, Color(0xFF39FF14)),
@@ -342,6 +354,15 @@ fun StoreScreen() {
       }
     }
     if (loading && results.isNotEmpty()) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+    } else if (selectedStoreTab == "vimm") {
+      Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(modifier = Modifier.weight(1f)) {
+          Text("Vimm's Lair · Xbox Vault", style = MaterialTheme.typography.titleLarge, color = Color.White)
+          Text("Catálogo oficial aberto dentro da Loja HakuX", style = MaterialTheme.typography.labelSmall, color = Color(0xFFB9C5BC))
+        }
+        TextButton(onClick = { selectedStoreTab = "catalog" }) { Text("Voltar", color = Color(0xFF39FF14)) }
+      }
+      VimmXboxVaultBrowser()
     } else {
       Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
         Text("Importar por link", modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleLarge, color = Color.White)
@@ -413,6 +434,30 @@ fun StoreScreen() {
       dismissButton = { TextButton(onClick = { selectedGame = null; options = emptyList(); selectedOption = null }) { Text("Cancelar") } },
     )
   }
+}
+
+/** Official Vimm Xbox Vault browser. It does not intercept or automate protected-game downloads. */
+@Composable
+private fun VimmXboxVaultBrowser() {
+  AndroidView(
+    modifier = Modifier.fillMaxWidth().weight(1f),
+    factory = { context ->
+      WebView(context).apply {
+        settings.javaScriptEnabled = true
+        settings.domStorageEnabled = true
+        settings.allowFileAccess = false
+        settings.allowContentAccess = false
+        settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
+        webViewClient = object : WebViewClient() {
+          override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+            val host = request.url.host?.lowercase(java.util.Locale.ROOT).orEmpty()
+            return host != "vimm.net" && !host.endsWith(".vimm.net")
+          }
+        }
+        loadUrl("https://vimm.net/vault/Xbox")
+      }
+    },
+  )
 }
 
 /** Loads the same multi-source cached 3D artwork used by the main library. */
