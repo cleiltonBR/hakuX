@@ -216,6 +216,18 @@ fun StoreScreen() {
           }
         }
         androidx.compose.material3.OutlinedButton(
+          onClick = { selectedStoreTab = "torrents" },
+          shape = RoundedCornerShape(18.dp),
+          border = BorderStroke(1.dp, Color(0xFF39FF14)),
+          contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 9.dp, vertical = 8.dp),
+        ) {
+          Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text("⇩", color = Color(0xFF39FF14), style = MaterialTheme.typography.titleLarge)
+            Text("Torrents", color = Color.White, style = MaterialTheme.typography.labelSmall)
+            Text("P2P", color = Color.White, style = MaterialTheme.typography.labelSmall)
+          }
+        }
+        androidx.compose.material3.OutlinedButton(
           onClick = { selectedStoreTab = "link" },
           shape = RoundedCornerShape(18.dp),
           border = BorderStroke(1.dp, Color(0xFF39FF14)),
@@ -377,6 +389,8 @@ fun StoreScreen() {
       VimmXboxNativeCatalog()
     } else if (selectedStoreTab == "minerva") {
       MinervaXboxNativeCatalog(onBack = { selectedStoreTab = "catalog" })
+    } else if (selectedStoreTab == "torrents") {
+      TorrentDownloadsScreen(onBack = { selectedStoreTab = "catalog" })
     } else {
       Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
         Text("Importar por link", modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleLarge, color = Color.White)

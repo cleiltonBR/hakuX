@@ -26,6 +26,34 @@ class ArchiveDownloadService : Service() {
     createNotificationChannel()
     startForegroundCompat(buildNotification(null))
     serviceScope.launch {
+      TorrentDownloadManager.downloads.collect { torrents ->
+        val activeTorrent = torrents.any {
+          it.state == TorrentDownload.State.WAITING_METADATA ||
+            it.state == TorrentDownload.State.CHECKING ||
+            it.state == TorrentDownload.State.DOWNLOADING
+        }
+        val activeHttp = ArchiveXboxDownloads.downloads.value.any {
+          it.status == ArchiveDownload.Status.QUEUED ||
+            it.status == ArchiveDownload.Status.DOWNLOADING ||
+            it.status == ArchiveDownload.Status.EXTRACTING
+        }
+        if (!activeTorrent && !activeHttp) {
+          delay(1200)
+          val torrentStillActive = TorrentDownloadManager.downloads.value.any {
+            it.state == TorrentDownload.State.WAITING_METADATA ||
+              it.state == TorrentDownload.State.CHECKING ||
+              it.state == TorrentDownload.State.DOWNLOADING
+          }
+          val httpStillActive = ArchiveXboxDownloads.downloads.value.any {
+            it.status == ArchiveDownload.Status.QUEUED ||
+              it.status == ArchiveDownload.Status.DOWNLOADING ||
+              it.status == ArchiveDownload.Status.EXTRACTING
+          }
+          if (!torrentStillActive && !httpStillActive) stopSelf()
+        }
+      }
+    }
+    serviceScope.launch {
       ArchiveXboxDownloads.downloads.collect { items ->
         val active = items.filter {
           it.status == ArchiveDownload.Status.QUEUED ||
@@ -33,13 +61,23 @@ class ArchiveDownloadService : Service() {
             it.status == ArchiveDownload.Status.EXTRACTING
         }
         getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, buildNotification(active.firstOrNull()))
-        if (active.isEmpty()) {
+        if (active.isEmpty() && TorrentDownloadManager.downloads.value.none {
+            it.state == TorrentDownload.State.WAITING_METADATA ||
+              it.state == TorrentDownload.State.CHECKING ||
+              it.state == TorrentDownload.State.DOWNLOADING
+          }) {
           delay(1200)
-          if (!ArchiveXboxDownloads.downloads.value.any {
-              it.status == ArchiveDownload.Status.QUEUED ||
-                it.status == ArchiveDownload.Status.DOWNLOADING ||
-                it.status == ArchiveDownload.Status.EXTRACTING
-            }) stopSelf()
+          val httpStillActive = ArchiveXboxDownloads.downloads.value.any {
+            it.status == ArchiveDownload.Status.QUEUED ||
+              it.status == ArchiveDownload.Status.DOWNLOADING ||
+              it.status == ArchiveDownload.Status.EXTRACTING
+          }
+          val torrentStillActive = TorrentDownloadManager.downloads.value.any {
+            it.state == TorrentDownload.State.WAITING_METADATA ||
+              it.state == TorrentDownload.State.CHECKING ||
+              it.state == TorrentDownload.State.DOWNLOADING
+          }
+          if (!httpStillActive && !torrentStillActive) stopSelf()
         }
       }
     }

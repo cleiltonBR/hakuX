@@ -195,6 +195,7 @@ dependencies {
   implementation("com.github.junrar:junrar:7.5.10")
   implementation("org.apache.commons:commons-compress:1.28.0")
   implementation("org.tukaani:xz:1.10")
+  implementation("org.libtorrent4j:libtorrent4j-android-arm64:2.1.0-39")
 
   // The UI: Jetpack Compose with Material 3.
   implementation(platform("androidx.compose:compose-bom:2025.06.00"))

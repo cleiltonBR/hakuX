@@ -13,3 +13,5 @@
 # activity's overridable methods).
 -keep class org.libsdl.app.** { *; }
 -keep class * extends org.libsdl.app.SDLActivity { *; }
+
+-keep class org.libtorrent4j.swig.libtorrent_jni { *; }
