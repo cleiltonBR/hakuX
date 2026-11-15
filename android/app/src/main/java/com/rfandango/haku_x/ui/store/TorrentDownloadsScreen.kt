@@ -135,11 +135,11 @@ private fun TorrentDownloadCard(
   Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF0B120E))) {
     Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
       Text(item.name, color = Color.White, style = MaterialTheme.typography.titleSmall)
-      Text("${item.state.name} · ${formatTorrentBytes(item.done)} / ${if (item.total > 0L) formatTorrentBytes(item.total) else "—"}", color = Color(0xFFB9C5BC), style = MaterialTheme.typography.labelSmall)
+      Text("${torrentStateLabel(item.state)} · ${formatTorrentBytes(item.done)} / ${if (item.total > 0L) formatTorrentBytes(item.total) else "—"}", color = Color(0xFFB9C5BC), style = MaterialTheme.typography.labelSmall)
       LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
       Text("↓ ${formatTorrentBytes(item.downloadRate.toLong())}/s   ↑ ${formatTorrentBytes(item.uploadRate.toLong())}/s", color = Color(0xFF9BA99E), style = MaterialTheme.typography.labelSmall)
       if (item.libraryImported) {
-        Text("Jogo adicionado à Biblioteca", color = Color(0xFF39FF14), style = MaterialTheme.typography.labelSmall)
+        Text("Arquivos selecionados importados para a Biblioteca", color = Color(0xFF39FF14), style = MaterialTheme.typography.labelSmall)
       }
       item.error?.let { Text(it, color = Color(0xFFFFB4AB), style = MaterialTheme.typography.bodySmall) }
       Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -152,6 +152,16 @@ private fun TorrentDownloadCard(
       }
     }
   }
+}
+
+private fun torrentStateLabel(state: TorrentDownload.State): String = when (state) {
+  TorrentDownload.State.WAITING_METADATA -> "Obtendo metadados"
+  TorrentDownload.State.CHECKING -> "Verificando arquivos"
+  TorrentDownload.State.DOWNLOADING -> "Baixando"
+  TorrentDownload.State.PAUSED -> "Pausado"
+  TorrentDownload.State.COMPLETED -> "Concluído"
+  TorrentDownload.State.SEEDING -> "Compartilhando"
+  TorrentDownload.State.ERROR -> "Erro"
 }
 
 private fun formatTorrentBytes(bytes: Long): String {
