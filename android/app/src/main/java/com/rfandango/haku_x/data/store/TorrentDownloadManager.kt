@@ -276,6 +276,7 @@ object TorrentDownloadManager {
                 val status = handle.status()
                 val nativeState = status.state().name
                 val state = when {
+                  id in pausedIds && mutableDownloads.value.firstOrNull { it.id == id }?.libraryImported == true -> TorrentDownload.State.COMPLETED
                   id in pausedIds -> TorrentDownload.State.PAUSED
                   nativeState == "CHECKING_FILES" || nativeState == "CHECKING_RESUME_DATA" -> TorrentDownload.State.CHECKING
                   nativeState == "DOWNLOADING_METADATA" -> TorrentDownload.State.WAITING_METADATA
