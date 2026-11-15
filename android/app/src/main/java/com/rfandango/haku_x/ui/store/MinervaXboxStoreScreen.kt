@@ -181,7 +181,7 @@ internal fun MinervaXboxNativeCatalog(onBack: () -> Unit) {
                           MinervaXboxRepository.resolveTorrent(entry)
                         }
                         withContext(Dispatchers.IO) {
-                          TorrentDownloadManager.addMagnet(context, source.magnet, entry.title)
+                          TorrentDownloadManager.addMagnet(context, source.magnet, entry.title, source.filePath)
                         }
                         message = "Download de ${entry.title} enviado à fila interna. Apenas este arquivo foi selecionado."
                       } catch (error: Exception) {
