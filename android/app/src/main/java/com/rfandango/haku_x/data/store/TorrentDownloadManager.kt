@@ -177,7 +177,7 @@ object TorrentDownloadManager {
                     downloadRate = status.downloadRate().coerceAtLeast(0),
                     uploadRate = status.uploadRate().coerceAtLeast(0),
                     state = state,
-                    error = status.errorCode().message().takeIf(String::isNotBlank),
+                    error = status.errorCode().getMessage().takeIf(String::isNotBlank),
                   )
                 }
               }
