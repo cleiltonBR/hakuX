@@ -59,6 +59,7 @@ internal fun VimmXboxNativeCatalog() {
   var downloadingGameId by remember { mutableStateOf<Int?>(null) }
   var downloadStatus by remember { mutableStateOf<String?>(null) }
   var downloadFailed by remember { mutableStateOf(false) }
+  var cloudflareGame by remember { mutableStateOf<VimmXboxGame?>(null) }
 
   fun startDownload(game: VimmXboxGame) {
     if (downloadingGameId != null) return
@@ -66,6 +67,7 @@ internal fun VimmXboxNativeCatalog() {
       downloadingGameId = game.vaultId
       downloadStatus = "Obtendo o link oficial de download para ${game.title}…"
       downloadFailed = false
+      cloudflareGame = null
       try {
         val resolved = withContext(Dispatchers.IO) { VimmXboxRepository.resolveDownload(game) }
         ArchiveXboxDownloads.enqueueDirect(
@@ -78,7 +80,12 @@ internal fun VimmXboxNativeCatalog() {
         downloadStatus = "Download de ${game.title} adicionado à fila interna. Acompanhe na aba Downloads."
       } catch (error: Exception) {
         downloadFailed = true
-        downloadStatus = error.message ?: "Não foi possível iniciar o download pelo Vimm."
+        val errorMessage = error.message ?: "Não foi possível iniciar o download pelo Vimm."
+        downloadStatus = errorMessage
+        if (errorMessage.contains("Cloudflare", ignoreCase = true)) {
+          cloudflareGame = game
+          runCatching { uriHandler.openUri(game.detailsUrl) }
+        }
       } finally {
         downloadingGameId = null
       }
@@ -127,6 +134,20 @@ internal fun VimmXboxNativeCatalog() {
     Text(message, color = Color(0xFFBFE8C5), style = MaterialTheme.typography.bodySmall)
     downloadStatus?.let {
       Text(it, color = if (downloadFailed) MaterialTheme.colorScheme.error else Color(0xFFBFE8C5), style = MaterialTheme.typography.bodySmall)
+    }
+    cloudflareGame?.let { game ->
+      Text(
+        "A página oficial foi aberta no navegador. Conclua a verificação do Cloudflare e volte ao HakuX.",
+        color = Color(0xFFFFD27A),
+        style = MaterialTheme.typography.bodySmall,
+      )
+      Button(
+        onClick = { startDownload(game) },
+        enabled = downloadingGameId == null,
+        modifier = Modifier.fillMaxWidth(),
+      ) {
+        Text("Tentar novamente após a verificação")
+      }
     }
     if (loading) {
       Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
