@@ -67,8 +67,39 @@ object TorrentDownloadManager {
         val row = rows.optJSONObject(i) ?: continue
         val source = row.optString("source")
         if (source.isBlank()) continue
-        if (source.startsWith("magnet:")) addMagnetInternal(appContext, source, persist = false)
-        else {
+        if (source.startsWith("magnet:")) {
+          val pathsObject = row.optJSONObject("paths") ?: JSONObject()
+          val paths = linkedMapOf<Int, String>()
+          val pathKeys = pathsObject.keys()
+          while (pathKeys.hasNext()) {
+            val key = pathKeys.next()
+            val index = key.toIntOrNull()
+            val value = pathsObject.optString(key)
+            if (index != null && value.isNotBlank()) paths[index] = value
+          }
+          val titlesObject = row.optJSONObject("titles") ?: JSONObject()
+          val titles = linkedMapOf<Int, String>()
+          val titleKeys = titlesObject.keys()
+          while (titleKeys.hasNext()) {
+            val key = titleKeys.next()
+            val index = key.toIntOrNull()
+            val value = titlesObject.optString(key)
+            if (index != null && value.isNotBlank()) titles[index] = value
+          }
+          val importedArray = row.optJSONArray("imported") ?: JSONArray()
+          val imported = buildSet {
+            for (index in 0 until importedArray.length()) importedArray.optInt(index, -1).takeIf { it >= 0 }?.let(::add)
+          }
+          addMagnetInternal(
+            appContext,
+            source,
+            persist = false,
+            displayName = row.optString("name").takeIf { it.isNotBlank() },
+            restoredPaths = paths,
+            restoredTitles = titles,
+            restoredImported = imported,
+          )
+        } else {
           val file = File(source)
           if (file.isFile) addTorrentFileInternal(appContext, file, persist = false)
         }
@@ -275,7 +306,16 @@ object TorrentDownloadManager {
   private fun persist() {
     val appContext = context ?: return
     val array = JSONArray()
-    synchronized(this) { sources.forEach { (id, source) -> array.put(JSONObject().put("id", id).put("source", source)) } }
+    synchronized(this) {
+      sources.forEach { (id, source) ->
+        val paths = JSONObject().apply { selectedFilePaths[id]?.forEach { (index, path) -> put(index.toString(), path) } }
+        val titles = JSONObject().apply { selectedFileTitles[id]?.forEach { (index, title) -> put(index.toString(), title) } }
+        val imported = JSONArray().apply { importedFileIndices[id]?.forEach(::put) }
+        val name = mutableDownloads.value.firstOrNull { it.id == id }?.name.orEmpty()
+        array.put(JSONObject().put("id", id).put("source", source).put("name", name)
+          .put("paths", paths).put("titles", titles).put("imported", imported))
+      }
+    }
     appContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_ITEMS, array.toString()).apply()
   }
 
