@@ -288,6 +288,9 @@ object TorrentDownloadManager {
                     error = status.errorCode().getMessage().takeIf(String::isNotBlank),
                   )
                 }
+                if (state == TorrentDownload.State.SEEDING || state == TorrentDownload.State.COMPLETED) {
+                  importSelectedFiles(id)
+                }
               }
             }.onFailure { error ->
               updateLocal(id) { it.copy(state = TorrentDownload.State.ERROR, error = error.message ?: "Falha no torrent.") }
@@ -303,6 +306,56 @@ object TorrentDownloadManager {
     mutableDownloads.value = mutableDownloads.value.map { if (it.id == id) transform(it) else it }
   }
 
+  @Synchronized
+  fun retryLibraryImport(id: String) {
+    val imported = importedFileIndices[id]?.toSet().orEmpty()
+    importAttempted[id] = imported.toMutableSet()
+    scope.launch { importSelectedFiles(id) }
+  }
+
+  private suspend fun importSelectedFiles(id: String) {
+    val appContext = context ?: return
+    val paths = synchronized(this) { selectedFilePaths[id]?.toMap().orEmpty() }
+    if (paths.isEmpty()) return
+    val titles = synchronized(this) { selectedFileTitles[id]?.toMap().orEmpty() }
+    for ((index, relativePath) in paths) {
+      val shouldImport = synchronized(this) {
+        if (index in importedFileIndices[id].orEmpty()) false
+        else importAttempted.getOrPut(id) { linkedSetOf() }.add(index)
+      }
+      if (!shouldImport) continue
+      try {
+        val file = locateDownloadedFile(relativePath, downloadDirectory(appContext))
+          ?: error("O torrent terminou, mas o arquivo selecionado não foi localizado no armazenamento.")
+        val title = titles[index]?.ifBlank { null } ?: file.nameWithoutExtension
+        ArchiveXboxDownloads.importTorrentFile(appContext, title, file)
+        synchronized(this) { importedFileIndices.getOrPut(id) { linkedSetOf() }.add(index) }
+        persist()
+      } catch (error: Exception) {
+        updateLocal(id) {
+          it.copy(error = "Torrent baixado, mas não foi possível adicionar à Biblioteca: ${error.message ?: "verifique a pasta de destino"}")
+        }
+      }
+    }
+    val allImported = synchronized(this) {
+      importedFileIndices[id]?.containsAll(paths.keys) == true
+    }
+    if (allImported) {
+      updateLocal(id) { it.copy(libraryImported = true, error = null) }
+      persist()
+    }
+  }
+
+  private fun locateDownloadedFile(relativePath: String, directory: File): File? {
+    val root = directory.canonicalFile
+    val safePath = relativePath.replace('\\\\', '/').removePrefix("./").trimStart('/')
+    val candidate = File(root, safePath).canonicalFile
+    if (!candidate.path.startsWith(root.path + File.separator)) return null
+    if (candidate.isFile) return candidate
+    val expectedName = safePath.substringAfterLast('/')
+    return root.walkTopDown().firstOrNull { it.isFile && it.name.equals(expectedName, ignoreCase = true) }
+  }
+
   private fun persist() {
     val appContext = context ?: return
     val array = JSONArray()
@@ -310,7 +363,7 @@ object TorrentDownloadManager {
       sources.forEach { (id, source) ->
         val paths = JSONObject().apply { selectedFilePaths[id]?.forEach { (index, path) -> put(index.toString(), path) } }
         val titles = JSONObject().apply { selectedFileTitles[id]?.forEach { (index, title) -> put(index.toString(), title) } }
-        val imported = JSONArray().apply { importedFileIndices[id]?.forEach(::put) }
+        val imported = JSONArray().apply { importedFileIndices[id]?.forEach { put(it) } }
         val name = mutableDownloads.value.firstOrNull { it.id == id }?.name.orEmpty()
         array.put(JSONObject().put("id", id).put("source", source).put("name", name)
           .put("paths", paths).put("titles", titles).put("imported", imported))
