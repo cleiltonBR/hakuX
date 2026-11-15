@@ -18,6 +18,8 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.material3.CardDefaults
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -169,61 +171,148 @@ fun StoreScreen() {
   }
 
   if (detailsGame == null) {
-  Column(modifier = Modifier.fillMaxSize().background(Color(0xFF050806)).padding(horizontal = 10.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-      FilterChip(modifier = Modifier.height(32.dp), selected = selectedStoreTab == "catalog", onClick = { selectedStoreTab = "catalog" }, label = { Text("Catálogo Xbox", style = MaterialTheme.typography.labelMedium) })
-      FilterChip(modifier = Modifier.height(32.dp), selected = selectedStoreTab == "link", onClick = { selectedStoreTab = "link" }, label = { Text("Importar por link", style = MaterialTheme.typography.labelMedium) })
-    }
+  Column(
+    modifier = Modifier.fillMaxSize()
+      .background(Brush.verticalGradient(listOf(Color(0xFF020503), Color(0xFF07140B), Color(0xFF020503))))
+      .padding(horizontal = 12.dp, vertical = 8.dp),
+    verticalArrangement = Arrangement.spacedBy(9.dp),
+  ) {
     if (selectedStoreTab == "catalog") {
-    Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
-      if (!landscape) {
-        Text("Loja Xbox Clássico", style = MaterialTheme.typography.headlineSmall, color = Color(0xFFE8F5E9))
-        Text("CATÁLOGO ONLINE  ·  ${results.size} jogos carregados", style = MaterialTheme.typography.labelSmall, color = Color(0xFF9AA79D))
+      Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Box(modifier = Modifier.size(58.dp).background(Brush.radialGradient(listOf(Color(0xFF39FF14), Color(0xFF12351A), Color.Transparent)), CircleShape), contentAlignment = Alignment.Center) {
+          Text("X", color = Color.White, style = MaterialTheme.typography.headlineLarge)
+        }
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+          Text("Loja", style = MaterialTheme.typography.headlineMedium, color = Color.White)
+          Text("XBOX CLÁSSICO", style = MaterialTheme.typography.titleMedium, color = Color(0xFF39FF14))
+          Text("Catálogo online · ${results.size} jogos carregados", style = MaterialTheme.typography.labelSmall, color = Color(0xFFB9C5BC))
+        }
+        androidx.compose.material3.OutlinedButton(
+          onClick = { selectedStoreTab = "link" },
+          shape = RoundedCornerShape(18.dp),
+          border = BorderStroke(1.dp, Color(0xFF39FF14)),
+          contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 8.dp),
+        ) {
+          Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text("↗", color = Color(0xFF39FF14), style = MaterialTheme.typography.titleLarge)
+            Text("Importar", color = Color.White, style = MaterialTheme.typography.labelSmall)
+            Text("por link", color = Color.White, style = MaterialTheme.typography.labelSmall)
+          }
+        }
+      }
+      Row(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
+        OutlinedTextField(
+          value = query, onValueChange = { query = it },
+          modifier = Modifier.weight(1f).height(58.dp),
+          singleLine = true, shape = RoundedCornerShape(30.dp),
+          textStyle = MaterialTheme.typography.bodyMedium,
+          label = { Text("⌕  Pesquisar jogos", style = MaterialTheme.typography.labelMedium) },
+          placeholder = { Text("Nome do jogo...", style = MaterialTheme.typography.bodySmall) },
+        )
+        Button(
+          modifier = Modifier.height(54.dp),
+          shape = RoundedCornerShape(28.dp),
+          colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = Color(0xFF39FF14), contentColor = Color(0xFF061006)),
+          contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 15.dp),
+          onClick = { loadCatalog(reset = true, term = query.trim()) },
+          enabled = !loading && (query.isBlank() || query.trim().length >= 2),
+        ) { Text("⌕ Buscar", style = MaterialTheme.typography.labelLarge) }
+      }
+      Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
+        genres.forEach { genre ->
+          val glyph = when (genre) { "Todos" -> "▦"; "FPS" -> "🎮"; "Luta" -> "★"; "Corrida" -> "🚘"; "Ação" -> "♟"; "Esportes" -> "⚽"; "RPG" -> "⚔"; "Plataforma" -> "◈"; else -> "•" }
+          FilterChip(
+            modifier = Modifier.height(38.dp), selected = selectedGenre == genre,
+            onClick = { selectedGenre = genre },
+            label = { Text("$glyph  $genre", style = MaterialTheme.typography.labelSmall) },
+            colors = androidx.compose.material3.FilterChipDefaults.filterChipColors(
+              selectedContainerColor = Color(0xFF39FF14), selectedLabelColor = Color(0xFF061006),
+              containerColor = Color(0xFF080E0A), labelColor = Color(0xFFE4EEE6),
+            ),
+            border = FilterChipDefaults.filterChipBorder(enabled = true, selected = selectedGenre == genre, borderColor = Color(0xFF294A32), selectedBorderColor = Color(0xFF39FF14)),
+          )
+        }
+      }
+      Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
+        FilterChip(
+          modifier = Modifier.weight(1f).height(42.dp), selected = favoritesOnly,
+          onClick = { favoritesOnly = !favoritesOnly },
+          label = { Text("♥  Favoritos", style = MaterialTheme.typography.labelMedium) },
+          colors = androidx.compose.material3.FilterChipDefaults.filterChipColors(selectedContainerColor = Color(0xFF18321D), selectedLabelColor = Color(0xFFFF5252), containerColor = Color(0xFF080E0A), labelColor = Color.White),
+          border = FilterChipDefaults.filterChipBorder(enabled = true, selected = favoritesOnly, borderColor = Color(0xFF294A32), selectedBorderColor = Color(0xFF39FF14)),
+        )
+        FilterChip(
+          modifier = Modifier.weight(1f).height(42.dp), selected = alphabetical,
+          onClick = { alphabetical = !alphabetical },
+          label = { Text("☷  ${if (alphabetical) "A–Z" else "Ordem"}", style = MaterialTheme.typography.labelMedium) },
+          colors = androidx.compose.material3.FilterChipDefaults.filterChipColors(containerColor = Color(0xFF080E0A), labelColor = Color.White),
+          border = FilterChipDefaults.filterChipBorder(enabled = true, selected = alphabetical, borderColor = Color(0xFF294A32), selectedBorderColor = Color(0xFF39FF14)),
+        )
+        TextButton(onClick = { selectedGenre = "Todos"; favoritesOnly = false; alphabetical = false; query = ""; if (loadedQuery.isNotEmpty()) loadCatalog(true, "") }, modifier = Modifier.weight(0.8f)) {
+          Text("♟ Limpar", color = Color(0xFF39FF14), style = MaterialTheme.typography.labelMedium)
+        }
+      }
+      Row(
+        modifier = Modifier.fillMaxWidth().background(Brush.horizontalGradient(listOf(Color(0xFF0C1C10), Color(0xFF142A18), Color(0xFF0C1C10))), RoundedCornerShape(24.dp))
+          .border(1.dp, Color(0xFF286A31), RoundedCornerShape(24.dp)).padding(horizontal = 12.dp, vertical = 11.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceEvenly,
+      ) {
+        Text("▰  ${message.substringBefore("·").trim()}", color = Color(0xFFE2F5E5), style = MaterialTheme.typography.labelMedium, maxLines = 1, modifier = Modifier.weight(1f))
+        Box(Modifier.width(1.dp).height(22.dp).background(Color(0xFF376B3D)))
+        Text("♜  ${results.size} carregados", color = Color(0xFFBFE8C5), style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(0.85f), maxLines = 1)
+      }
+    } else {
+      Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text("Importar por link", modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleLarge, color = Color.White)
+        TextButton(onClick = { selectedStoreTab = "catalog" }) { Text("Voltar ao catálogo", color = Color(0xFF39FF14)) }
       }
     }
-    Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
-      OutlinedTextField(value = query, onValueChange = { query = it }, modifier = Modifier.weight(1f).height(58.dp), singleLine = true, shape = RoundedCornerShape(28.dp), textStyle = MaterialTheme.typography.bodyMedium, label = { Text("Pesquisar jogos", style = MaterialTheme.typography.labelSmall) }, placeholder = { Text("Nome do jogo...", style = MaterialTheme.typography.bodySmall) })
-      Button(modifier = Modifier.height(48.dp), shape = RoundedCornerShape(24.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 0.dp), onClick = { loadCatalog(reset = true, term = query.trim()) }, enabled = !loading && (query.isBlank() || query.trim().length >= 2)) { Text("Buscar", style = MaterialTheme.typography.labelMedium) }
-    }
-    Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
-      genres.forEach { genre -> FilterChip(modifier = Modifier.height(28.dp), selected = selectedGenre == genre, onClick = { selectedGenre = genre }, label = { Text(genre, style = MaterialTheme.typography.labelSmall) }) }
-    }
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
-      FilterChip(modifier = Modifier.height(28.dp), selected = favoritesOnly, onClick = { favoritesOnly = !favoritesOnly }, label = { Text("♥ Favoritos", style = MaterialTheme.typography.labelSmall) })
-      FilterChip(modifier = Modifier.height(28.dp), selected = alphabetical, onClick = { alphabetical = !alphabetical }, label = { Text(if (alphabetical) "A–Z" else "Ordem", style = MaterialTheme.typography.labelSmall) })
-      TextButton(onClick = { selectedGenre = "Todos"; favoritesOnly = false; alphabetical = false; query = ""; if (loadedQuery.isNotEmpty()) loadCatalog(true, "") }, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp, vertical = 0.dp)) { Text("Limpar", style = MaterialTheme.typography.labelSmall) }
-    }
-    Text(message, modifier = Modifier.fillMaxWidth().background(Color(0xFF0D1710), RoundedCornerShape(14.dp)).padding(horizontal = 12.dp, vertical = 9.dp), style = MaterialTheme.typography.labelSmall, color = Color(0xFFC8E6C9), maxLines = 1)
     if (loading && results.isEmpty()) {
       Column(modifier = Modifier.fillMaxWidth().weight(1f), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
         CircularProgressIndicator()
         Text("Buscando jogos do Xbox Clássico…", modifier = Modifier.padding(top = 12.dp))
       }
     } else {
-      LazyVerticalGrid(state = gridState, columns = GridCells.Adaptive(minSize = 154.dp), modifier = Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(9.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+      LazyVerticalGrid(state = gridState, columns = GridCells.Adaptive(minSize = 300.dp), modifier = Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(9.dp), verticalArrangement = Arrangement.spacedBy(9.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 14.dp)) {
         items(visibleGames, key = { game -> game.archiveFileName?.let { "${game.identifier}:$it" } ?: "${game.identifier}:${game.title}" }) { game ->
           Card(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF142219)),
-            border = BorderStroke(1.dp, Color(0xFF294A32)),
+            shape = RoundedCornerShape(22.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF0B120E)),
+            border = BorderStroke(1.dp, Color(0xFF31543A)),
           ) {
-            Column(modifier = Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-              ArchiveGameCover(game = game, onClick = { detailsGame = game })
-              Text(game.title, modifier = Modifier.padding(horizontal = 2.dp), style = MaterialTheme.typography.titleSmall, color = Color(0xFFE8F5E9), maxLines = 2, minLines = 2)
-              Text(game.genre + (game.year?.let { " · $it" } ?: ""), modifier = Modifier.padding(horizontal = 2.dp), style = MaterialTheme.typography.labelMedium, color = Color(0xFFB4B8BC), maxLines = 1)
-              Text("● " + game.region, modifier = Modifier.padding(horizontal = 2.dp), style = MaterialTheme.typography.labelSmall, color = Color(0xFF39FF14), maxLines = 1)
-              Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                TextButton(modifier = Modifier.weight(0.7f), contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 2.dp, vertical = 0.dp), onClick = {
-                  val favoriteKey = game.archiveFileName?.let { "${game.identifier}:$it" } ?: game.identifier
-                  toggleFavorite(favoriteKey)
-                }) {
-                  val favoriteKey = game.archiveFileName?.let { "${game.identifier}:$it" } ?: game.identifier
-                  Text(if (favoriteKey in favorites) "♥ Favorito" else "♡ Favorito", color = if (favoriteKey in favorites) Color(0xFFFF5252) else Color(0xFFE8F5E9), style = MaterialTheme.typography.labelSmall)
+            Row(modifier = Modifier.padding(7.dp), horizontalArrangement = Arrangement.spacedBy(9.dp), verticalAlignment = Alignment.Top) {
+              ArchiveGameCover(game = game, onClick = { detailsGame = game }, modifier = Modifier.weight(0.82f).height(148.dp))
+              Column(modifier = Modifier.weight(1.18f).height(148.dp), verticalArrangement = Arrangement.SpaceBetween) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                  Text(game.title, style = MaterialTheme.typography.titleSmall, color = Color(0xFFF0F7F1), maxLines = 2, minLines = 2)
+                  Text(game.genre + (game.year?.let { " · $it" } ?: ""), style = MaterialTheme.typography.labelMedium, color = Color(0xFFAAB5AD), maxLines = 1)
+                  Text("● ${game.region}", style = MaterialTheme.typography.labelSmall, color = Color(0xFF39FF14), maxLines = 2)
                 }
-                TextButton(modifier = Modifier.weight(0.5f), contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 2.dp, vertical = 0.dp), onClick = { uriHandler.openUri(game.detailsUrl) }) { Text("Info", style = MaterialTheme.typography.labelSmall, color = Color(0xFF39FF14)) }
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                  TextButton(modifier = Modifier.weight(0.85f), contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 1.dp, vertical = 0.dp), onClick = {
+                    val favoriteKey = game.archiveFileName?.let { "${game.identifier}:$it" } ?: game.identifier
+                    toggleFavorite(favoriteKey)
+                  }) {
+                    val favoriteKey = game.archiveFileName?.let { "${game.identifier}:$it" } ?: game.identifier
+                    Text(if (favoriteKey in favorites) "♥" else "♡", color = if (favoriteKey in favorites) Color(0xFFFF5252) else Color(0xFFE8F5E9), style = MaterialTheme.typography.titleMedium)
+                  }
+                  Button(
+                    modifier = Modifier.weight(1.5f).height(34.dp),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = Color(0xFF39FF14), contentColor = Color(0xFF061006)),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 3.dp),
+                    onClick = { uriHandler.openUri(game.detailsUrl) },
+                  ) { Text("ⓘ Info", style = MaterialTheme.typography.labelMedium) }
+                }
               }
-              Button(modifier = Modifier.fillMaxWidth().height(36.dp), shape = RoundedCornerShape(18.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp, vertical = 0.dp), enabled = checkingId == null && !loading, onClick = {
+            }
+            Button(
+              modifier = Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, bottom = 8.dp).height(36.dp),
+              shape = RoundedCornerShape(20.dp),
+              colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = Color(0xFF39FF14), contentColor = Color(0xFF061006)),
+              enabled = checkingId == null && !loading,
+              onClick = {
                 scope.launch {
                   checkingId = game.identifier
                   try {
@@ -234,8 +323,8 @@ fun StoreScreen() {
                     message = error.message ?: "Não foi possível verificar os arquivos deste item."
                   } finally { checkingId = null }
                 }
-              }) { Text(if (checkingId == game.identifier) "Verificando…" else "↓ Baixar", style = MaterialTheme.typography.labelMedium) }
-            }
+              },
+            ) { Text(if (checkingId == game.identifier) "Verificando…" else "↓  Baixar jogo", style = MaterialTheme.typography.labelMedium) }
           }
         }
         if (visibleGames.isEmpty() && !loading) {
@@ -326,7 +415,7 @@ fun StoreScreen() {
 
 /** Loads the same multi-source cached 3D artwork used by the main library. */
 @Composable
-private fun ArchiveGameCover(game: ArchiveXboxItem, onClick: () -> Unit) {
+private fun ArchiveGameCover(game: ArchiveXboxItem, onClick: () -> Unit, modifier: Modifier = Modifier) {
   val context = LocalContext.current
   var cover by remember(game.title) { mutableStateOf<Bitmap?>(null) }
   LaunchedEffect(game.title) {
@@ -335,7 +424,7 @@ private fun ArchiveGameCover(game: ArchiveXboxItem, onClick: () -> Unit) {
   AsyncImage(
     model = cover,
     contentDescription = "Capa de ${game.title}",
-    modifier = Modifier.fillMaxWidth().aspectRatio(0.82f).clickable(onClick = onClick),
+    modifier = modifier.fillMaxWidth().clickable(onClick = onClick),
     contentScale = ContentScale.Fit,
   )
 }
