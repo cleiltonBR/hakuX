@@ -60,22 +60,45 @@ object VimmXboxRepository {
    * or an unavailable vault item), this deliberately refuses to synthesize it.
    */
   fun resolveDownload(game: VimmXboxGame): DownloadResolution {
-    val pageUrl = URL(game.detailsUrl)
-    val pageConnection = (pageUrl.openConnection() as HttpURLConnection).apply {
-      requestMethod = "GET"
-      connectTimeout = 15_000
-      readTimeout = 25_000
-      instanceFollowRedirects = true
-      setRequestProperty("Accept", "text/html,application/xhtml+xml")
-      setRequestProperty("Accept-Language", "en")
-      setRequestProperty("User-Agent", USER_AGENT)
+    // Prefer the exact catalog href, then retry Vimm's numeric vault route.
+    // Catalog hrefs can contain HTML entities or query-based detail routes.
+    val pageCandidates = listOf(
+      game.detailsUrl,
+      "https://vimm.net/vault/${game.vaultId}",
+    ).distinct()
+    var pageHtml: String? = null
+    var resolvedPageUrl: URL? = null
+    var lastPageStatus = -1
+    for (candidate in pageCandidates) {
+      val pageConnection = (URL(candidate).openConnection() as HttpURLConnection).apply {
+        requestMethod = "GET"
+        connectTimeout = 15_000
+        readTimeout = 25_000
+        instanceFollowRedirects = true
+        setRequestProperty("Accept", "text/html,application/xhtml+xml")
+        setRequestProperty("Accept-Language", "en")
+        setRequestProperty("User-Agent", USER_AGENT)
+      }
+      try {
+        val status = pageConnection.responseCode
+        lastPageStatus = status
+        if (status == HttpURLConnection.HTTP_NOT_FOUND) continue
+        require(status in 200..299) {
+          "Não foi possível abrir a página do jogo no Vimm (HTTP $status)."
+        }
+        pageHtml = pageConnection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+        resolvedPageUrl = pageConnection.url
+        break
+      } finally {
+        pageConnection.disconnect()
+      }
     }
-    val html = try {
-      val status = pageConnection.responseCode
-      require(status in 200..299) { "Não foi possível abrir a página do jogo no Vimm (HTTP $status)." }
-      pageConnection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
-    } finally {
-      pageConnection.disconnect()
+    val html = pageHtml ?: error(
+      "O Vimm não encontrou a página deste jogo (HTTP $lastPageStatus). Endereços testados: ${pageCandidates.joinToString()}"
+    )
+    val pageUrl = resolvedPageUrl ?: error("O Vimm não confirmou o endereço final da página do jogo.")
+    require(!html.contains("cf-turnstile", true) && !html.contains("challenges.cloudflare.com/turnstile", true)) {
+      "O Vimm solicitou uma verificação no navegador. Abra a página oficial para continuar."
     }
 
     require(!Regex("(?i)download unavailable|temporarily offline|not available at the request").containsMatchIn(html)) {
@@ -83,8 +106,11 @@ object VimmXboxRepository {
     }
 
     val formMatch = Regex("(?is)<form\\b([^>]*)>(.*?)</form>").findAll(html)
-      .firstOrNull { match -> Regex("(?i)\\bid\\s*=\\s*['\"]dl_form['\"]").containsMatchIn(match.groupValues[1]) }
-      ?: error("A página do Vimm não disponibilizou um formulário de download para este jogo.")
+      .firstOrNull { match ->
+        Regex("(?i)\\bid\\s*=\\s*['\\"](?:dl_form|download_form)['\\"]")
+          .containsMatchIn(match.groupValues[1])
+      }
+      ?: error("A página do Vimm não disponibilizou um formulário oficial de download para este jogo.")
     val formAttributes = formMatch.groupValues[1]
     val formBody = formMatch.groupValues[2]
     val controls = Regex("(?is)<button\\b([^>]*)>(.*?)</button>|<input\\b([^>]*)>")
@@ -139,7 +165,7 @@ object VimmXboxRepository {
         instanceFollowRedirects = false
         setRequestProperty("Accept", "*/*")
         setRequestProperty("User-Agent", USER_AGENT)
-        setRequestProperty("Referer", game.detailsUrl)
+        setRequestProperty("Referer", pageUrl.toString())
         if (methodForRequest == "POST") {
           doOutput = true
           setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
@@ -162,6 +188,10 @@ object VimmXboxRepository {
           return@repeat
         }
         require(status in 200..299) { "O servidor de download do Vimm respondeu HTTP $status." }
+        val contentType = connection.contentType.orEmpty().substringBefore(';').trim().lowercase(Locale.ROOT)
+        require(contentType !in setOf("text/html", "application/xhtml+xml")) {
+          "O Vimm retornou uma página HTML em vez do arquivo de jogo. Abra os detalhes para concluir a etapa indicada pelo site."
+        }
         val disposition = connection.getHeaderField("Content-Disposition").orEmpty()
         val dispositionName = Regex("""(?i)filename\*?=(?:UTF-8''|")?([^;"]+)""")
           .find(disposition)?.groupValues?.get(1)?.trim()?.trim('"')
@@ -188,7 +218,7 @@ object VimmXboxRepository {
       for (match in anchorPattern.findAll(row)) {
         val attributes = match.groupValues[1]
         if (Regex("(?i)display\\s*:\\s*none").containsMatchIn(attributes)) continue
-        val href = match.groupValues[2]
+        val href = decode(match.groupValues[2])
         val id = match.groupValues[3].toIntOrNull() ?: continue
         if (id == 999999 || found.containsKey(id)) continue
         val title = cleanText(match.groupValues[4])
