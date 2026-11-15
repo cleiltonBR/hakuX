@@ -36,11 +36,12 @@ object VimmXboxRepository {
     }
     try {
       val status = connection.responseCode
-      require(status in 200..299) { "Vimm's Lair respondeu HTTP $status." }
-      val html = connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
-      require(!html.contains("cf-turnstile", true) && !html.contains("challenges.cloudflare.com/turnstile", true)) {
-        "O Vimm's Lair solicitou uma verificação no navegador. Abra o site oficial para continuar."
+      val html = (if (status in 200..299) connection.inputStream else connection.errorStream)
+        ?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
+      require(!isCloudflareChallenge(connection, html)) {
+        "O Vimm's Lair exige uma verificação do Cloudflare. Abra a página oficial no navegador, conclua a verificação e tente novamente no HakuX."
       }
+      require(status in 200..299) { "Vimm's Lair respondeu HTTP $status." }
       return parseListing(html)
     } finally {
       connection.disconnect()
@@ -82,11 +83,16 @@ object VimmXboxRepository {
       try {
         val status = pageConnection.responseCode
         lastPageStatus = status
+        val responseHtml = (if (status in 200..299) pageConnection.inputStream else pageConnection.errorStream)
+          ?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
+        require(!isCloudflareChallenge(pageConnection, responseHtml)) {
+          "O Vimm exige uma verificação do Cloudflare. Abra os detalhes deste jogo no navegador, conclua a verificação e siga as instruções do site. O HakuX não contorna essa proteção."
+        }
         if (status == HttpURLConnection.HTTP_NOT_FOUND) continue
         require(status in 200..299) {
           "Não foi possível abrir a página do jogo no Vimm (HTTP $status)."
         }
-        pageHtml = pageConnection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+        pageHtml = responseHtml
         resolvedPageUrl = pageConnection.url
         break
       } finally {
@@ -97,8 +103,8 @@ object VimmXboxRepository {
       "O Vimm não encontrou a página deste jogo (HTTP $lastPageStatus). Endereços testados: ${pageCandidates.joinToString()}"
     )
     val pageUrl = resolvedPageUrl ?: error("O Vimm não confirmou o endereço final da página do jogo.")
-    require(!html.contains("cf-turnstile", true) && !html.contains("challenges.cloudflare.com/turnstile", true)) {
-      "O Vimm solicitou uma verificação no navegador. Abra a página oficial para continuar."
+    require(!isCloudflareChallenge(null, html)) {
+      "O Vimm exige uma verificação do Cloudflare. Abra os detalhes deste jogo no navegador e siga as instruções do site."
     }
 
     require(!Regex("(?i)download unavailable|temporarily offline|not available at the request").containsMatchIn(html)) {
@@ -207,6 +213,19 @@ object VimmXboxRepository {
       }
     }
     error("O servidor do Vimm excedeu o limite de redirecionamentos.")
+  }
+
+  private fun isCloudflareChallenge(connection: HttpURLConnection?, html: String): Boolean {
+    val mitigated = connection?.getHeaderField("cf-mitigated").orEmpty()
+    if (mitigated.equals("challenge", ignoreCase = true)) return true
+    return listOf(
+      "cf-turnstile",
+      "challenges.cloudflare.com",
+      "__cf_chl",
+      "challenge-platform",
+      "just a moment",
+      "checking your browser",
+    ).any { html.contains(it, ignoreCase = true) }
   }
 
   internal fun parseListing(html: String): List<VimmXboxGame> {
