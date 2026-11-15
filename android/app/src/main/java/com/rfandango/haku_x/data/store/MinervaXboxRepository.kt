@@ -25,6 +25,20 @@ object MinervaXboxRepository {
   const val CATALOG_URL = "https://minerva-archive.org/browse/Redump/Microsoft%20-%20Xbox/"
   private const val SEARCH_URL = "https://minerva-archive.org/v1/api/rom/search"
   private const val USER_AGENT = "HakuX-Store/1.0 (Android; Minerva catalog)"
+  private val TRACKERS = listOf(
+    "udp://tracker.opentrackr.org:1337/announce",
+    "udp://open.demonii.com:1337/announce",
+    "udp://open.tracker.cl:1337/announce",
+    "udp://tracker.publictracker.xyz:6969/announce",
+    "udp://tracker.wildkat.net:6969/announce",
+    "udp://tracker.qu.ax:6969/announce",
+    "udp://tracker.peerfect.org:6969/announce",
+    "udp://tracker.ilibr.org:6969/announce",
+    "udp://tracker.dler.org:6969/announce",
+    "udp://tracker.bittor.pw:1337/announce",
+    "udp://tracker.0x7c0.com:6969/announce",
+    "udp://exodus.desync.com:6969/announce",
+  )
 
   fun loadCatalog(): List<MinervaXboxEntry> {
     val connection = (URL(CATALOG_URL).openConnection() as HttpURLConnection).apply {
@@ -133,9 +147,15 @@ object MinervaXboxRepository {
       require(fileIndex.matches(Regex("\\d+"))) {
         "O Minerva não informou o índice do arquivo no torrent. Nenhum download foi iniciado."
       }
-      val selectedMagnet = if (Regex("(?i)[?&]so=").containsMatchIn(magnet)) magnet
-        else "$magnet&so=$fileIndex"
-      val path = row.optString("full_path").replace('\\', '/')
+      val selectedMagnet = buildString {
+        append(if (Regex("(?i)[?&]so=").containsMatchIn(magnet)) magnet else "$magnet&so=$fileIndex")
+        if (!Regex("(?i)[?&]tr=").containsMatchIn(magnet)) {
+          TRACKERS.forEach { tracker ->
+            append("&tr=").append(URLEncoder.encode(tracker, Charsets.UTF_8.name()))
+          }
+        }
+      }
+      val path = row.optString("full_path").replace('\\\\', '/')
       return MinervaTorrentSource(selectedMagnet, path, fileIndex)
     } finally {
       connection.disconnect()
