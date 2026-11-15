@@ -62,7 +62,7 @@
     <activity
       android:name=".RelaunchActivity"
       android:theme="@style/Theme.HakuX.Game"
-      android:screenOrientation="sensorLandscape"
+      android:screenOrientation="landscape"
       android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|uiMode"
       android:excludeFromRecents="true"
       android:noHistory="true"
@@ -79,7 +79,7 @@
     <activity
       android:name=".NativeCoreActivity"
       android:theme="@style/Theme.HakuX.Game"
-      android:screenOrientation="sensorLandscape"
+      android:screenOrientation="landscape"
       android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|uiMode"
       android:hardwareAccelerated="true"
       android:process=":native"
