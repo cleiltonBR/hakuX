@@ -45,6 +45,137 @@ object VimmXboxRepository {
     }
   }
 
+
+  data class DownloadResolution(
+    val url: String,
+    val fileName: String,
+    val bytes: Long,
+  )
+
+  /**
+   * Resolves only the download form that Vimm itself currently publishes.
+   * If the site's Download control is absent/disabled (for example, a takedown
+   * or an unavailable vault item), this deliberately refuses to synthesize it.
+   */
+  fun resolveDownload(game: VimmXboxGame): DownloadResolution {
+    val pageUrl = URL(game.detailsUrl)
+    val pageConnection = (pageUrl.openConnection() as HttpURLConnection).apply {
+      requestMethod = "GET"
+      connectTimeout = 15_000
+      readTimeout = 25_000
+      instanceFollowRedirects = true
+      setRequestProperty("Accept", "text/html,application/xhtml+xml")
+      setRequestProperty("Accept-Language", "en")
+      setRequestProperty("User-Agent", USER_AGENT)
+    }
+    val html = try {
+      val status = pageConnection.responseCode
+      require(status in 200..299) { "Não foi possível abrir a página do jogo no Vimm (HTTP $status)." }
+      pageConnection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+    } finally {
+      pageConnection.disconnect()
+    }
+
+    require(!Regex("(?i)download unavailable|temporarily offline|not available at the request").containsMatchIn(html)) {
+      "O Vimm informa que o download deste jogo não está disponível."
+    }
+
+    val formMatch = Regex("(?is)<form\\b([^>]*)>(.*?)</form>").findAll(html)
+      .firstOrNull { match -> Regex("(?i)\\bid\\s*=\\s*['\"]dl_form['\"]").containsMatchIn(match.groupValues[1]) }
+      ?: error("A página do Vimm não disponibilizou um formulário de download para este jogo.")
+    val formAttributes = formMatch.groupValues[1]
+    val formBody = formMatch.groupValues[2]
+    val controls = Regex("(?is)<button\\b([^>]*)>(.*?)</button>|<input\\b([^>]*)>")
+    val hasActiveDownloadButton = controls.findAll(formBody).any { match ->
+      val attrs = if (match.groupValues[1].isNotEmpty()) match.groupValues[1] else match.groupValues[3]
+      val label = if (match.groupValues[2].isNotEmpty()) match.groupValues[2].replace(Regex("(?is)<[^>]+>"), " ") else {
+        Regex("(?i)\\bvalue\\s*=\\s*['\"]([^'\"]*)['\"]").find(attrs)?.groupValues?.get(1).orEmpty()
+      }
+      val type = Regex("(?i)\\btype\\s*=\\s*['\"]([^'\"]*)['\"]").find(attrs)?.groupValues?.get(1)?.lowercase(Locale.ROOT)
+      "disabled" !in attrs.lowercase(Locale.ROOT) &&
+        (type == null || type == "submit") &&
+        label.contains("download", ignoreCase = true)
+    }
+    require(hasActiveDownloadButton) {
+      "O Vimm não disponibilizou um botão de download ativo para este jogo. O HakuX não tentará contornar essa indisponibilidade."
+    }
+
+    fun attribute(source: String, name: String): String? =
+      Regex("(?i)\\b$name\\s*=\\s*(?:[\"']([^\"']*)[\"']|([^\\s>]+))")
+        .find(source)?.let { it.groupValues[1].ifBlank { it.groupValues[2] } }
+
+    val action = attribute(formAttributes, "action")?.takeIf { it.isNotBlank() }
+      ?: error("O formulário oficial do Vimm não informou o endereço de download.")
+    val method = (attribute(formAttributes, "method") ?: "GET").uppercase(Locale.ROOT)
+    require(method == "GET" || method == "POST") { "O método de download informado pelo Vimm não é compatível." }
+    val params = Regex("(?is)<input\\b([^>]*)>").findAll(formBody).mapNotNull { match ->
+      val attrs = match.groupValues[1]
+      if (Regex("(?i)\\bdisabled(?:\\s|=|$)").containsMatchIn(attrs)) return@mapNotNull null
+      val name = attribute(attrs, "name") ?: return@mapNotNull null
+      val value = attribute(attrs, "value") ?: ""
+      name to value
+    }.toList()
+    require(params.any { it.first == "mediaId" && it.second.isNotBlank() }) {
+      "O formulário oficial do Vimm não contém um identificador de mídia válido."
+    }
+    val encodedParams = params.joinToString("&") {
+      "${URLEncoder.encode(it.first, Charsets.UTF_8.name())}=${URLEncoder.encode(it.second, Charsets.UTF_8.name())}"
+    }
+    var requestUrl = URL(pageUrl, action)
+    var requestMethod = method
+    var requestBody: String? = if (method == "POST") encodedParams else null
+    if (method == "GET" && encodedParams.isNotBlank()) {
+      requestUrl = URL(requestUrl.toString() + (if (requestUrl.query == null) "?" else "&") + encodedParams)
+    }
+
+    repeat(6) {
+      val connection = (requestUrl.openConnection() as HttpURLConnection).apply {
+        requestMethod = this@VimmXboxRepository.run { requestMethod }
+        connectTimeout = 15_000
+        readTimeout = 30_000
+        instanceFollowRedirects = false
+        setRequestProperty("Accept", "*/*")
+        setRequestProperty("User-Agent", USER_AGENT)
+        setRequestProperty("Referer", game.detailsUrl)
+        if (this@VimmXboxRepository.run { requestMethod } == "POST") {
+          doOutput = true
+          setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
+        }
+      }
+      val status: Int
+      try {
+        if (requestMethod == "POST") {
+          connection.outputStream.use { it.write((requestBody ?: "").toByteArray(Charsets.UTF_8)) }
+        }
+        status = connection.responseCode
+        if (status in 300..399) {
+          val location = connection.getHeaderField("Location")
+            ?: error("O servidor do Vimm redirecionou sem informar o destino.")
+          requestUrl = URL(requestUrl, location)
+          if (status == 303 || ((status == 301 || status == 302) && requestMethod == "POST")) {
+            requestMethod = "GET"
+            requestBody = null
+          }
+          return@repeat
+        }
+        require(status in 200..299) { "O servidor de download do Vimm respondeu HTTP $status." }
+        val disposition = connection.getHeaderField("Content-Disposition").orEmpty()
+        val dispositionName = Regex("(?i)filename\\*?=(?:UTF-8''|\\")?([^;\\"]+)")
+          .find(disposition)?.groupValues?.get(1)?.trim()?.trim('"')
+          ?.let { runCatching { java.net.URLDecoder.decode(it, Charsets.UTF_8.name()) }.getOrDefault(it) }
+        val pathName = requestUrl.path.substringAfterLast('/').takeIf { it.contains('.') }
+        val fileName = (dispositionName ?: pathName)
+          ?.substringAfterLast('/')?.substringAfterLast('\\')
+          ?.takeIf { it.substringAfterLast('.', "").lowercase(Locale.ROOT) in setOf("iso", "xiso", "cso", "cci", "zip", "rar", "7z") }
+          ?: error("O Vimm respondeu, mas não informou um nome de arquivo compatível. Abra os detalhes do jogo para verificar a disponibilidade.")
+        return DownloadResolution(requestUrl.toString(), fileName, connection.contentLengthLong.coerceAtLeast(0L))
+      } finally {
+        connection.disconnect()
+      }
+    }
+    error("O servidor do Vimm excedeu o limite de redirecionamentos.")
+  }
+
   internal fun parseListing(html: String): List<VimmXboxGame> {
     val rows = Regex("(?is)<tr\\b[^>]*>(.*?)</tr>").findAll(html).map { it.groupValues[1] }.toList()
     val candidates = if (rows.isNotEmpty()) rows else listOf(html)
