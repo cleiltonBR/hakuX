@@ -33,6 +33,7 @@ data class TorrentDownload(
   val uploadRate: Int = 0,
   val state: State = State.WAITING_METADATA,
   val error: String? = null,
+  val libraryImported: Boolean = false,
 ) {
   enum class State { WAITING_METADATA, CHECKING, DOWNLOADING, PAUSED, COMPLETED, SEEDING, ERROR }
 }
@@ -48,6 +49,10 @@ object TorrentDownloadManager {
   private val pausedIds = ConcurrentHashMap.newKeySet<String>()
   private val selectedFileIndices = linkedMapOf<String, MutableSet<Int>>()
   private val appliedFileSelections = mutableMapOf<String, Set<Int>>()
+  private val selectedFilePaths = linkedMapOf<String, MutableMap<Int, String>>()
+  private val selectedFileTitles = linkedMapOf<String, MutableMap<Int, String>>()
+  private val importAttempted = linkedMapOf<String, MutableSet<Int>>()
+  private val importedFileIndices = linkedMapOf<String, MutableSet<Int>>()
   private var context: Context? = null
   private var polling = false
 
@@ -71,8 +76,19 @@ object TorrentDownloadManager {
     }
   }
 
-  fun addMagnet(appContext: Context, rawMagnet: String, displayName: String? = null) {
-    addMagnetInternal(appContext.applicationContext, rawMagnet.trim(), persist = true, displayName = displayName)
+  fun addMagnet(
+    appContext: Context,
+    rawMagnet: String,
+    displayName: String? = null,
+    relativePath: String? = null,
+  ) {
+    addMagnetInternal(
+      appContext.applicationContext,
+      rawMagnet.trim(),
+      persist = true,
+      displayName = displayName,
+      relativePath = relativePath,
+    )
   }
 
   @Synchronized
@@ -81,6 +97,10 @@ object TorrentDownloadManager {
     magnet: String,
     persist: Boolean,
     displayName: String? = null,
+    relativePath: String? = null,
+    restoredPaths: Map<Int, String> = emptyMap(),
+    restoredTitles: Map<Int, String> = emptyMap(),
+    restoredImported: Set<Int> = emptySet(),
   ) {
     require(magnet.startsWith("magnet:?", ignoreCase = true)) { "Informe um link magnet válido." }
     val hash = extractBtih(magnet)
@@ -89,7 +109,14 @@ object TorrentDownloadManager {
     if (sources.containsKey(hash)) {
       if (requestedFiles.isNotEmpty()) {
         val selected = selectedFileIndices.getOrPut(hash) { linkedSetOf() }
-        if (selected.addAll(requestedFiles)) {
+        val selectionChanged = selected.addAll(requestedFiles)
+        if (!relativePath.isNullOrBlank()) {
+          val paths = selectedFilePaths.getOrPut(hash) { linkedMapOf() }
+          requestedFiles.forEach { paths[it] = relativePath }
+          val titles = selectedFileTitles.getOrPut(hash) { linkedMapOf() }
+          requestedFiles.forEach { index -> displayName?.let { titles[index] = it } }
+        }
+        if (selectionChanged) {
           val mergedMagnet = magnetWithSelectedFiles(sources[hash] ?: magnet, selected)
           sources[hash] = mergedMagnet
           mutableDownloads.value = mutableDownloads.value.map {
@@ -97,8 +124,8 @@ object TorrentDownloadManager {
           }
           val existingHandle = handles[hash] ?: engine.find(Sha1Hash.parseHex(hash))?.also { handles[hash] = it }
           if (existingHandle != null && existingHandle.isValid()) applySelectedFiles(hash, existingHandle)
-          if (persist) persist()
         }
+        if (persist) persist()
       }
       return
     }
@@ -106,8 +133,26 @@ object TorrentDownloadManager {
     engine.download(magnet, downloadDirectory(appContext), TorrentFlags.AUTO_MANAGED)
     sources[hash] = magnet
     if (requestedFiles.isNotEmpty()) selectedFileIndices[hash] = requestedFiles.toMutableSet()
+    if (!relativePath.isNullOrBlank()) {
+      selectedFilePaths[hash] = requestedFiles.associateWith { relativePath }.toMutableMap()
+      displayName?.let { title -> selectedFileTitles[hash] = requestedFiles.associateWith { title }.toMutableMap() }
+    }
+    if (restoredPaths.isNotEmpty()) selectedFilePaths[hash] = restoredPaths.toMutableMap()
+    if (restoredTitles.isNotEmpty()) selectedFileTitles[hash] = restoredTitles.toMutableMap()
+    if (restoredImported.isNotEmpty()) {
+      importedFileIndices[hash] = restoredImported.toMutableSet()
+      importAttempted[hash] = restoredImported.toMutableSet()
+    }
+    val alreadyImported = selectedFilePaths[hash]?.let { paths ->
+      paths.isNotEmpty() && importedFileIndices[hash]?.size == paths.size
+    } ?: false
     mutableDownloads.value = mutableDownloads.value.filterNot { it.id == hash } +
-      TorrentDownload(hash, displayName?.takeIf { it.isNotBlank() } ?: "Obtendo metadados…", magnet)
+      TorrentDownload(
+        hash,
+        displayName?.takeIf { it.isNotBlank() } ?: "Obtendo metadados…",
+        magnet,
+        libraryImported = alreadyImported,
+      )
     if (persist) persist()
     startService(appContext)
     startPolling()
@@ -155,6 +200,10 @@ object TorrentDownloadManager {
     sources.remove(id)
     selectedFileIndices.remove(id)
     appliedFileSelections.remove(id)
+    selectedFilePaths.remove(id)
+    selectedFileTitles.remove(id)
+    importAttempted.remove(id)
+    importedFileIndices.remove(id)
     mutableDownloads.value = mutableDownloads.value.filterNot { it.id == id }
     persist()
   }
