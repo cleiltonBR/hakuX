@@ -105,9 +105,9 @@ object VimmXboxRepository {
       "O Vimm informa que o download deste jogo não está disponível."
     }
 
-    val formMatch = Regex("(?is)<form\\b([^>]*)>(.*?)</form>").findAll(html)
+    val formMatch = Regex("""(?is)<form\b([^>]*)>(.*?)</form>""").findAll(html)
       .firstOrNull { match ->
-        Regex("(?i)\\bid\\s*=\\s*['\\"](?:dl_form|download_form)['\\"]")
+        Regex("""(?i)\bid\s*=\s*['"](?:dl_form|download_form)['"]""")
           .containsMatchIn(match.groupValues[1])
       }
       ?: error("A página do Vimm não disponibilizou um formulário oficial de download para este jogo.")
