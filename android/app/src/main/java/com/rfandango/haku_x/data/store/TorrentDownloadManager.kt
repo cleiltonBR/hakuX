@@ -154,7 +154,14 @@ object TorrentDownloadManager {
             if (it.id == hash) it.copy(source = mergedMagnet) else it
           }
           val existingHandle = handles[hash] ?: engine.find(Sha1Hash.parseHex(hash))?.also { handles[hash] = it }
-          if (existingHandle != null && existingHandle.isValid()) applySelectedFiles(hash, existingHandle)
+          if (existingHandle != null && existingHandle.isValid()) {
+            applySelectedFiles(hash, existingHandle)
+            pausedIds.remove(hash)
+            existingHandle.resume()
+            updateLocal(hash) { it.copy(state = TorrentDownload.State.DOWNLOADING, libraryImported = false, error = null) }
+            startService(appContext)
+            startPolling()
+          }
         }
         if (persist) persist()
       }
@@ -290,6 +297,16 @@ object TorrentDownloadManager {
                 }
                 if (state == TorrentDownload.State.SEEDING || state == TorrentDownload.State.COMPLETED) {
                   importSelectedFiles(id)
+                  val hasLibraryTarget = synchronized(this@TorrentDownloadManager) {
+                    !selectedFilePaths[id].isNullOrEmpty()
+                  }
+                  if (hasLibraryTarget) {
+                    handle.pause()
+                    pausedIds.add(id)
+                    updateLocal(id) {
+                      it.copy(state = TorrentDownload.State.COMPLETED, downloadRate = 0, uploadRate = 0)
+                    }
+                  }
                 }
               }
             }.onFailure { error ->
