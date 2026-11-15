@@ -327,7 +327,7 @@ object TorrentDownloadManager {
       try {
         val file = locateDownloadedFile(relativePath, downloadDirectory(appContext))
           ?: error("O torrent terminou, mas o arquivo selecionado não foi localizado no armazenamento.")
-        val title = titles[index]?.ifBlank { null } ?: file.nameWithoutExtension
+        val title = titles[index]?.takeIf { it.isNotBlank() } ?: file.nameWithoutExtension
         ArchiveXboxDownloads.importTorrentFile(appContext, title, file)
         synchronized(this) { importedFileIndices.getOrPut(id) { linkedSetOf() }.add(index) }
         persist()
@@ -348,7 +348,7 @@ object TorrentDownloadManager {
 
   private fun locateDownloadedFile(relativePath: String, directory: File): File? {
     val root = directory.canonicalFile
-    val safePath = relativePath.replace('\\\\', '/').removePrefix("./").trimStart('/')
+    val safePath = relativePath.replace('\\', '/').removePrefix("./").trimStart('/')
     val candidate = File(root, safePath).canonicalFile
     if (!candidate.path.startsWith(root.path + File.separator)) return null
     if (candidate.isFile) return candidate
