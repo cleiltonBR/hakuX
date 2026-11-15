@@ -208,6 +208,58 @@ object ArchiveXboxDownloads {
     return true
   }
 
+  /**
+   * Imports a completed Minerva torrent file into the configured game folder.
+   * Archive files are extracted there so the library scanner can discover the game.
+   */
+  suspend fun importTorrentFile(context: Context, title: String, source: File) = withContext(Dispatchers.IO) {
+    val app = context.applicationContext
+    require(source.isFile && source.length() > 0L) { "O arquivo recebido pelo torrent não foi localizado ou está vazio." }
+    val folderUri = AppPrefs(app).downloadFolderUri
+      ?: error("Escolha uma pasta de destino na tela Downloads antes de importar o jogo.")
+    check(Storage.isFolderReady(app, folderUri)) { "A pasta de destino da Biblioteca não está disponível." }
+    val hasWrite = app.contentResolver.persistedUriPermissions.any { it.uri == folderUri && it.isWritePermission }
+    check(hasWrite) { "O HakuX não tem permissão de gravação na pasta da Biblioteca. Selecione-a novamente." }
+    val root = DocumentFile.fromTreeUri(app, folderUri)
+      ?: error("Não foi possível abrir a pasta da Biblioteca.")
+    check(root.canWrite()) { "A pasta da Biblioteca não permite gravação." }
+
+    val extension = source.extension.lowercase(Locale.ROOT)
+    if (extension in ARCHIVE_EXTENSIONS) {
+      val stagingArchive = File(app.cacheDir, "hakux-minerva-${UUID.randomUUID()}.$extension")
+      val stagingDirectory = File(app.cacheDir, "hakux-minerva-extract-${UUID.randomUUID()}")
+      var extractedFolder: DocumentFile? = null
+      try {
+        source.inputStream().use { input ->
+          FileOutputStream(stagingArchive).use { output -> input.copyTo(output, 128 * 1024) }
+        }
+        GameArchiveExtractor.extract(stagingArchive, stagingDirectory)
+        val folderName = uniqueName(root, safeFolderName(title))
+        extractedFolder = root.createDirectory(folderName)
+          ?: error("Não foi possível criar a pasta do jogo na Biblioteca.")
+        try {
+          copyExtractedTree(app, stagingDirectory, extractedFolder!!)
+        } catch (error: Exception) {
+          deleteTree(extractedFolder!!)
+          extractedFolder = null
+          throw error
+        }
+      } finally {
+        extractedFolder = null
+        stagingArchive.delete()
+        stagingDirectory.deleteRecursively()
+      }
+    } else {
+      val fileName = uniqueName(root, source.name)
+      val outputFile = root.createFile("application/octet-stream", fileName)
+        ?: error("Não foi possível criar o arquivo do jogo na Biblioteca.")
+      app.contentResolver.openOutputStream(outputFile.uri, "w")?.use { output ->
+        source.inputStream().use { input -> input.copyTo(output, 128 * 1024) }
+      } ?: error("Não foi possível gravar o jogo na pasta da Biblioteca.")
+    }
+    mutableLibraryRefresh.tryEmit(Unit)
+  }
+
   /** Adds a download to the in-memory FIFO queue. Only one transfer writes at a time. */
   @Synchronized
   fun enqueue(context: Context, identifier: String, title: String, option: ArchiveDownloadOption) {
