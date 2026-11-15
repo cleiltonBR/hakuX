@@ -277,7 +277,7 @@ fun StoreScreen() {
         Text("Buscando jogos do Xbox Clássico…", modifier = Modifier.padding(top = 12.dp))
       }
     } else {
-      LazyVerticalGrid(state = gridState, columns = GridCells.Adaptive(minSize = 300.dp), modifier = Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(9.dp), verticalArrangement = Arrangement.spacedBy(9.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 14.dp)) {
+      LazyVerticalGrid(state = gridState, columns = GridCells.Fixed(2), modifier = Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(9.dp), verticalArrangement = Arrangement.spacedBy(9.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 14.dp)) {
         items(visibleGames, key = { game -> game.archiveFileName?.let { "${game.identifier}:$it" } ?: "${game.identifier}:${game.title}" }) { game ->
           Card(
             modifier = Modifier.fillMaxWidth(),
