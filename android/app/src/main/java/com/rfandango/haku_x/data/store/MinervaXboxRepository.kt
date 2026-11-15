@@ -155,7 +155,7 @@ object MinervaXboxRepository {
           }
         }
       }
-      val path = row.optString("full_path").replace('\\\\', '/')
+      val path = row.optString("full_path").replace('\\', '/')
       return MinervaTorrentSource(selectedMagnet, path, fileIndex)
     } finally {
       connection.disconnect()
