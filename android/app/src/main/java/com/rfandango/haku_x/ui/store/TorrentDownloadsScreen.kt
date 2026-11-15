@@ -81,6 +81,11 @@ internal fun TorrentDownloadsScreen(onBack: () -> Unit) {
     }
     OutlinedTextField(value = magnet, onValueChange = { magnet = it }, modifier = Modifier.fillMaxWidth(),
       label = { Text("Link magnet") }, placeholder = { Text("magnet:?xt=urn:btih:…") }, singleLine = true)
+    Text(
+      "Para jogos da Minerva, use o botão Download no próprio card. O HakuX localiza o magnet e seleciona somente o arquivo escolhido; este campo aceita apenas links magnet, não endereços de páginas.",
+      color = Color(0xFFB9C5BC),
+      style = MaterialTheme.typography.labelSmall,
+    )
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
       Button(
         onClick = {
