@@ -187,9 +187,9 @@ fun StoreScreen() {
           Text("X", color = Color.White, style = MaterialTheme.typography.headlineLarge)
         }
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-          Text("Loja", style = MaterialTheme.typography.headlineMedium, color = Color.White)
-          Text("XBOX CLÁSSICO", style = MaterialTheme.typography.titleMedium, color = Color(0xFF39FF14))
-          Text("Catálogo online · ${results.size} jogos carregados", style = MaterialTheme.typography.labelSmall, color = Color(0xFFB9C5BC))
+          Text("Loja", style = MaterialTheme.typography.headlineMedium, color = Color.White, maxLines = 1, softWrap = false)
+          Text("XBOX CLÁSSICO", style = MaterialTheme.typography.titleMedium, color = Color(0xFF39FF14), maxLines = 1, softWrap = false)
+          Text("Catálogo online · ${results.size} jogos carregados", style = MaterialTheme.typography.labelSmall, color = Color(0xFFB9C5BC), maxLines = 1, softWrap = false)
         }
       }
       Row(
