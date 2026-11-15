@@ -24,6 +24,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -35,12 +36,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.rfandango.haku_x.data.XboxCoverCache
 import com.rfandango.haku_x.data.store.MinervaXboxEntry
 import com.rfandango.haku_x.data.store.MinervaXboxRepository
+import com.rfandango.haku_x.data.store.TorrentDownloadManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -48,11 +49,12 @@ import kotlinx.coroutines.withContext
 @Composable
 internal fun MinervaXboxNativeCatalog(onBack: () -> Unit) {
   val context = LocalContext.current
-  val uriHandler = LocalUriHandler.current
+  val torrentDownloads by TorrentDownloadManager.downloads.collectAsState()
   val scope = rememberCoroutineScope()
   var query by remember { mutableStateOf("") }
   var entries by remember { mutableStateOf<List<MinervaXboxEntry>>(emptyList()) }
   var loading by remember { mutableStateOf(false) }
+  var downloadingId by remember { mutableStateOf<String?>(null) }
   var message by remember { mutableStateOf("Carregando catálogo Redump Xbox do Minerva Archive…") }
 
   fun loadCatalog() {
@@ -82,7 +84,10 @@ internal fun MinervaXboxNativeCatalog(onBack: () -> Unit) {
     else entries.filter { it.title.contains(term, ignoreCase = true) || it.fileName.contains(term, ignoreCase = true) }
   }
 
-  LaunchedEffect(Unit) { loadCatalog() }
+  LaunchedEffect(Unit) {
+    TorrentDownloadManager.restore(context)
+    loadCatalog()
+  }
 
   Column(
     modifier = Modifier.fillMaxSize()
@@ -114,11 +119,9 @@ internal fun MinervaXboxNativeCatalog(onBack: () -> Unit) {
     )
 
     Text(message, color = Color(0xFFBFE8C5), style = MaterialTheme.typography.bodySmall)
-    Text(
-      "O Minerva disponibiliza torrents e links magnet. O botão abre a página oficial do item para você escolher a opção de download; o gerenciador HTTP do HakuX não baixa torrents diretamente.",
-      color = Color(0xFFFFD27A),
-      style = MaterialTheme.typography.labelSmall,
-    )
+    if (downloadingId != null) {
+      Text("Localizando o torrent oficial e preparando o download seletivo…", color = Color(0xFFFFD27A), style = MaterialTheme.typography.labelSmall)
+    }
 
     if (loading && entries.isEmpty()) {
       Box(modifier = Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
@@ -166,13 +169,42 @@ internal fun MinervaXboxNativeCatalog(onBack: () -> Unit) {
                 style = MaterialTheme.typography.labelSmall,
                 maxLines = 1,
               )
+              val queued = torrentDownloads.firstOrNull { it.name.equals(entry.title, ignoreCase = true) }
               Button(
-                onClick = { uriHandler.openUri(entry.detailsUrl) },
+                onClick = {
+                  if (downloadingId == null) {
+                    scope.launch {
+                      downloadingId = entry.id
+                      message = "Localizando o torrent de ${entry.title} no índice oficial do Minerva…"
+                      try {
+                        val source = withContext(Dispatchers.IO) {
+                          MinervaXboxRepository.resolveTorrent(entry)
+                        }
+                        withContext(Dispatchers.IO) {
+                          TorrentDownloadManager.addMagnet(context, source.magnet, entry.title)
+                        }
+                        message = "Download de ${entry.title} enviado à fila interna. Apenas este arquivo foi selecionado."
+                      } catch (error: Exception) {
+                        message = error.message ?: "Não foi possível iniciar o torrent deste jogo."
+                      } finally {
+                        downloadingId = null
+                      }
+                    }
+                  }
+                },
                 modifier = Modifier.fillMaxWidth(),
+                enabled = downloadingId == null && queued == null,
                 shape = RoundedCornerShape(18.dp),
                 contentPadding = PaddingValues(horizontal = 4.dp, vertical = 5.dp),
               ) {
-                Text("↓ Download", style = MaterialTheme.typography.labelSmall)
+                Text(
+                  when {
+                    downloadingId == entry.id -> "Preparando…"
+                    queued != null -> "Na fila"
+                    else -> "↓ Download"
+                  },
+                  style = MaterialTheme.typography.labelSmall,
+                )
               }
             }
           }
