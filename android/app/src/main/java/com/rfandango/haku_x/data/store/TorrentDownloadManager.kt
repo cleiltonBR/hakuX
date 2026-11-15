@@ -68,12 +68,17 @@ object TorrentDownloadManager {
     }
   }
 
-  fun addMagnet(appContext: Context, rawMagnet: String) {
-    addMagnetInternal(appContext, rawMagnet.trim(), persist = true)
+  fun addMagnet(appContext: Context, rawMagnet: String, displayName: String? = null) {
+    addMagnetInternal(appContext.applicationContext, rawMagnet.trim(), persist = true, displayName = displayName)
   }
 
   @Synchronized
-  private fun addMagnetInternal(appContext: Context, magnet: String, persist: Boolean) {
+  private fun addMagnetInternal(
+    appContext: Context,
+    magnet: String,
+    persist: Boolean,
+    displayName: String? = null,
+  ) {
     require(magnet.startsWith("magnet:?", ignoreCase = true)) { "Informe um link magnet válido." }
     val hash = extractBtih(magnet)
     require(hash != null) { "O magnet precisa conter um identificador btih hexadecimal válido." }
@@ -82,7 +87,7 @@ object TorrentDownloadManager {
     engine.download(magnet, downloadDirectory(appContext), TorrentFlags.AUTO_MANAGED)
     sources[hash] = magnet
     mutableDownloads.value = mutableDownloads.value.filterNot { it.id == hash } +
-      TorrentDownload(hash, "Obtendo metadados…", magnet)
+      TorrentDownload(hash, displayName?.takeIf { it.isNotBlank() } ?: "Obtendo metadados…", magnet)
     if (persist) persist()
     startService(appContext)
     startPolling()
