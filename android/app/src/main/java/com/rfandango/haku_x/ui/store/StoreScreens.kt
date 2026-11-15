@@ -191,6 +191,12 @@ fun StoreScreen() {
           Text("XBOX CLÁSSICO", style = MaterialTheme.typography.titleMedium, color = Color(0xFF39FF14))
           Text("Catálogo online · ${results.size} jogos carregados", style = MaterialTheme.typography.labelSmall, color = Color(0xFFB9C5BC))
         }
+      }
+      Row(
+        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+      ) {
         androidx.compose.material3.OutlinedButton(
           onClick = { selectedStoreTab = "vimm" },
           shape = RoundedCornerShape(18.dp),
