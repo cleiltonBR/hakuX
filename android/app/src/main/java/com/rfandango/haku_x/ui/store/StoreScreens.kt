@@ -204,6 +204,18 @@ fun StoreScreen() {
           }
         }
         androidx.compose.material3.OutlinedButton(
+          onClick = { selectedStoreTab = "minerva" },
+          shape = RoundedCornerShape(18.dp),
+          border = BorderStroke(1.dp, Color(0xFF39FF14)),
+          contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 9.dp, vertical = 8.dp),
+        ) {
+          Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text("M", color = Color(0xFF39FF14), style = MaterialTheme.typography.titleLarge)
+            Text("Minerva", color = Color.White, style = MaterialTheme.typography.labelSmall)
+            Text("Archive", color = Color.White, style = MaterialTheme.typography.labelSmall)
+          }
+        }
+        androidx.compose.material3.OutlinedButton(
           onClick = { selectedStoreTab = "link" },
           shape = RoundedCornerShape(18.dp),
           border = BorderStroke(1.dp, Color(0xFF39FF14)),
@@ -363,6 +375,8 @@ fun StoreScreen() {
         TextButton(onClick = { selectedStoreTab = "catalog" }) { Text("Voltar", color = Color(0xFF39FF14)) }
       }
       VimmXboxNativeCatalog()
+    } else if (selectedStoreTab == "minerva") {
+      MinervaXboxNativeCatalog(onBack = { selectedStoreTab = "catalog" })
     } else {
       Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
         Text("Importar por link", modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleLarge, color = Color.White)
