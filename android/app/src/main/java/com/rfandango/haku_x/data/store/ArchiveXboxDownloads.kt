@@ -234,6 +234,9 @@ object ArchiveXboxDownloads {
           FileOutputStream(stagingArchive).use { output -> input.copyTo(output, 128 * 1024) }
         }
         GameArchiveExtractor.extract(stagingArchive, stagingDirectory)
+        check(stagingDirectory.walkTopDown().any { it.isFile }) {
+          "O arquivo torrent não continha arquivos de jogo extraíveis."
+        }
         val folderName = uniqueName(root, safeFolderName(title))
         extractedFolder = root.createDirectory(folderName)
           ?: error("Não foi possível criar a pasta do jogo na Biblioteca.")
