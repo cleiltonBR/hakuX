@@ -10,8 +10,9 @@ data class VimmXboxGame(
   val vaultId: Int,
   val title: String,
   val regions: String,
+  val detailsPath: String = "/vault/$vaultId/",
 ) {
-  val detailsUrl: String get() = "https://vimm.net/vault/$vaultId"
+  val detailsUrl: String get() = URL(URL("https://vimm.net/"), detailsPath).toString()
 }
 
 object VimmXboxRepository {
@@ -181,14 +182,15 @@ object VimmXboxRepository {
     val rows = Regex("(?is)<tr\\b[^>]*>(.*?)</tr>").findAll(html).map { it.groupValues[1] }.toList()
     val candidates = if (rows.isNotEmpty()) rows else listOf(html)
     val found = LinkedHashMap<Int, VimmXboxGame>()
-    val anchorPattern = Regex("(?is)<a\\b([^>]*?)href\\s*=\\s*[\"']\\s*/vault/(\\d+)/?[^>]*>(.*?)</a>")
+    val anchorPattern = Regex("""(?is)<a\b([^>]*?\bhref\s*=\s*["']([^"']*?/vault/(\d+)/?[^"']*)["'][^>]*)>(.*?)</a>""")
     for (row in candidates) {
       for (match in anchorPattern.findAll(row)) {
         val attributes = match.groupValues[1]
         if (Regex("(?i)display\\s*:\\s*none").containsMatchIn(attributes)) continue
-        val id = match.groupValues[2].toIntOrNull() ?: continue
+        val href = match.groupValues[2]
+        val id = match.groupValues[3].toIntOrNull() ?: continue
         if (id == 999999 || found.containsKey(id)) continue
-        val title = cleanText(match.groupValues[3])
+        val title = cleanText(match.groupValues[4])
         if (title.isBlank() || title == "9") continue
         val regionTitles = Regex("(?is)<img\\b[^>]*title\\s*=\\s*[\"']([^\"']+)[\"'][^>]*>")
           .findAll(row)
@@ -196,7 +198,12 @@ object VimmXboxRepository {
           .filter { it.isNotBlank() && it.length < 40 }
           .distinct()
           .joinToString(", ")
-        found[id] = VimmXboxGame(id, title, regionTitles.ifBlank { "Região não informada" })
+        val detailsPath = runCatching {
+          val resolved = URL(URL("https://vimm.net/"), href)
+          require(resolved.protocol == "https" && resolved.host.equals("vimm.net", ignoreCase = true))
+          resolved.file.ifBlank { "/vault/$id/" }
+        }.getOrElse { "/vault/$id/" }
+        found[id] = VimmXboxGame(id, title, regionTitles.ifBlank { "Região não informada" }, detailsPath)
       }
     }
     return found.values.toList()
