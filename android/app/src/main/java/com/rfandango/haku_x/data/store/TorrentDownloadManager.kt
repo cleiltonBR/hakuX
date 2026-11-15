@@ -251,7 +251,7 @@ object TorrentDownloadManager {
   private fun magnetWithSelectedFiles(magnet: String, selected: Set<Int>): String {
     val withoutSelection = magnet.replace(Regex("(?i)([?&])so=[^&]*"), "")
     val separator = if (withoutSelection.contains("?")) "&" else "?"
-    return "$withoutSelection\${separator}so=\${selected.sorted().joinToString(",")}"
+    return "$withoutSelection${separator}so=${selected.sorted().joinToString(",")}"
   }
 
   private fun extractBtih(magnet: String): String? =
