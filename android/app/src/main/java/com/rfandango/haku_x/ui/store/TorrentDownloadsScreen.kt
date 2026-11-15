@@ -111,14 +111,26 @@ internal fun TorrentDownloadsScreen(onBack: () -> Unit) {
     if (downloads.isEmpty()) Text("Nenhum torrent na fila.", color = Color(0xFFB9C5BC))
     else LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
       items(downloads, key = { it.id }) { item ->
-        TorrentDownloadCard(item, { TorrentDownloadManager.pause(item.id) }, { TorrentDownloadManager.resume(item.id) }, { TorrentDownloadManager.remove(item.id) })
+        TorrentDownloadCard(
+          item,
+          { TorrentDownloadManager.pause(item.id) },
+          { TorrentDownloadManager.resume(item.id) },
+          { TorrentDownloadManager.remove(item.id) },
+          { TorrentDownloadManager.retryLibraryImport(item.id) },
+        )
       }
     }
   }
 }
 
 @Composable
-private fun TorrentDownloadCard(item: TorrentDownload, onPause: () -> Unit, onResume: () -> Unit, onRemove: () -> Unit) {
+private fun TorrentDownloadCard(
+  item: TorrentDownload,
+  onPause: () -> Unit,
+  onResume: () -> Unit,
+  onRemove: () -> Unit,
+  onRetryImport: () -> Unit,
+) {
   val progress = if (item.total > 0L) (item.done.toFloat() / item.total).coerceIn(0f, 1f) else 0f
   Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF0B120E))) {
     Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -126,8 +138,14 @@ private fun TorrentDownloadCard(item: TorrentDownload, onPause: () -> Unit, onRe
       Text("${item.state.name} · ${formatTorrentBytes(item.done)} / ${if (item.total > 0L) formatTorrentBytes(item.total) else "—"}", color = Color(0xFFB9C5BC), style = MaterialTheme.typography.labelSmall)
       LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
       Text("↓ ${formatTorrentBytes(item.downloadRate.toLong())}/s   ↑ ${formatTorrentBytes(item.uploadRate.toLong())}/s", color = Color(0xFF9BA99E), style = MaterialTheme.typography.labelSmall)
+      if (item.libraryImported) {
+        Text("Jogo adicionado à Biblioteca", color = Color(0xFF39FF14), style = MaterialTheme.typography.labelSmall)
+      }
       item.error?.let { Text(it, color = Color(0xFFFFB4AB), style = MaterialTheme.typography.bodySmall) }
       Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (!item.libraryImported && item.error?.startsWith("Torrent baixado, mas não foi possível adicionar à Biblioteca") == true) {
+          TextButton(onClick = onRetryImport) { Text("Tentar importar") }
+        }
         if (item.state == TorrentDownload.State.PAUSED) TextButton(onClick = onResume) { Text("Retomar") }
         else if (item.state != TorrentDownload.State.COMPLETED && item.state != TorrentDownload.State.SEEDING) TextButton(onClick = onPause) { Text("Pausar") }
         TextButton(onClick = onRemove) { Text("Remover") }
