@@ -265,12 +265,6 @@ fun StoreScreen() {
         Box(Modifier.width(1.dp).height(22.dp).background(Color(0xFF376B3D)))
         Text("♜  ${results.size} carregados", color = Color(0xFFBFE8C5), style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(0.85f), maxLines = 1)
       }
-    } else {
-      Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text("Importar por link", modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleLarge, color = Color.White)
-        TextButton(onClick = { selectedStoreTab = "catalog" }) { Text("Voltar ao catálogo", color = Color(0xFF39FF14)) }
-      }
-    }
     if (loading && results.isEmpty()) {
       Column(modifier = Modifier.fillMaxWidth().weight(1f), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
         CircularProgressIndicator()
@@ -349,6 +343,10 @@ fun StoreScreen() {
     }
     if (loading && results.isNotEmpty()) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
     } else {
+      Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text("Importar por link", modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleLarge, color = Color.White)
+        TextButton(onClick = { selectedStoreTab = "catalog" }) { Text("Voltar ao catálogo", color = Color(0xFF39FF14)) }
+      }
       CustomLinkBrowser(
         url = customUrl,
         onUrlChange = { customUrl = it },
