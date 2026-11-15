@@ -12,7 +12,8 @@ data class VimmXboxGame(
   val regions: String,
   val detailsPath: String = "/vault/$vaultId/",
 ) {
-  val detailsUrl: String get() = URL(URL("https://vimm.net/"), detailsPath).toString()
+  // Vimm's canonical details route uses the details action and numeric media ID.
+  val detailsUrl: String get() = "https://vimm.net/vault/?p=details&id=$vaultId"
 }
 
 object VimmXboxRepository {
