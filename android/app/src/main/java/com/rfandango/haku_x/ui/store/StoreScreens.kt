@@ -14,6 +14,11 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.documentfile.provider.DocumentFile
 import androidx.core.content.ContextCompat
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.Color
+import androidx.compose.material3.CardDefaults
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -164,56 +169,61 @@ fun StoreScreen() {
   }
 
   if (detailsGame == null) {
-  Column(modifier = Modifier.fillMaxSize().padding(horizontal = 5.dp, vertical = 3.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+  Column(modifier = Modifier.fillMaxSize().background(Color(0xFF050806)).padding(horizontal = 10.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
       FilterChip(modifier = Modifier.height(32.dp), selected = selectedStoreTab == "catalog", onClick = { selectedStoreTab = "catalog" }, label = { Text("Catálogo Xbox", style = MaterialTheme.typography.labelMedium) })
       FilterChip(modifier = Modifier.height(32.dp), selected = selectedStoreTab == "link", onClick = { selectedStoreTab = "link" }, label = { Text("Importar por link", style = MaterialTheme.typography.labelMedium) })
     }
     if (selectedStoreTab == "catalog") {
     Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
       if (!landscape) {
-        Text("Biblioteca Xbox Clássico", style = MaterialTheme.typography.titleLarge)
-        Text("Catálogo online · ${results.size} jogos carregados", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Loja Xbox Clássico", style = MaterialTheme.typography.headlineSmall, color = Color(0xFFE8F5E9))
+        Text("CATÁLOGO ONLINE  ·  ${results.size} jogos carregados", style = MaterialTheme.typography.labelSmall, color = Color(0xFF9AA79D))
       }
     }
     Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
-      OutlinedTextField(value = query, onValueChange = { query = it }, modifier = Modifier.weight(1f).height(56.dp), singleLine = true, textStyle = MaterialTheme.typography.bodySmall, label = { Text("Pesquisar", style = MaterialTheme.typography.labelSmall) }, placeholder = { Text("Nome do jogo", style = MaterialTheme.typography.bodySmall) })
-      Button(modifier = Modifier.height(36.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 0.dp), onClick = { loadCatalog(reset = true, term = query.trim()) }, enabled = !loading && (query.isBlank() || query.trim().length >= 2)) { Text("Buscar", style = MaterialTheme.typography.labelMedium) }
+      OutlinedTextField(value = query, onValueChange = { query = it }, modifier = Modifier.weight(1f).height(58.dp), singleLine = true, shape = RoundedCornerShape(28.dp), textStyle = MaterialTheme.typography.bodyMedium, label = { Text("Pesquisar jogos", style = MaterialTheme.typography.labelSmall) }, placeholder = { Text("Nome do jogo...", style = MaterialTheme.typography.bodySmall) })
+      Button(modifier = Modifier.height(48.dp), shape = RoundedCornerShape(24.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 0.dp), onClick = { loadCatalog(reset = true, term = query.trim()) }, enabled = !loading && (query.isBlank() || query.trim().length >= 2)) { Text("Buscar", style = MaterialTheme.typography.labelMedium) }
     }
-    Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
       genres.forEach { genre -> FilterChip(modifier = Modifier.height(28.dp), selected = selectedGenre == genre, onClick = { selectedGenre = genre }, label = { Text(genre, style = MaterialTheme.typography.labelSmall) }) }
     }
-    Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
       FilterChip(modifier = Modifier.height(28.dp), selected = favoritesOnly, onClick = { favoritesOnly = !favoritesOnly }, label = { Text("♥ Favoritos", style = MaterialTheme.typography.labelSmall) })
       FilterChip(modifier = Modifier.height(28.dp), selected = alphabetical, onClick = { alphabetical = !alphabetical }, label = { Text(if (alphabetical) "A–Z" else "Ordem", style = MaterialTheme.typography.labelSmall) })
       TextButton(onClick = { selectedGenre = "Todos"; favoritesOnly = false; alphabetical = false; query = ""; if (loadedQuery.isNotEmpty()) loadCatalog(true, "") }, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp, vertical = 0.dp)) { Text("Limpar", style = MaterialTheme.typography.labelSmall) }
     }
-    Text(message, style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp), color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+    Text(message, modifier = Modifier.fillMaxWidth().background(Color(0xFF0D1710), RoundedCornerShape(14.dp)).padding(horizontal = 12.dp, vertical = 9.dp), style = MaterialTheme.typography.labelSmall, color = Color(0xFFC8E6C9), maxLines = 1)
     if (loading && results.isEmpty()) {
       Column(modifier = Modifier.fillMaxWidth().weight(1f), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
         CircularProgressIndicator()
         Text("Buscando jogos do Xbox Clássico…", modifier = Modifier.padding(top = 12.dp))
       }
     } else {
-      LazyVerticalGrid(state = gridState, columns = GridCells.Adaptive(minSize = 92.dp), modifier = Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+      LazyVerticalGrid(state = gridState, columns = GridCells.Adaptive(minSize = 154.dp), modifier = Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(9.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
         items(visibleGames, key = { game -> game.archiveFileName?.let { "${game.identifier}:$it" } ?: "${game.identifier}:${game.title}" }) { game ->
-          Card(modifier = Modifier.fillMaxWidth()) {
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+          Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF142219)),
+            border = BorderStroke(1.dp, Color(0xFF294A32)),
+          ) {
+            Column(modifier = Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
               ArchiveGameCover(game = game, onClick = { detailsGame = game })
-              Text(game.title, modifier = Modifier.padding(horizontal = 4.dp), style = MaterialTheme.typography.labelMedium, maxLines = 2, minLines = 2)
-              Text(game.genre + (game.year?.let { " · $it" } ?: ""), modifier = Modifier.padding(horizontal = 4.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
-              Text(game.region, modifier = Modifier.padding(horizontal = 4.dp), style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp), color = MaterialTheme.colorScheme.primary, maxLines = 1)
-              Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 1.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                TextButton(contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 3.dp, vertical = 0.dp), onClick = {
+              Text(game.title, modifier = Modifier.padding(horizontal = 2.dp), style = MaterialTheme.typography.titleSmall, color = Color(0xFFE8F5E9), maxLines = 2, minLines = 2)
+              Text(game.genre + (game.year?.let { " · $it" } ?: ""), modifier = Modifier.padding(horizontal = 2.dp), style = MaterialTheme.typography.labelMedium, color = Color(0xFFB4B8BC), maxLines = 1)
+              Text("● " + game.region, modifier = Modifier.padding(horizontal = 2.dp), style = MaterialTheme.typography.labelSmall, color = Color(0xFF39FF14), maxLines = 1)
+              Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                TextButton(modifier = Modifier.weight(0.7f), contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 2.dp, vertical = 0.dp), onClick = {
                   val favoriteKey = game.archiveFileName?.let { "${game.identifier}:$it" } ?: game.identifier
                   toggleFavorite(favoriteKey)
                 }) {
                   val favoriteKey = game.archiveFileName?.let { "${game.identifier}:$it" } ?: game.identifier
-                  Text(if (favoriteKey in favorites) "♥" else "♡")
+                  Text(if (favoriteKey in favorites) "♥ Favorito" else "♡ Favorito", color = if (favoriteKey in favorites) Color(0xFFFF5252) else Color(0xFFE8F5E9), style = MaterialTheme.typography.labelSmall)
                 }
-                TextButton(contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 3.dp, vertical = 0.dp), onClick = { uriHandler.openUri(game.detailsUrl) }) { Text("Info", style = MaterialTheme.typography.labelSmall) }
+                TextButton(modifier = Modifier.weight(0.5f), contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 2.dp, vertical = 0.dp), onClick = { uriHandler.openUri(game.detailsUrl) }) { Text("Info", style = MaterialTheme.typography.labelSmall, color = Color(0xFF39FF14)) }
               }
-              Button(modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp, vertical = 1.dp).height(28.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 3.dp, vertical = 0.dp), enabled = checkingId == null && !loading, onClick = {
+              Button(modifier = Modifier.fillMaxWidth().height(36.dp), shape = RoundedCornerShape(18.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp, vertical = 0.dp), enabled = checkingId == null && !loading, onClick = {
                 scope.launch {
                   checkingId = game.identifier
                   try {
@@ -224,7 +234,7 @@ fun StoreScreen() {
                     message = error.message ?: "Não foi possível verificar os arquivos deste item."
                   } finally { checkingId = null }
                 }
-              }) { Text(if (checkingId == game.identifier) "Verificando…" else "↓ Baixar", style = MaterialTheme.typography.labelSmall) }
+              }) { Text(if (checkingId == game.identifier) "Verificando…" else "↓ Baixar", style = MaterialTheme.typography.labelMedium) }
             }
           }
         }
@@ -325,7 +335,7 @@ private fun ArchiveGameCover(game: ArchiveXboxItem, onClick: () -> Unit) {
   AsyncImage(
     model = cover,
     contentDescription = "Capa de ${game.title}",
-    modifier = Modifier.fillMaxWidth(0.5f).aspectRatio(0.78f).clickable(onClick = onClick),
+    modifier = Modifier.fillMaxWidth().aspectRatio(0.82f).clickable(onClick = onClick),
     contentScale = ContentScale.Fit,
   )
 }
