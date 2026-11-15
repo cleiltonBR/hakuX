@@ -226,14 +226,10 @@ object ArchiveXboxDownloads {
 
     val extension = source.extension.lowercase(Locale.ROOT)
     if (extension in ARCHIVE_EXTENSIONS) {
-      val stagingArchive = File(app.cacheDir, "hakux-minerva-${UUID.randomUUID()}.$extension")
-      val stagingDirectory = File(app.cacheDir, "hakux-minerva-extract-${UUID.randomUUID()}")
+      val stagingDirectory = File(app.cacheDir, "hakux-minerva-extract-" + UUID.randomUUID())
       var extractedFolder: DocumentFile? = null
       try {
-        source.inputStream().use { input ->
-          FileOutputStream(stagingArchive).use { output -> input.copyTo(output, 128 * 1024) }
-        }
-        GameArchiveExtractor.extract(stagingArchive, stagingDirectory)
+        GameArchiveExtractor.extract(source, stagingDirectory)
         check(stagingDirectory.walkTopDown().any { it.isFile }) {
           "O arquivo torrent não continha arquivos de jogo extraíveis."
         }
@@ -249,7 +245,6 @@ object ArchiveXboxDownloads {
         }
       } finally {
         extractedFolder = null
-        stagingArchive.delete()
         stagingDirectory.deleteRecursively()
       }
     } else {
