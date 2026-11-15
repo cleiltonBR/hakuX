@@ -88,7 +88,7 @@ object TorrentDownloadManager {
           }
           val importedArray = row.optJSONArray("imported") ?: JSONArray()
           val imported = buildSet {
-            for (index in 0 until importedArray.length()) importedArray.optInt(index, -1).takeIf { it >= 0 }?.let(::add)
+            for (index in 0 until importedArray.length()) importedArray.optInt(index, -1).takeIf { it >= 0 }?.let { add(it) }
           }
           addMagnetInternal(
             appContext,
@@ -182,7 +182,7 @@ object TorrentDownloadManager {
       importAttempted[hash] = restoredImported.toMutableSet()
     }
     val alreadyImported = selectedFilePaths[hash]?.let { paths ->
-      paths.isNotEmpty() && importedFileIndices[hash]?.size == paths.size
+      paths.isNotEmpty() && importedFileIndices[hash]?.containsAll(paths.keys) == true
     } ?: false
     mutableDownloads.value = mutableDownloads.value.filterNot { it.id == hash } +
       TorrentDownload(
