@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import org.json.JSONArray
 import org.json.JSONObject
 import org.libtorrent4j.SessionManager
+import org.libtorrent4j.Priority
 import org.libtorrent4j.Sha1Hash
 import org.libtorrent4j.TorrentFlags
 import org.libtorrent4j.TorrentHandle
@@ -45,6 +46,8 @@ object TorrentDownloadManager {
   private val handles = ConcurrentHashMap<String, TorrentHandle>()
   private val sources = linkedMapOf<String, String>()
   private val pausedIds = ConcurrentHashMap.newKeySet<String>()
+  private val selectedFileIndices = linkedMapOf<String, MutableSet<Int>>()
+  private val appliedFileSelections = mutableMapOf<String, Set<Int>>()
   private var context: Context? = null
   private var polling = false
 
@@ -82,10 +85,27 @@ object TorrentDownloadManager {
     require(magnet.startsWith("magnet:?", ignoreCase = true)) { "Informe um link magnet válido." }
     val hash = extractBtih(magnet)
     require(hash != null) { "O magnet precisa conter um identificador btih hexadecimal válido." }
-    if (sources.containsKey(hash)) return
+    val requestedFiles = extractSelectedFileIndices(magnet)
+    if (sources.containsKey(hash)) {
+      if (requestedFiles.isNotEmpty()) {
+        val selected = selectedFileIndices.getOrPut(hash) { linkedSetOf() }
+        if (selected.addAll(requestedFiles)) {
+          val mergedMagnet = magnetWithSelectedFiles(sources[hash] ?: magnet, selected)
+          sources[hash] = mergedMagnet
+          mutableDownloads.value = mutableDownloads.value.map {
+            if (it.id == hash) it.copy(source = mergedMagnet) else it
+          }
+          val existingHandle = handles[hash] ?: engine.find(Sha1Hash.parseHex(hash))?.also { handles[hash] = it }
+          if (existingHandle != null && existingHandle.isValid()) applySelectedFiles(hash, existingHandle)
+          if (persist) persist()
+        }
+      }
+      return
+    }
     ensureEngine(appContext)
     engine.download(magnet, downloadDirectory(appContext), TorrentFlags.AUTO_MANAGED)
     sources[hash] = magnet
+    if (requestedFiles.isNotEmpty()) selectedFileIndices[hash] = requestedFiles.toMutableSet()
     mutableDownloads.value = mutableDownloads.value.filterNot { it.id == hash } +
       TorrentDownload(hash, displayName?.takeIf { it.isNotBlank() } ?: "Obtendo metadados…", magnet)
     if (persist) persist()
@@ -133,6 +153,8 @@ object TorrentDownloadManager {
     handles.remove(id)?.takeIf { it.isValid() }?.let { engine.remove(it) }
     pausedIds.remove(id)
     sources.remove(id)
+    selectedFileIndices.remove(id)
+    appliedFileSelections.remove(id)
     mutableDownloads.value = mutableDownloads.value.filterNot { it.id == id }
     persist()
   }
@@ -163,6 +185,7 @@ object TorrentDownloadManager {
               if (handle == null || !handle.isValid()) {
                 updateLocal(id) { it.copy(state = TorrentDownload.State.WAITING_METADATA) }
               } else {
+                applySelectedFiles(id, handle)
                 val status = handle.status()
                 val nativeState = status.state().name
                 val state = when {
@@ -205,6 +228,30 @@ object TorrentDownloadManager {
     val array = JSONArray()
     synchronized(this) { sources.forEach { (id, source) -> array.put(JSONObject().put("id", id).put("source", source)) } }
     appContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_ITEMS, array.toString()).apply()
+  }
+
+  @Synchronized
+  private fun applySelectedFiles(id: String, handle: TorrentHandle) {
+    val selected = selectedFileIndices[id]?.toSet().orEmpty()
+    if (selected.isEmpty() || appliedFileSelections[id] == selected) return
+    val info = handle.torrentFile() ?: return
+    val priorities = Priority.array(Priority.IGNORE, info.numFiles())
+    require(selected.all { it in priorities.indices }) {
+      "O índice de arquivo fornecido pelo Minerva não corresponde ao torrent recebido."
+    }
+    selected.forEach { priorities[it] = Priority.DEFAULT }
+    handle.prioritizeFiles(priorities)
+    appliedFileSelections[id] = selected
+  }
+
+  private fun extractSelectedFileIndices(magnet: String): Set<Int> =
+    Regex("(?i)(?:[?&])so=([^&]+)").find(magnet)?.groupValues?.get(1)
+      ?.split(",")?.mapNotNull { it.toIntOrNull() }?.toSet().orEmpty()
+
+  private fun magnetWithSelectedFiles(magnet: String, selected: Set<Int>): String {
+    val withoutSelection = magnet.replace(Regex("(?i)([?&])so=[^&]*"), "")
+    val separator = if (withoutSelection.contains("?")) "&" else "?"
+    return "$withoutSelection\${separator}so=\${selected.sorted().joinToString(",")}"
   }
 
   private fun extractBtih(magnet: String): String? =
