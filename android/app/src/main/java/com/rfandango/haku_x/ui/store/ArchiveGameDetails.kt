@@ -74,11 +74,13 @@ private object ArchiveGameInfoRepository {
   fun load(game: ArchiveXboxItem): ArchiveGameInfo {
     // Steam's public store endpoints provide structured descriptions, artwork,
     // screenshots and (when licensed/available) short video previews without an API key.
+    // Never accept a partial title match: "Black" must not resolve to
+    // "Black Myth: Wukong". Steam is used only for an exact normalized title.
     steamSearch(game.title)?.let { appId ->
-      steamDetails(appId)?.let { steam ->
+      steamDetails(appId, game.title)?.let { steam ->
         return steam.copy(
           releaseDate = steam.releaseDate ?: game.year,
-          sourceLabel = "Steam Store · correspondência por título",
+          sourceLabel = "Steam Store · título exato",
         )
       }
     }
@@ -107,12 +109,9 @@ private object ArchiveGameInfoRepository {
     for (i in 0 until items.length()) {
       val item = items.optJSONObject(i) ?: continue
       val candidate = normalize(item.optString("name"))
-      val score = when {
-        candidate == target -> 100
-        candidate.startsWith(target) || target.startsWith(candidate) -> 75
-        candidate.contains(target) || target.contains(candidate) -> 55
-        else -> 0
-      }
+      // Exact normalized equality only. Prefix/substring matches are unsafe
+      // for short or ambiguous titles such as "Black", "F", or "The".
+      val score = if (candidate == target) 100 else 0
       if (score > bestScore) {
         bestScore = score
         bestId = item.optLong("id").takeIf { it > 0 }?.toString()
@@ -121,11 +120,14 @@ private object ArchiveGameInfoRepository {
     return bestId?.takeIf { bestScore >= 75 }
   }
 
-  private fun steamDetails(appId: String): ArchiveGameInfo? {
+  private fun steamDetails(appId: String, expectedTitle: String): ArchiveGameInfo? {
     val root = getJson("https://store.steampowered.com/api/appdetails?appids=$appId&l=brazilian&cc=br")
       ?.optJSONObject(appId) ?: return null
     if (!root.optBoolean("success")) return null
     val data = root.optJSONObject("data") ?: return null
+    // Defensive second check: the details endpoint must describe the exact
+    // game requested, not merely the result returned by a search provider.
+    if (normalize(data.optString("name")) != normalize(expectedTitle)) return null
     val screenshots = buildList {
       val array = data.optJSONArray("screenshots") ?: org.json.JSONArray()
       for (i in 0 until array.length()) {
@@ -179,7 +181,7 @@ private object ArchiveGameInfoRepository {
     for (index in 0 until results.length()) {
       val candidate = results.optJSONObject(index)?.optString("title").orEmpty()
       val normalizedCandidate = normalize(candidate.substringBefore(" ("))
-      if (normalizedCandidate == normalizedTitle || normalizedCandidate.startsWith("$normalizedTitle ")) {
+      if (normalizedCandidate == normalizedTitle) {
         val slug = URLEncoder.encode(candidate.replace(' ', '_'), "UTF-8").replace("+", "%20")
         return getJson("https://$language.wikipedia.org/api/rest_v1/page/summary/$slug")
       }
@@ -215,11 +217,13 @@ private object ArchiveGameInfoRepository {
     while (iterator.hasNext()) {
       val page = pages.optJSONObject(iterator.next()) ?: continue
       val file = normalize(page.optString("title").substringAfter("File:").substringBeforeLast('.'))
-      val score = when {
-        file.contains(target) -> 100
-        target.split(" ").filter { it.length > 2 }.count { file.contains(it) } >= 2 -> 70
-        else -> 0
-      }
+      // Match the complete game title. Permit only known media suffixes
+      // after it; never treat a longer game's name as a match (e.g. Black Myth).
+      val suffix = file.removePrefix(target).trim()
+      val safeSuffix = suffix.isBlank() || suffix.startsWith(" screenshot") ||
+        suffix.startsWith(" gameplay") || suffix.startsWith(" cover") ||
+        suffix.startsWith(" xbox") || suffix.startsWith(" playstation")
+      val score = if (file == target || (file.startsWith("$target ") && safeSuffix)) 100 else 0
       if (score < 70) continue
       val image = page.optJSONArray("imageinfo")?.optJSONObject(0) ?: continue
       if (image.optInt("width") < 300 || image.optInt("height") < 160) continue
