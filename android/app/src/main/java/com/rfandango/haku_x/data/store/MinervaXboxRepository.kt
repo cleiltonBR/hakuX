@@ -42,7 +42,7 @@ object MinervaXboxRepository {
 
   internal fun parseListing(html: String): List<MinervaXboxEntry> {
     val pattern = Regex(
-      """(?is)<a\\b([^>]*?\\bhref\\s*=\\s*["']([^"']*?/rom\\?id=(\\d+)[^"']*)["'][^>]*)>(.*?)</a>"""
+      """(?is)<a\b([^>]*?\bhref\s*=\s*["']([^"']*?/rom\?id=(\d+)[^"']*)["'][^>]*)>(.*?)</a>"""
     )
     val entries = LinkedHashMap<String, MinervaXboxEntry>()
     pattern.findAll(html).forEach { match ->
@@ -52,7 +52,7 @@ object MinervaXboxRepository {
       val afterAnchor = html.substring(match.range.last + 1)
       val nextAnchor = afterAnchor.indexOf("<a", ignoreCase = true).let { if (it < 0) minOf(afterAnchor.length, 220) else minOf(it, 220) }
       val nearbyText = cleanText(afterAnchor.substring(0, nextAnchor))
-      val size = Regex("""(?i)\\b(\\d+(?:\\.\\d+)?\\s*(?:GB|MB|KB))\\b""")
+      val size = Regex("""(?i)\b(\d+(?:\.\d+)?\s*(?:GB|MB|KB))\b""")
         .find(nearbyText)?.groupValues?.get(1)?.uppercase(Locale.ROOT) ?: "Tamanho não informado"
       val title = fileName.removeSuffix(".zip").removeSuffix(".ZIP")
       entries.putIfAbsent(
