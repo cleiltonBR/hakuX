@@ -13,6 +13,7 @@
 #include "hw/xbox/hle/vk/swapchain.h"
 
 #include <string.h>
+#include <stdatomic.h>
 #include <sys/system_properties.h>
 #include "hw/xbox/hle/prop.h"
 #include <time.h>
@@ -24,7 +25,7 @@ static int g_upscale = NC_UPSCALE_BILINEAR;
 static bool g_cas;
 static float g_cas_sharpness = 0.2f;
 static bool g_nis;
-static float g_nis_sharpness = 0.5f;
+static _Atomic float g_nis_sharpness = 0.5f;
 static bool g_shown;
 
 /* Frame rate from the HLE GPU's presented frames. */
@@ -76,7 +77,7 @@ void nc_present_set_nis(bool on, float sharpness)
     /* The Android settings menu calls this on the UI thread while the
      * presenter reads the values on the frame thread. Keep both accesses
      * atomic; publish sharpness before enabling the new setting. */
-    __atomic_store_n(&g_nis_sharpness, sharpness, __ATOMIC_RELAXED);
+    atomic_store_explicit(&g_nis_sharpness, sharpness, memory_order_relaxed);
     __atomic_store_n(&g_nis, on, __ATOMIC_RELAXED);
 }
 
@@ -203,7 +204,7 @@ bool nc_present_frame(struct ANativeWindow *win)
     /* Snapshot runtime NIS controls once per frame. nativeSetNis can run
      * concurrently from Android's UI thread. */
     const bool nis = __atomic_load_n(&g_nis, __ATOMIC_RELAXED);
-    const float nis_sharpness = __atomic_load_n(&g_nis_sharpness, __ATOMIC_RELAXED);
+    const float nis_sharpness = atomic_load_explicit(&g_nis_sharpness, memory_order_relaxed);
     const bool fxaa = g_dbg.fxaa < 0 ? g_fxaa : g_dbg.fxaa != 0;
     const int upscale = g_dbg.upscale < 0 ? g_upscale : g_dbg.upscale;
     /* what places and filters the frame, beside it and the window */
