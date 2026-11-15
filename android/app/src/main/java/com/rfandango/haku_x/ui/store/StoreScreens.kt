@@ -265,6 +265,7 @@ fun StoreScreen() {
         Box(Modifier.width(1.dp).height(22.dp).background(Color(0xFF376B3D)))
         Text("♜  ${results.size} carregados", color = Color(0xFFBFE8C5), style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(0.85f), maxLines = 1)
       }
+    }
     if (loading && results.isEmpty()) {
       Column(modifier = Modifier.fillMaxWidth().weight(1f), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
         CircularProgressIndicator()
