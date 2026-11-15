@@ -220,9 +220,9 @@ private object ArchiveGameInfoRepository {
       // Match the complete game title. Permit only known media suffixes
       // after it; never treat a longer game's name as a match (e.g. Black Myth).
       val suffix = file.removePrefix(target).trim()
-      val safeSuffix = suffix.isBlank() || suffix.startsWith(" screenshot") ||
-        suffix.startsWith(" gameplay") || suffix.startsWith(" cover") ||
-        suffix.startsWith(" xbox") || suffix.startsWith(" playstation")
+      val safeSuffix = suffix.isBlank() || suffix.startsWith("screenshot") ||
+        suffix.startsWith("gameplay") || suffix.startsWith("cover") ||
+        suffix.startsWith("xbox") || suffix.startsWith("playstation")
       val score = if (file == target || (file.startsWith("$target ") && safeSuffix)) 100 else 0
       if (score < 70) continue
       val image = page.optJSONArray("imageinfo")?.optJSONObject(0) ?: continue
