@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -41,6 +42,7 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.rfandango.haku_x.data.XboxCoverCache
+import com.rfandango.haku_x.data.store.ArchiveXboxDownloads
 import com.rfandango.haku_x.data.store.VimmXboxGame
 import com.rfandango.haku_x.data.store.VimmXboxRepository
 import kotlinx.coroutines.Dispatchers
@@ -56,6 +58,9 @@ internal fun VimmXboxNativeCatalog() {
   var games by remember { mutableStateOf<List<VimmXboxGame>>(emptyList()) }
   var loading by remember { mutableStateOf(false) }
   var message by remember { mutableStateOf("Pesquise no catálogo Xbox do Vimm's Lair para carregar os jogos.") }
+  var downloadGame by remember { mutableStateOf<VimmXboxGame?>(null) }
+  var directDownloadUrl by remember { mutableStateOf("") }
+  var downloadMessage by remember { mutableStateOf<String?>(null) }
 
   fun search() {
     val term = query.trim()
@@ -125,6 +130,12 @@ internal fun VimmXboxNativeCatalog() {
               Text(game.title, color = Color.White, style = MaterialTheme.typography.titleSmall, minLines = 2, maxLines = 2)
               Text(game.regions, color = Color(0xFFB9C5BC), style = MaterialTheme.typography.labelSmall, maxLines = 2)
               Button(
+                onClick = { downloadGame = game; directDownloadUrl = ""; downloadMessage = null },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(18.dp),
+                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 5.dp),
+              ) { Text("↓ Download interno", style = MaterialTheme.typography.labelSmall) }
+              Button(
                 onClick = { uriHandler.openUri(game.detailsUrl) },
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(18.dp),
@@ -135,6 +146,46 @@ internal fun VimmXboxNativeCatalog() {
         }
       }
     }
+  }
+
+  downloadGame?.let { game ->
+    AlertDialog(
+      onDismissRequest = { downloadGame = null },
+      title = { Text("Download interno · ${game.title}") },
+      text = {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+          Text("Cole um link direto para um arquivo que você tenha autorização para baixar. O HakuX usará a fila interna, com progresso e retomada.")
+          OutlinedTextField(
+            value = directDownloadUrl,
+            onValueChange = { directDownloadUrl = it },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            label = { Text("Link direto HTTP/HTTPS") },
+            placeholder = { Text("https://servidor/arquivo.iso") },
+          )
+          Text("Aceita ISO, XISO, CSO, CCI, ZIP, RAR e 7z. Não busca nem extrai links de páginas do catálogo.", style = MaterialTheme.typography.bodySmall)
+          downloadMessage?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+        }
+      },
+      confirmButton = {
+        TextButton(onClick = {
+          try {
+            ArchiveXboxDownloads.enqueueDirect(
+              context = context,
+              title = game.title,
+              rawUrl = directDownloadUrl.trim(),
+              suggestedFileName = null,
+            )
+            downloadMessage = null
+            downloadGame = null
+            message = "Download de ${game.title} adicionado à fila interna. Acompanhe na aba Downloads."
+          } catch (error: Exception) {
+            downloadMessage = error.message ?: "Não foi possível adicionar este link."
+          }
+        }, enabled = directDownloadUrl.trim().isNotBlank()) { Text("Adicionar à fila") }
+      },
+      dismissButton = { TextButton(onClick = { downloadGame = null }) { Text("Cancelar") } },
+    )
   }
 }
 
