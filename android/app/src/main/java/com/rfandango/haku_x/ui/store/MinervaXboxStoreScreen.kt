@@ -183,7 +183,7 @@ internal fun MinervaXboxNativeCatalog(onBack: () -> Unit) {
                         withContext(Dispatchers.IO) {
                           TorrentDownloadManager.addMagnet(context, source.magnet, entry.title, source.filePath)
                         }
-                        message = "Download de ${entry.title} enviado à fila interna. Apenas este arquivo foi selecionado."
+                        message = "Download de ${entry.title} enviado à fila interna. Apenas este arquivo foi selecionado; ao terminar, será importado para a Biblioteca."
                       } catch (error: Exception) {
                         message = error.message ?: "Não foi possível iniciar o torrent deste jogo."
                       } finally {
