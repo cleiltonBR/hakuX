@@ -129,15 +129,16 @@ object VimmXboxRepository {
     }
 
     repeat(6) {
+      val methodForRequest = requestMethod
       val connection = (requestUrl.openConnection() as HttpURLConnection).apply {
-        requestMethod = this@VimmXboxRepository.run { requestMethod }
+        requestMethod = methodForRequest
         connectTimeout = 15_000
         readTimeout = 30_000
         instanceFollowRedirects = false
         setRequestProperty("Accept", "*/*")
         setRequestProperty("User-Agent", USER_AGENT)
         setRequestProperty("Referer", game.detailsUrl)
-        if (this@VimmXboxRepository.run { requestMethod } == "POST") {
+        if (methodForRequest == "POST") {
           doOutput = true
           setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
         }
@@ -160,7 +161,7 @@ object VimmXboxRepository {
         }
         require(status in 200..299) { "O servidor de download do Vimm respondeu HTTP $status." }
         val disposition = connection.getHeaderField("Content-Disposition").orEmpty()
-        val dispositionName = Regex("(?i)filename\\*?=(?:UTF-8''|\\")?([^;\\"]+)")
+        val dispositionName = Regex("""(?i)filename\\*?=(?:UTF-8''|")?([^;"]+)""")
           .find(disposition)?.groupValues?.get(1)?.trim()?.trim('"')
           ?.let { runCatching { java.net.URLDecoder.decode(it, Charsets.UTF_8.name()) }.getOrDefault(it) }
         val pathName = requestUrl.path.substringAfterLast('/').takeIf { it.contains('.') }
