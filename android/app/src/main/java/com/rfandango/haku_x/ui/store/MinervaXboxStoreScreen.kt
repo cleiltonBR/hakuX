@@ -68,7 +68,7 @@ internal fun MinervaXboxNativeCatalog(onBack: () -> Unit) {
         message = if (loaded.isEmpty()) {
           "O catálogo foi aberto, mas nenhum arquivo compatível foi identificado."
         } else {
-          "\${loaded.size} arquivos encontrados no catálogo Redump Xbox."
+          "${loaded.size} arquivos encontrados no catálogo Redump Xbox."
         }
       } catch (error: Exception) {
         message = error.message ?: "Não foi possível carregar o catálogo do Minerva Archive."
@@ -164,7 +164,7 @@ internal fun MinervaXboxNativeCatalog(onBack: () -> Unit) {
                 maxLines = 3,
               )
               Text(
-                "ZIP · \${entry.sizeLabel}",
+                "ZIP · ${entry.sizeLabel}",
                 color = Color(0xFFB9C5BC),
                 style = MaterialTheme.typography.labelSmall,
                 maxLines = 1,
