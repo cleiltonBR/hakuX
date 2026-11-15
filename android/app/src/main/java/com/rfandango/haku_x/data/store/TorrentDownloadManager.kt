@@ -148,6 +148,7 @@ object TorrentDownloadManager {
           requestedFiles.forEach { index -> displayName?.let { titles[index] = it } }
         }
         if (selectionChanged) {
+          importAttempted[hash] = importedFileIndices[hash]?.toMutableSet() ?: linkedSetOf()
           val mergedMagnet = magnetWithSelectedFiles(sources[hash] ?: magnet, selected)
           sources[hash] = mergedMagnet
           mutableDownloads.value = mutableDownloads.value.map {
