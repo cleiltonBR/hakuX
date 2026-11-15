@@ -439,25 +439,27 @@ fun StoreScreen() {
 /** Official Vimm Xbox Vault browser. It does not intercept or automate protected-game downloads. */
 @Composable
 private fun VimmXboxVaultBrowser() {
-  AndroidView(
-    modifier = Modifier.fillMaxWidth().weight(1f),
-    factory = { context ->
-      WebView(context).apply {
-        settings.javaScriptEnabled = true
-        settings.domStorageEnabled = true
-        settings.allowFileAccess = false
-        settings.allowContentAccess = false
-        settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
-        webViewClient = object : WebViewClient() {
-          override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
-            val host = request.url.host?.lowercase(java.util.Locale.ROOT).orEmpty()
-            return host != "vimm.net" && !host.endsWith(".vimm.net")
+  Column(modifier = Modifier.fillMaxSize()) {
+    AndroidView(
+      modifier = Modifier.fillMaxWidth().weight(1f),
+      factory = { context ->
+        WebView(context).apply {
+          settings.javaScriptEnabled = true
+          settings.domStorageEnabled = true
+          settings.allowFileAccess = false
+          settings.allowContentAccess = false
+          settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
+          webViewClient = object : WebViewClient() {
+            override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+              val host = request.url.host?.lowercase(java.util.Locale.ROOT).orEmpty()
+              return host != "vimm.net" && !host.endsWith(".vimm.net")
+            }
           }
+          loadUrl("https://vimm.net/vault/Xbox")
         }
-        loadUrl("https://vimm.net/vault/Xbox")
-      }
-    },
-  )
+      },
+    )
+  }
 }
 
 /** Loads the same multi-source cached 3D artwork used by the main library. */
