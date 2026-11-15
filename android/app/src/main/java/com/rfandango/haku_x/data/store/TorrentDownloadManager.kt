@@ -176,7 +176,7 @@ object TorrentDownloadManager {
                 }
                 updateLocal(id) {
                   it.copy(
-                    name = status.name().takeIf(String::isNotBlank) ?: it.name,
+                    name = if (it.name == "Obtendo metadados…") status.name().takeIf(String::isNotBlank) ?: it.name else it.name,
                     done = status.totalDone().coerceAtLeast(0L),
                     total = status.total().coerceAtLeast(0L),
                     downloadRate = status.downloadRate().coerceAtLeast(0),
