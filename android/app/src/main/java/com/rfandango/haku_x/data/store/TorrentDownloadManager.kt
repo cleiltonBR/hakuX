@@ -23,7 +23,6 @@ import org.libtorrent4j.TorrentFlags
 import org.libtorrent4j.TorrentHandle
 import org.libtorrent4j.TorrentInfo
 import org.libtorrent4j.alerts.Alert
-import org.libtorrent4j.alerts.AlertListener
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 import java.util.Locale
