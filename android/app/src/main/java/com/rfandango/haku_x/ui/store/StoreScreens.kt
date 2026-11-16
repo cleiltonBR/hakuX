@@ -393,8 +393,6 @@ fun StoreScreen() {
         TextButton(onClick = { selectedStoreTab = "catalog" }) { Text("Voltar", color = Color(0xFF39FF14)) }
       }
       VimmXboxNativeCatalog()
-    } else if (selectedStoreTab == "minerva") {
-      MinervaXboxNativeCatalog(onBack = { selectedStoreTab = "catalog" })
     } else if (selectedStoreTab == "torrents") {
       TorrentDownloadsScreen(onBack = { selectedStoreTab = "catalog" })
     } else {
