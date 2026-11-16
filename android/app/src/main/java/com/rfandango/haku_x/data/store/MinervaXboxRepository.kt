@@ -3,6 +3,7 @@ package com.rfandango.haku_x.data.store
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
+import java.net.URLDecoder
 import java.util.Locale
 import org.json.JSONArray
 import org.json.JSONObject
@@ -165,10 +166,20 @@ object MinervaXboxRepository {
       }
       val selectedMagnet = buildString {
         append(if (Regex("(?i)[?&]so=").containsMatchIn(magnet)) magnet else "$magnet&so=$fileIndex")
-        if (!Regex("(?i)[?&]tr=").containsMatchIn(magnet)) {
-          TRACKERS.forEach { tracker ->
-            append("&tr=").append(URLEncoder.encode(tracker, Charsets.UTF_8.name()))
+
+        // A magnet may contain one stale/unreachable tracker. Do not treat
+        // the presence of a single tr= parameter as proof that discovery is
+        // configured: merge every fallback tracker that is not already there.
+        val existingTrackers = Regex("(?i)(?:[?&])tr=([^&]+)")
+          .findAll(magnet)
+          .mapNotNull { match ->
+            runCatching {
+              URLDecoder.decode(match.groupValues[1], Charsets.UTF_8.name())
+            }.getOrNull()
           }
+          .toSet()
+        TRACKERS.filterNot { it in existingTrackers }.forEach { tracker ->
+          append("&tr=").append(URLEncoder.encode(tracker, Charsets.UTF_8.name()))
         }
       }
       val path = row.optString("full_path").replace('\\', '/')
