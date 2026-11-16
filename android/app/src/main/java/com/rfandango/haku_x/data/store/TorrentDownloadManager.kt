@@ -168,8 +168,11 @@ object TorrentDownloadManager {
       }
       return
     }
-    ensureEngine(appContext)
-    engine.download(magnet, downloadDirectory(appContext), TorrentFlags.AUTO_MANAGED)
+    // Publish and persist the queue item BEFORE entering libtorrent's native
+    // startup/add path. SessionManager.start()/download() may block while the
+    // native session initializes; the UI must not hide the selected game until
+    // those calls return.
+    context = appContext.applicationContext
     sources[hash] = magnet
     if (requestedFiles.isNotEmpty()) selectedFileIndices[hash] = requestedFiles.toMutableSet()
     if (!relativePath.isNullOrBlank()) {
@@ -193,8 +196,19 @@ object TorrentDownloadManager {
         libraryImported = alreadyImported,
       )
     if (persist) persist()
-    startService(appContext)
-    startPolling()
+
+    try {
+      ensureEngine(appContext)
+      engine.download(magnet, downloadDirectory(appContext), TorrentFlags.AUTO_MANAGED)
+      startService(appContext)
+      startPolling()
+    } catch (error: Exception) {
+      updateLocal(hash) {
+        it.copy(state = TorrentDownload.State.ERROR, error = error.message ?: "Não foi possível inicializar o motor BitTorrent.")
+      }
+      if (persist) persist()
+      throw error
+    }
   }
 
   fun addTorrentFile(appContext: Context, file: File) {
