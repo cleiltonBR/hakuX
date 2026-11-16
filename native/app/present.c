@@ -19,6 +19,7 @@
 #include <sys/system_properties.h>
 #include "hw/xbox/hle/prop.h"
 #include <time.h>
+#include <stdatomic.h>
 
 static int g_aspect = NC_ASPECT_AUTO;
 static bool g_widescreen;
@@ -26,8 +27,8 @@ static bool g_fxaa;
 static int g_upscale = NC_UPSCALE_BILINEAR;
 static bool g_cas;
 static float g_cas_sharpness = 0.2f;
-static bool g_nis;
-static float g_nis_sharpness = 0.5f;
+static _Atomic bool g_nis;
+static _Atomic float g_nis_sharpness = 0.5f;
 static char *g_lsfg_dll_path;
 static int g_lsfg_multiplier = 2, g_lsfg_flow_scale = 100;
 static bool g_lsfg_performance, g_lsfg_load_attempted;
@@ -77,10 +78,12 @@ void nc_present_set_cas_sharpness(float sharpness)
 
 void nc_present_set_nis(bool on, float sharpness)
 {
-    g_nis = on;
     if (sharpness < 0.0f) sharpness = 0.0f;
     if (sharpness > 1.0f) sharpness = 1.0f;
-    g_nis_sharpness = sharpness;
+    /* Publish sharpness before enabling NIS; the render thread acquires
+     * the enable flag before reading the associated runtime setting. */
+    atomic_store_explicit(&g_nis_sharpness, sharpness, memory_order_relaxed);
+    atomic_store_explicit(&g_nis, on, memory_order_release);
 }
 
 void nc_present_set_lsfg(const char *path, int multiplier, bool performance, int flow_scale)
@@ -232,13 +235,17 @@ bool nc_present_frame(struct ANativeWindow *win)
 {
     count_frames();
     debug_poll();
+    /* Snapshot runtime NIS controls once per frame. nativeSetNis can run
+     * concurrently from Android's UI thread. */
+    const bool nis = atomic_load_explicit(&g_nis, memory_order_acquire);
+    const float nis_sharpness = atomic_load_explicit(&g_nis_sharpness, memory_order_relaxed);
     const bool fxaa = g_dbg.fxaa < 0 ? g_fxaa : g_dbg.fxaa != 0;
     const int upscale = g_dbg.upscale < 0 ? g_upscale : g_dbg.upscale;
     /* what places and filters the frame, beside it and the window */
     const uint64_t key = (uint64_t)fxaa | (uint64_t)upscale << 1 | (uint64_t)g_dbg.average << 4 |
                          (uint64_t)g_widescreen << 5 | (uint64_t)(uint32_t)g_aspect << 8 |
                          (uint64_t)g_cas << 16 | (uint64_t)(uint32_t)(g_cas_sharpness * 1000.0f) << 17 |
-                         (uint64_t)g_nis << 30 | (uint64_t)(uint32_t)(g_nis_sharpness * 1000.0f) << 31;
+                         (uint64_t)nis << 30 | (uint64_t)(uint32_t)(nis_sharpness * 1000.0f) << 31;
     if (hle_present_unchanged(win, key)) {
         nc_dev_nv2a_display_pickup(now_ns()); /* it looked: the vblank keeps clear of it */
         wait_next_vsync();
@@ -255,6 +262,6 @@ bool nc_present_frame(struct ANativeWindow *win)
         place(fw, fh, ww, wh, &sx, &sy);
         __atomic_store_n(&g_shown, true, __ATOMIC_RELAXED);
     }
-    hle_present_end(sx, sy, fxaa, upscale, g_dbg.average, g_cas, g_cas_sharpness, g_nis, g_nis_sharpness, key);
+    hle_present_end(sx, sy, fxaa, upscale, g_dbg.average, g_cas, g_cas_sharpness, nis, nis_sharpness, key);
     return true;
 }
