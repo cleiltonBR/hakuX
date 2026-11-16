@@ -24,6 +24,7 @@ import org.libtorrent4j.TorrentHandle
 import org.libtorrent4j.TorrentInfo
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
+import java.util.Locale
 
 data class TorrentDownload(
   val id: String,
@@ -451,17 +452,36 @@ object TorrentDownloadManager {
 
   @Synchronized
   private fun applySelectedFiles(id: String, handle: TorrentHandle) {
-    val selected = selectedFileIndices[id]?.toSet().orEmpty()
-    if (selected.isEmpty() || appliedFileSelections[id] == selected) return
     val info = handle.torrentFile() ?: return
-    val priorities = Priority.array(Priority.IGNORE, info.numFiles())
-    require(selected.all { it in priorities.indices }) {
-      "O índice de arquivo fornecido pelo Minerva não corresponde ao torrent recebido."
+    val paths = selectedFilePaths[id].orEmpty().values
+      .map(::normalizeTorrentPath)
+      .filter(String::isNotBlank)
+      .toSet()
+    if (paths.isEmpty()) return
+
+    // Minerva's so_id identifies its catalogue row, not a verified
+    // libtorrent file index. Resolve the selected archive by its full path
+    // against the actual torrent metadata instead.
+    val selected = (0 until info.numFiles()).filter { index ->
+      val torrentPath = normalizeTorrentPath(info.files().filePath(index))
+      paths.any { requested ->
+        torrentPath == requested || torrentPath.endsWith("/$requested") ||
+          requested.endsWith("/$torrentPath")
+      }
+    }.toSet()
+    require(selected.isNotEmpty()) {
+      "O arquivo ${paths.first()} não foi encontrado nos metadados do torrent Minerva."
     }
+    if (appliedFileSelections[id] == selected) return
+    val priorities = Priority.array(Priority.IGNORE, info.numFiles())
     selected.forEach { priorities[it] = Priority.DEFAULT }
     handle.prioritizeFiles(priorities)
+    selectedFileIndices[id] = selected.toMutableSet()
     appliedFileSelections[id] = selected
   }
+
+  private fun normalizeTorrentPath(path: String): String =
+    path.replace('\\', '/').trim().trimStart('/').removePrefix("./").lowercase(Locale.ROOT)
 
   private fun extractSelectedFileIndices(magnet: String): Set<Int> =
     Regex("(?i)(?:[?&])so=([^&]+)").find(magnet)?.groupValues?.get(1)
