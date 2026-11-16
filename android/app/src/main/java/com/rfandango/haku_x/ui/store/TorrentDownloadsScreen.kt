@@ -146,6 +146,18 @@ private fun TorrentDownloadCard(
         LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
       }
       Text("↓ ${formatTorrentBytes(item.downloadRate.toLong())}/s   ↑ ${formatTorrentBytes(item.uploadRate.toLong())}/s", color = Color(0xFF9BA99E), style = MaterialTheme.typography.labelSmall)
+      if (item.state == TorrentDownload.State.WAITING_METADATA) {
+        Text(
+          "Peers: ${item.connectedPeers} conectados · ${item.discoveredPeers} encontrados · ${item.seedCount} seeds",
+          color = Color(0xFFB9C5BC),
+          style = MaterialTheme.typography.labelSmall,
+        )
+        Text(
+          if (item.activeTracker.isBlank()) "Tracker: aguardando primeira resposta" else "Tracker ativo: ${item.activeTracker}",
+          color = Color(0xFF9BA99E),
+          style = MaterialTheme.typography.labelSmall,
+        )
+      }
       if (item.libraryImported) {
         Text("Arquivos selecionados importados para a Biblioteca", color = Color(0xFF39FF14), style = MaterialTheme.typography.labelSmall)
       }
