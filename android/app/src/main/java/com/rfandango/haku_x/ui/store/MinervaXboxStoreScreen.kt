@@ -180,10 +180,11 @@ internal fun MinervaXboxNativeCatalog(onBack: () -> Unit) {
                         val source = withContext(Dispatchers.IO) {
                           MinervaXboxRepository.resolveTorrent(entry)
                         }
+                        message = "Torrent localizado. Registrando ${entry.title} na fila interna…"
                         withContext(Dispatchers.IO) {
                           TorrentDownloadManager.addMagnet(context, source.magnet, entry.title, source.filePath)
                         }
-                        message = "Download de ${entry.title} enviado à fila interna. Apenas este arquivo foi selecionado; ao terminar, será importado para a Biblioteca."
+                        message = "Download de ${entry.title} registrado na fila interna. O motor BitTorrent está inicializando em segundo plano; apenas este arquivo foi selecionado e será importado para a Biblioteca ao concluir."
                       } catch (error: Exception) {
                         message = error.message ?: "Não foi possível iniciar o torrent deste jogo."
                       } finally {
