@@ -161,10 +161,18 @@ object MinervaXboxRepository {
       require(magnet.startsWith("magnet:?", ignoreCase = true)) {
         "O Minerva não forneceu um magnet válido para este jogo."
       }
-      // so_id is a Minerva database row identifier, not a verified
-      // libtorrent file index. Do not pass it as BEP 53 "so".
+      // MiNERVA's own browser uses so_id as the BEP 53 select-only
+      // index in the collection magnet (?so=<index>). Preserve it so
+      // libtorrent can select the requested archive entry instead of
+      // treating the entire collection as the intended download.
+      val soId = row.optString("so_id").trim()
+      require(soId.isNotBlank() && soId.all(Char::isDigit)) {
+        "O Minerva não forneceu um índice de arquivo válido (so_id) para ${entry.fileName}."
+      }
       val selectedMagnet = buildString {
-        append(magnet)
+        append(magnet.replace(Regex("(?i)([?&])so=[^&]*"), ""))
+        append(if (magnet.contains("?")) "&" else "?")
+        append("so=").append(soId)
 
         // A magnet may contain one stale/unreachable tracker. Do not treat
         // the presence of a single tr= parameter as proof that discovery is
