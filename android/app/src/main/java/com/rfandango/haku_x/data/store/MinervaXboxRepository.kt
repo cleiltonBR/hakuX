@@ -111,8 +111,10 @@ object MinervaXboxRepository {
     }
     val connection = (URL("$SEARCH_URL?$encoded").openConnection() as HttpURLConnection).apply {
       requestMethod = "GET"
-      connectTimeout = 15_000
-      readTimeout = 60_000
+      connectTimeout = 10_000
+      // MiNERVA normally answers in ~20-25s. Bound the wait so the UI
+      // cannot remain in Preparing indefinitely on a stalled connection.
+      readTimeout = 35_000
       instanceFollowRedirects = true
       setRequestProperty("Accept", "application/json")
       setRequestProperty("Accept-Language", "en")
@@ -125,7 +127,18 @@ object MinervaXboxRepository {
       require(status in 200..299) {
         "A API do Minerva respondeu HTTP $status ao localizar o torrent."
       }
-      val rows = JSONArray(body)
+      require(body.isNotBlank()) {
+        "A API do Minerva retornou uma resposta vazia. Tente novamente em instantes."
+      }
+      val rows = try {
+        JSONArray(body)
+      } catch (error: Exception) {
+        val preview = body.take(160).replace(Regex("\\s+"), " ")
+        throw IllegalStateException(
+          "A API do Minerva não retornou JSON válido (HTTP $status). Resposta: $preview",
+          error,
+        )
+      }
       var selected: JSONObject? = null
       for (index in 0 until rows.length()) {
         val row = rows.optJSONObject(index) ?: continue
