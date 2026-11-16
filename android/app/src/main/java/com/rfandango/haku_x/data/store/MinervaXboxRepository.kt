@@ -114,7 +114,10 @@ object MinervaXboxRepository {
       connectTimeout = 10_000
       // MiNERVA normally answers in ~20-25s. Bound the wait so the UI
       // cannot remain in Preparing indefinitely on a stalled connection.
-      readTimeout = 35_000
+      // The public MiNERVA API is documented by its client integration as
+      // taking 20–25s and requiring at least 60s of HTTP timeout budget.
+      // Keep enough headroom for slow responses instead of aborting at 35s.
+      readTimeout = 65_000
       instanceFollowRedirects = true
       setRequestProperty("Accept", "application/json")
       setRequestProperty("Accept-Language", "en")
