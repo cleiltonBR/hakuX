@@ -340,7 +340,11 @@ object TorrentDownloadManager {
                     downloadRate = status.downloadRate().coerceAtLeast(0),
                     uploadRate = status.uploadRate().coerceAtLeast(0),
                     state = state,
-                    error = status.errorCode().getMessage().takeIf(String::isNotBlank),
+                    // libtorrent reports the zero error code as the text "Success".
+                    // That is a healthy status, not an error to show in the download card.
+                    error = status.errorCode().getMessage().takeUnless {
+                      it.isBlank() || it.equals("Success", ignoreCase = true)
+                    },
                   )
                 }
                 if (state == TorrentDownload.State.SEEDING || state == TorrentDownload.State.COMPLETED) {
