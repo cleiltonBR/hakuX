@@ -1,6 +1,12 @@
 package com.rfandango.haku_x.ui.store
 
 import android.graphics.Bitmap
+import android.content.Intent
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.documentfile.provider.DocumentFile
+import com.rfandango.haku_x.data.AppPrefs
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -57,6 +63,32 @@ internal fun MinervaXboxNativeCatalog(onBack: () -> Unit) {
   var downloadingId by remember { mutableStateOf<String?>(null) }
   var confirmedTorrentId by remember { mutableStateOf<String?>(null) }
   var message by remember { mutableStateOf("Carregando catálogo Redump Xbox do Minerva Archive…") }
+  var destinationName by remember {
+    mutableStateOf(
+      AppPrefs(context).downloadFolderUri?.let { uri ->
+        DocumentFile.fromTreeUri(context, uri)?.name
+      } ?: "Não selecionada"
+    )
+  }
+  val destinationPicker = rememberLauncherForActivityResult(
+    ActivityResultContracts.OpenDocumentTree()
+  ) { uri: Uri? ->
+    if (uri != null) {
+      runCatching {
+        context.contentResolver.takePersistableUriPermission(
+          uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+        )
+        val folder = DocumentFile.fromTreeUri(context, uri)
+          ?: error("Não foi possível abrir a pasta selecionada.")
+        require(folder.canWrite()) { "A pasta selecionada não permite gravação." }
+        AppPrefs(context).downloadFolderUri = uri
+        destinationName = folder.name ?: uri.lastPathSegment ?: "Pasta selecionada"
+        message = "Destino dos downloads definido: $destinationName"
+      }.onFailure { error ->
+        message = error.message ?: "Não foi possível salvar a pasta de destino."
+      }
+    }
+  }
 
   fun loadCatalog() {
     if (loading) return
@@ -119,6 +151,24 @@ internal fun MinervaXboxNativeCatalog(onBack: () -> Unit) {
       placeholder = { Text("Ex.: Halo, Forza, Burnout…") },
     )
 
+    Row(
+      modifier = Modifier.fillMaxWidth(),
+      verticalAlignment = Alignment.CenterVertically,
+      horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+      Column(modifier = Modifier.weight(1f)) {
+        Text("Pasta de destino", color = Color.White, style = MaterialTheme.typography.labelMedium)
+        Text(destinationName, color = Color(0xFFB9C5BC), style = MaterialTheme.typography.labelSmall, maxLines = 2)
+      }
+      TextButton(onClick = { destinationPicker.launch(null) }) {
+        Text("Escolher pasta", color = Color(0xFF39FF14))
+      }
+    }
+    Text(
+      "O torrent usa uma área temporária privada durante a transferência. Ao concluir, o HakuX copia/importa o jogo para esta pasta escolhida.",
+      color = Color(0xFF9BA99E),
+      style = MaterialTheme.typography.labelSmall,
+    )
     Text(message, color = Color(0xFFBFE8C5), style = MaterialTheme.typography.bodySmall)
     if (downloadingId != null) {
       Text("Consultando a API do Minerva (normalmente 20–25 s). Se não responder em até 45 s, será exibido um erro para tentar novamente.", color = Color(0xFFFFD27A), style = MaterialTheme.typography.labelSmall)
