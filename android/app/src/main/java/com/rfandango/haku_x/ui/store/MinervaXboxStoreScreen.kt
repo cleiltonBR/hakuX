@@ -175,7 +175,7 @@ internal fun MinervaXboxNativeCatalog(onBack: () -> Unit) {
                   if (downloadingId == null) {
                     scope.launch {
                       downloadingId = entry.id
-                      message = "Localizando o torrent de ${entry.title} no índice oficial do Minerva…"
+                      message = "Consultando a API do Minerva para localizar ${entry.title}. Essa consulta pode levar até 60 segundos; aguarde nesta tela…"
                       try {
                         val source = withContext(Dispatchers.IO) {
                           MinervaXboxRepository.resolveTorrent(entry)
