@@ -170,7 +170,7 @@ object TorrentDownloadManager {
   ): String {
     val magnet = rawMagnet.trim()
     val hash = requireNotNull(extractBtih(magnet)) {
-      "O magnet do Minerva não contém um BTIH hexadecimal válido."
+      "O magnet não contém um BTIH hexadecimal válido."
     }
     addMagnet(appContext, magnet, displayName, relativePath)
     val startup = startupResults[hash]
@@ -251,7 +251,7 @@ object TorrentDownloadManager {
     sources[hash] = magnet
     if (requestedFiles.isNotEmpty()) selectedFileIndices[hash] = requestedFiles.toMutableSet()
     if (!relativePath.isNullOrBlank()) {
-      // A negative placeholder keeps the selected Minerva path until torrent
+      // A negative placeholder keeps the selected torrent file path until torrent
       // metadata arrives and the real libtorrent file index can be resolved.
       val pathKeys = requestedFiles.ifEmpty { setOf(-1) }
       selectedFilePaths[hash] = pathKeys.associateWith { relativePath }.toMutableMap()
@@ -352,7 +352,7 @@ object TorrentDownloadManager {
   private fun ensureEngine(appContext: Context) {
     context = appContext.applicationContext
     if (!engine.isRunning) {
-      // MiNERVA collection torrents contain large info dictionaries.
+      // Large collection torrents contain large info dictionaries.
       // libtorrent4j defaults max_metadata_size to 2 MiB, which rejects
       // the ~21 MiB Xbox collection metadata before file sizes are known.
       // Raise the cap to 64 MiB so metadata exchange can complete.
@@ -522,7 +522,7 @@ object TorrentDownloadManager {
       .toSet()
     if (paths.isEmpty()) return
 
-    // Minerva's so_id identifies its catalogue row, not a verified
+    // The selected file identifier is not assumed to be a verified
     // libtorrent file index. Resolve the selected archive by its full path
     // against the actual torrent metadata instead.
     val selected = (0 until info.numFiles()).filter { index ->
@@ -533,7 +533,7 @@ object TorrentDownloadManager {
       }
     }.toSet()
     require(selected.isNotEmpty()) {
-      "O arquivo ${paths.first()} não foi encontrado nos metadados do torrent Minerva."
+      "O arquivo ${paths.first()} não foi encontrado nos metadados do torrent."
     }
     if (appliedFileSelections[id] == selected) return
     val priorities = Priority.array(Priority.IGNORE, info.numFiles())
