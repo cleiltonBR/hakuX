@@ -209,7 +209,7 @@ object ArchiveXboxDownloads {
   }
 
   /**
-   * Imports a completed Minerva torrent file into the configured game folder.
+   * Imports a completed torrent file into the configured game folder.
    * Archive files are extracted there so the library scanner can discover the game.
    */
   suspend fun importTorrentFile(context: Context, title: String, source: File) = withContext(Dispatchers.IO) {
@@ -226,7 +226,7 @@ object ArchiveXboxDownloads {
 
     val extension = source.extension.lowercase(Locale.ROOT)
     if (extension in ARCHIVE_EXTENSIONS) {
-      val stagingDirectory = File(app.cacheDir, "hakux-minerva-extract-" + UUID.randomUUID())
+      val stagingDirectory = File(app.cacheDir, "hakux-torrent-extract-" + UUID.randomUUID())
       var extractedFolder: DocumentFile? = null
       try {
         GameArchiveExtractor.extract(source, stagingDirectory)
