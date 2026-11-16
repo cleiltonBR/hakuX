@@ -22,6 +22,8 @@ import org.libtorrent4j.Sha1Hash
 import org.libtorrent4j.TorrentFlags
 import org.libtorrent4j.TorrentHandle
 import org.libtorrent4j.TorrentInfo
+import org.libtorrent4j.alerts.Alert
+import org.libtorrent4j.alerts.AlertListener
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 import java.util.Locale
@@ -64,6 +66,49 @@ object TorrentDownloadManager {
   private val importedFileIndices = linkedMapOf<String, MutableSet<Int>>()
   private var context: Context? = null
   private var polling = false
+  private var alertListenerRegistered = false
+
+  // Capture native libtorrent events instead of leaving failed metadata
+  // exchanges indistinguishable from a torrent that is still waiting.
+  private val torrentAlertListener = object : AlertListener {
+    override fun types(): IntArray? = null
+
+    override fun alert(alert: Alert<*>) {
+      when (alert.type().name) {
+        "METADATA_RECEIVED" -> {
+          val hash = extractAlertInfoHash(alert) ?: return
+          updateLocal(hash) { current ->
+            current.copy(
+              error = null,
+              name = if (current.name == "Obtendo metadados…") "Metadados recebidos — verificando arquivos…" else current.name,
+            )
+          }
+        }
+        "METADATA_FAILED" -> {
+          val hash = extractAlertInfoHash(alert) ?: return
+          updateLocal(hash) {
+            it.copy(state = TorrentDownload.State.ERROR, error = "Falha ao receber metadados do torrent: $alert")
+          }
+          persist()
+        }
+        "TORRENT_ERROR", "ADD_TORRENT_FAILED" -> {
+          val hash = extractAlertInfoHash(alert) ?: return
+          updateLocal(hash) {
+            it.copy(state = TorrentDownload.State.ERROR, error = "Falha reportada pelo libtorrent: $alert")
+          }
+          persist()
+        }
+      }
+    }
+  }
+
+  private fun extractAlertInfoHash(alert: Alert<*>): String? =
+    runCatching {
+      val torrentAlert = alert as? org.libtorrent4j.alerts.TorrentAlert<*> ?: return null
+      val handle = torrentAlert.handle()
+      if (!handle.isValid()) return null
+      handle.infoHash().toHex().lowercase(Locale.ROOT)
+    }.getOrNull()
 
   @Synchronized
   fun restore(appContext: Context) {
@@ -306,6 +351,10 @@ object TorrentDownloadManager {
   private fun ensureEngine(appContext: Context) {
     context = appContext.applicationContext
     if (!engine.isRunning) engine.start()
+    if (!alertListenerRegistered) {
+      engine.addListener(torrentAlertListener)
+      alertListenerRegistered = true
+    }
   }
 
   private fun downloadDirectory(appContext: Context): File =
