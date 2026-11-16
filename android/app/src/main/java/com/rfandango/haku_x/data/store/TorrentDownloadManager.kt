@@ -41,6 +41,7 @@ data class TorrentDownload(
 /** Native BitTorrent engine for user-supplied magnet URIs and .torrent files. */
 object TorrentDownloadManager {
   private val engine = SessionManager()
+  private val engineLock = Any()
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
   private val mutableDownloads = MutableStateFlow<List<TorrentDownload>>(emptyList())
   val downloads: StateFlow<List<TorrentDownload>> = mutableDownloads.asStateFlow()
@@ -197,17 +198,22 @@ object TorrentDownloadManager {
       )
     if (persist) persist()
 
-    try {
-      ensureEngine(appContext)
-      engine.download(magnet, downloadDirectory(appContext), TorrentFlags.AUTO_MANAGED)
-      startService(appContext)
-      startPolling()
-    } catch (error: Exception) {
-      updateLocal(hash) {
-        it.copy(state = TorrentDownload.State.ERROR, error = error.message ?: "Não foi possível inicializar o motor BitTorrent.")
+    // Native libtorrent startup runs off the caller so the store screen can
+    // return immediately after the item is visible in the persistent queue.
+    scope.launch {
+      try {
+        synchronized(engineLock) {
+          ensureEngine(appContext)
+          engine.download(magnet, downloadDirectory(appContext), TorrentFlags.AUTO_MANAGED)
+        }
+        startService(appContext)
+        startPolling()
+      } catch (error: Exception) {
+        updateLocal(hash) {
+          it.copy(state = TorrentDownload.State.ERROR, error = error.message ?: "Não foi possível inicializar o motor BitTorrent.")
+        }
+        if (persist) persist()
       }
-      if (persist) persist()
-      throw error
     }
   }
 
