@@ -120,7 +120,7 @@ internal fun MinervaXboxNativeCatalog(onBack: () -> Unit) {
 
     Text(message, color = Color(0xFFBFE8C5), style = MaterialTheme.typography.bodySmall)
     if (downloadingId != null) {
-      Text("Localizando o torrent oficial e preparando o download seletivo…", color = Color(0xFFFFD27A), style = MaterialTheme.typography.labelSmall)
+      Text("Consultando a API do Minerva (normalmente 20–25 s). Se não responder em até 45 s, será exibido um erro para tentar novamente.", color = Color(0xFFFFD27A), style = MaterialTheme.typography.labelSmall)
     }
 
     if (loading && entries.isEmpty()) {
