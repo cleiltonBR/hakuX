@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import org.json.JSONArray
 import org.json.JSONObject
 import org.libtorrent4j.SessionManager
+import org.libtorrent4j.AlertListener
 import org.libtorrent4j.Priority
 import org.libtorrent4j.Sha1Hash
 import org.libtorrent4j.TorrentFlags
