@@ -96,8 +96,9 @@ object MinervaXboxRepository {
 
   /**
    * Resolves one catalog row through MiNERVA's public search API.
-   * The API returns a collection magnet plus so_id, the selected-file index.
-   * Appending BEP 53's so parameter prevents downloading the entire Xbox set.
+   * The API returns a collection magnet plus a row-level so_id.
+   * so_id is not assumed to be a libtorrent file index. The exact archive
+   * path is matched against torrent metadata after it arrives.
    */
   fun resolveTorrent(entry: MinervaXboxEntry): MinervaTorrentSource {
     val searchTerm = entry.fileName.removeSuffix(".zip").removeSuffix(".ZIP")
@@ -160,12 +161,10 @@ object MinervaXboxRepository {
       require(magnet.startsWith("magnet:?", ignoreCase = true)) {
         "O Minerva não forneceu um magnet válido para este jogo."
       }
-      val fileIndex = row.optString("so_id").trim()
-      require(fileIndex.matches(Regex("\\d+"))) {
-        "O Minerva não informou o índice do arquivo no torrent. Nenhum download foi iniciado."
-      }
+      // so_id is a Minerva database row identifier, not a verified
+      // libtorrent file index. Do not pass it as BEP 53 "so".
       val selectedMagnet = buildString {
-        append(if (Regex("(?i)[?&]so=").containsMatchIn(magnet)) magnet else "$magnet&so=$fileIndex")
+        append(magnet)
 
         // A magnet may contain one stale/unreachable tracker. Do not treat
         // the presence of a single tr= parameter as proof that discovery is
@@ -183,7 +182,7 @@ object MinervaXboxRepository {
         }
       }
       val path = row.optString("full_path").replace('\\', '/')
-      return MinervaTorrentSource(selectedMagnet, path, fileIndex)
+      return MinervaTorrentSource(selectedMagnet, path, "")
     } finally {
       connection.disconnect()
     }
