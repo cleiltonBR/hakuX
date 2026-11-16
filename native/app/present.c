@@ -24,7 +24,7 @@ static bool g_fxaa;
 static int g_upscale = NC_UPSCALE_BILINEAR;
 static bool g_cas;
 static float g_cas_sharpness = 0.2f;
-static bool g_nis;
+static _Atomic bool g_nis;
 static _Atomic float g_nis_sharpness = 0.5f;
 static bool g_shown;
 
@@ -78,7 +78,7 @@ void nc_present_set_nis(bool on, float sharpness)
      * presenter reads the values on the frame thread. Keep both accesses
      * atomic; publish sharpness before enabling the new setting. */
     atomic_store_explicit(&g_nis_sharpness, sharpness, memory_order_relaxed);
-    __atomic_store_n(&g_nis, on, __ATOMIC_RELAXED);
+    atomic_store_explicit(&g_nis, on, memory_order_release);
 }
 
 void nc_present_set_aspect(int mode)
@@ -203,7 +203,7 @@ bool nc_present_frame(struct ANativeWindow *win)
     debug_poll();
     /* Snapshot runtime NIS controls once per frame. nativeSetNis can run
      * concurrently from Android's UI thread. */
-    const bool nis = __atomic_load_n(&g_nis, __ATOMIC_RELAXED);
+    const bool nis = atomic_load_explicit(&g_nis, memory_order_acquire);
     const float nis_sharpness = atomic_load_explicit(&g_nis_sharpness, memory_order_relaxed);
     const bool fxaa = g_dbg.fxaa < 0 ? g_fxaa : g_dbg.fxaa != 0;
     const int upscale = g_dbg.upscale < 0 ? g_upscale : g_dbg.upscale;
