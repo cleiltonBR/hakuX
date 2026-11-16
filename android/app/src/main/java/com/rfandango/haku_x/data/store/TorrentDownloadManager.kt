@@ -33,6 +33,10 @@ data class TorrentDownload(
   val total: Long = 0L,
   val downloadRate: Int = 0,
   val uploadRate: Int = 0,
+  val connectedPeers: Int = 0,
+  val discoveredPeers: Int = 0,
+  val seedCount: Int = 0,
+  val activeTracker: String = "",
   val state: State = State.WAITING_METADATA,
   val error: String? = null,
   val libraryImported: Boolean = false,
@@ -339,6 +343,10 @@ object TorrentDownloadManager {
                     total = status.total().coerceAtLeast(0L),
                     downloadRate = status.downloadRate().coerceAtLeast(0),
                     uploadRate = status.uploadRate().coerceAtLeast(0),
+                    connectedPeers = status.numPeers().coerceAtLeast(0),
+                    discoveredPeers = status.listPeers().coerceAtLeast(0),
+                    seedCount = status.numSeeds().coerceAtLeast(0),
+                    activeTracker = status.currentTracker(),
                     state = state,
                     // libtorrent reports the zero error code as the text "Success".
                     // That is a healthy status, not an error to show in the download card.
