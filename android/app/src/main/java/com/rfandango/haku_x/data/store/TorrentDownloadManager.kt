@@ -3,6 +3,8 @@ package com.rfandango.haku_x.data.store
 import android.content.Context
 import android.content.Intent
 import androidx.core.content.ContextCompat
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -43,6 +45,7 @@ object TorrentDownloadManager {
   private val engine = SessionManager()
   private val engineLock = Any()
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+  private val startupResults = ConcurrentHashMap<String, CompletableDeferred<Unit>>()
   private val mutableDownloads = MutableStateFlow<List<TorrentDownload>>(emptyList())
   val downloads: StateFlow<List<TorrentDownload>> = mutableDownloads.asStateFlow()
   private val handles = ConcurrentHashMap<String, TorrentHandle>()
@@ -106,6 +109,26 @@ object TorrentDownloadManager {
         }
       }
     }
+  }
+
+  suspend fun addMagnetAndAwaitEngine(
+    appContext: Context,
+    rawMagnet: String,
+    displayName: String? = null,
+    relativePath: String? = null,
+  ): String {
+    val magnet = rawMagnet.trim()
+    val hash = requireNotNull(extractBtih(magnet)) {
+      "O magnet do Minerva não contém um BTIH hexadecimal válido."
+    }
+    addMagnet(appContext, magnet, displayName, relativePath)
+    val startup = startupResults[hash]
+      ?: throw IllegalStateException("O torrent foi encontrado na fila, mas a inicialização não foi confirmada.")
+    withTimeout(90_000) { startup.await() }
+    check(mutableDownloads.value.any { it.id == hash }) {
+      "O motor BitTorrent não manteve este torrent na fila."
+    }
+    return hash
   }
 
   fun addMagnet(
@@ -198,8 +221,9 @@ object TorrentDownloadManager {
       )
     if (persist) persist()
 
-    // Native libtorrent startup runs off the caller so the store screen can
-    // return immediately after the item is visible in the persistent queue.
+    // Queue insertion alone is not proof that libtorrent accepted the magnet.
+    val startup = CompletableDeferred<Unit>()
+    startupResults[hash] = startup
     scope.launch {
       try {
         synchronized(engineLock) {
@@ -208,7 +232,9 @@ object TorrentDownloadManager {
         }
         startService(appContext)
         startPolling()
+        startup.complete(Unit)
       } catch (error: Exception) {
+        startup.completeExceptionally(error)
         updateLocal(hash) {
           it.copy(state = TorrentDownload.State.ERROR, error = error.message ?: "Não foi possível inicializar o motor BitTorrent.")
         }
