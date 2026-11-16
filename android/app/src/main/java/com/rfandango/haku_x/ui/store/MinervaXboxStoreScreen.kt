@@ -55,6 +55,7 @@ internal fun MinervaXboxNativeCatalog(onBack: () -> Unit) {
   var entries by remember { mutableStateOf<List<MinervaXboxEntry>>(emptyList()) }
   var loading by remember { mutableStateOf(false) }
   var downloadingId by remember { mutableStateOf<String?>(null) }
+  var confirmedTorrentId by remember { mutableStateOf<String?>(null) }
   var message by remember { mutableStateOf("Carregando catálogo Redump Xbox do Minerva Archive…") }
 
   fun loadCatalog() {
@@ -169,7 +170,9 @@ internal fun MinervaXboxNativeCatalog(onBack: () -> Unit) {
                 style = MaterialTheme.typography.labelSmall,
                 maxLines = 1,
               )
-              val queued = torrentDownloads.firstOrNull { it.name.equals(entry.title, ignoreCase = true) }
+              val queued = torrentDownloads.firstOrNull {
+                it.id == confirmedTorrentId || it.name.equals(entry.title, ignoreCase = true)
+              }
               Button(
                 onClick = {
                   if (downloadingId == null) {
@@ -181,12 +184,16 @@ internal fun MinervaXboxNativeCatalog(onBack: () -> Unit) {
                           MinervaXboxRepository.resolveTorrent(entry)
                         }
                         message = "Torrent localizado. Registrando ${entry.title} na fila interna…"
-                        withContext(Dispatchers.IO) {
-                          TorrentDownloadManager.addMagnet(context, source.magnet, entry.title, source.filePath)
+                        val torrentId = withContext(Dispatchers.IO) {
+                          TorrentDownloadManager.addMagnetAndAwaitEngine(
+                            context, source.magnet, entry.title, source.filePath
+                          )
                         }
-                        message = "Download de ${entry.title} registrado na fila interna. O motor BitTorrent está inicializando em segundo plano; apenas este arquivo foi selecionado e será importado para a Biblioteca ao concluir."
+                        confirmedTorrentId = torrentId
+                        message = "Motor BitTorrent inicializado e torrent confirmado na fila para ${entry.title}. O progresso real aparecerá na aba Downloads."
                       } catch (error: Exception) {
-                        message = error.message ?: "Não foi possível iniciar o torrent deste jogo."
+                        confirmedTorrentId = null
+                        message = error.message ?: "Não foi possível confirmar a inicialização do torrent."
                       } finally {
                         downloadingId = null
                       }
