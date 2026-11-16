@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import org.json.JSONArray
 import org.json.JSONObject
 import org.libtorrent4j.SessionManager
+import org.libtorrent4j.SessionParams
 import org.libtorrent4j.AlertListener
 import org.libtorrent4j.Priority
 import org.libtorrent4j.Sha1Hash
@@ -350,7 +351,15 @@ object TorrentDownloadManager {
 
   private fun ensureEngine(appContext: Context) {
     context = appContext.applicationContext
-    if (!engine.isRunning) engine.start()
+    if (!engine.isRunning) {
+      // MiNERVA collection torrents contain large info dictionaries.
+      // libtorrent4j defaults max_metadata_size to 2 MiB, which rejects
+      // the ~21 MiB Xbox collection metadata before file sizes are known.
+      // Raise the cap to 64 MiB so metadata exchange can complete.
+      val sessionParams = SessionParams()
+      sessionParams.getSettings().setMaxMetadataSize(64 * 1024 * 1024)
+      engine.start(sessionParams)
+    }
     if (!alertListenerRegistered) {
       engine.addListener(torrentAlertListener)
       alertListenerRegistered = true
