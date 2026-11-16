@@ -41,7 +41,7 @@ void nc_present_set_lsfg(const char *path, int multiplier, bool performance, int
  * average interval, and the last one's (ms). */
 void nc_present_stats(float *fps, float *avg_ms, float *last_ms);
 /* NIS diagnostics for the debug overlay: ready/enabled/executed/reason/dimensions/path. */
-void nc_present_nis_status(int status[9]);
+void nc_present_nis_status(int status[14]);
 /* A title frame has been on screen (any thread). */
 bool nc_present_shown(void);
 
