@@ -82,7 +82,7 @@ internal fun TorrentDownloadsScreen(onBack: () -> Unit) {
     OutlinedTextField(value = magnet, onValueChange = { magnet = it }, modifier = Modifier.fillMaxWidth(),
       label = { Text("Link magnet") }, placeholder = { Text("magnet:?xt=urn:btih:…") }, singleLine = true)
     Text(
-      "Para jogos da Minerva, use o botão Download no próprio card. O HakuX localiza o magnet e seleciona somente o arquivo escolhido; este campo aceita apenas links magnet, não endereços de páginas.",
+      "Adicione um link magnet ou abra um arquivo .torrent. Este campo aceita apenas links magnet, não endereços de páginas.",
       color = Color(0xFFB9C5BC),
       style = MaterialTheme.typography.labelSmall,
     )
@@ -108,7 +108,7 @@ internal fun TorrentDownloadsScreen(onBack: () -> Unit) {
     }
     Text(message, color = Color(0xFFBFE8C5), style = MaterialTheme.typography.bodySmall)
     Text(
-      "Área temporária do BitTorrent: armazenamento privado do app. Após a conclusão, os jogos da Minerva são importados para a pasta de destino escolhida no catálogo Minerva.",
+      "Os torrents são baixados no armazenamento privado temporário do aplicativo.",
       color = Color(0xFF9BA99E),
       style = MaterialTheme.typography.labelSmall,
     )
