@@ -205,8 +205,13 @@ object TorrentDownloadManager {
     sources[hash] = magnet
     if (requestedFiles.isNotEmpty()) selectedFileIndices[hash] = requestedFiles.toMutableSet()
     if (!relativePath.isNullOrBlank()) {
-      selectedFilePaths[hash] = requestedFiles.associateWith { relativePath }.toMutableMap()
-      displayName?.let { title -> selectedFileTitles[hash] = requestedFiles.associateWith { title }.toMutableMap() }
+      // A negative placeholder keeps the selected Minerva path until torrent
+      // metadata arrives and the real libtorrent file index can be resolved.
+      val pathKeys = requestedFiles.ifEmpty { setOf(-1) }
+      selectedFilePaths[hash] = pathKeys.associateWith { relativePath }.toMutableMap()
+      displayName?.let { title ->
+        selectedFileTitles[hash] = pathKeys.associateWith { title }.toMutableMap()
+      }
     }
     if (restoredPaths.isNotEmpty()) selectedFilePaths[hash] = restoredPaths.toMutableMap()
     if (restoredTitles.isNotEmpty()) selectedFileTitles[hash] = restoredTitles.toMutableMap()
