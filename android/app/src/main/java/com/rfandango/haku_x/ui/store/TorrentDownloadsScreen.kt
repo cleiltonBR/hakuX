@@ -107,7 +107,11 @@ internal fun TorrentDownloadsScreen(onBack: () -> Unit) {
       }
     }
     Text(message, color = Color(0xFFBFE8C5), style = MaterialTheme.typography.bodySmall)
-    Text("Destino interno: ${File(context.filesDir, "torrent-downloads").absolutePath}", color = Color(0xFF9BA99E), style = MaterialTheme.typography.labelSmall)
+    Text(
+      "Área temporária do BitTorrent: armazenamento privado do app. Após a conclusão, os jogos da Minerva são importados para a pasta de destino escolhida no catálogo Minerva.",
+      color = Color(0xFF9BA99E),
+      style = MaterialTheme.typography.labelSmall,
+    )
     if (downloads.isEmpty()) Text("Nenhum torrent na fila.", color = Color(0xFFB9C5BC))
     else LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
       items(downloads, key = { it.id }) { item ->
