@@ -132,11 +132,19 @@ private fun TorrentDownloadCard(
   onRetryImport: () -> Unit,
 ) {
   val progress = if (item.total > 0L) (item.done.toFloat() / item.total).coerceIn(0f, 1f) else 0f
+  val stateLabel = if (
+    item.state == TorrentDownload.State.WAITING_METADATA &&
+    (item.downloadRate > 0 || item.uploadRate > 0)
+  ) "Baixando metadados" else torrentStateLabel(item.state)
   Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF0B120E))) {
     Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
       Text(item.name, color = Color.White, style = MaterialTheme.typography.titleSmall)
-      Text("${torrentStateLabel(item.state)} · ${formatTorrentBytes(item.done)} / ${if (item.total > 0L) formatTorrentBytes(item.total) else "—"}", color = Color(0xFFB9C5BC), style = MaterialTheme.typography.labelSmall)
-      LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
+      Text("$stateLabel · ${formatTorrentBytes(item.done)} / ${if (item.total > 0L) formatTorrentBytes(item.total) else "aguardando tamanho"}", color = Color(0xFFB9C5BC), style = MaterialTheme.typography.labelSmall)
+      if (item.total > 0L) {
+        LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
+      } else {
+        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+      }
       Text("↓ ${formatTorrentBytes(item.downloadRate.toLong())}/s   ↑ ${formatTorrentBytes(item.uploadRate.toLong())}/s", color = Color(0xFF9BA99E), style = MaterialTheme.typography.labelSmall)
       if (item.libraryImported) {
         Text("Arquivos selecionados importados para a Biblioteca", color = Color(0xFF39FF14), style = MaterialTheme.typography.labelSmall)
