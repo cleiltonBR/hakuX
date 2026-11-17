@@ -377,17 +377,26 @@ object ArchiveXboxDownloads {
         val connection = openDownloadConnection(option.downloadUrl, offset, option.requestHeaders)
         try {
           val status = connection.responseCode
-          if (offset > 0L) {
+          if (offset > 0L && status == HttpURLConnection.HTTP_OK) {
+            // The origin ignored Range and is sending the file from byte zero.
+            // Restart safely instead of appending duplicate bytes or failing immediately.
+            offset = 0L
+            completedBytes = 0L
+            expectedTotal = connection.contentLengthLong.takeIf { it > 0L } ?: option.bytes
+          } else if (offset > 0L) {
             check(status == HttpURLConnection.HTTP_PARTIAL) {
-              if (status == HttpURLConnection.HTTP_OK) "O servidor não aceitou a retomada HTTP. O progresso parcial foi preservado; este link pode não permitir retomada."
-              else "Não foi possível retomar o download (HTTP $status). O progresso parcial foi preservado."
+              "Não foi possível retomar o download (HTTP $status). O progresso parcial foi preservado."
             }
             val contentRange = connection.getHeaderField("Content-Range") ?: ""
-            check(contentRange.startsWith("bytes $offset-", ignoreCase = true)) {
+            check(Regex("""(?i)^bytes\\s+$offset-\\d+/(?:\\d+|\\*)$""").matches(contentRange.trim())) {
               "O servidor retornou um intervalo diferente do solicitado. O arquivo parcial foi preservado."
             }
           } else {
             check(status in 200..299) { "Falha ao baixar o arquivo (HTTP $status)." }
+          }
+          val contentType = connection.contentType.orEmpty().substringBefore(';').trim().lowercase(Locale.ROOT)
+          check(contentType != "text/html") {
+            "O servidor retornou uma página HTML em vez do arquivo. Verifique a sessão ou a disponibilidade do link na RomUlation."
           }
           val reportedLength = connection.contentLengthLong
           if (expectedTotal <= 0L) {
