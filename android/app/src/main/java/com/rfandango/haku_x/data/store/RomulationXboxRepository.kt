@@ -35,11 +35,15 @@ object RomulationXboxRepository {
    ?: error("A página não forneceu um link oficial de download.")
   val resolved=URL(URL(finalUrl),decode(link))
   require(resolved.protocol=="https" && resolved.host.equals("www.romulation.org",true)) { "Destino de download inválido." }
-  val cookies = runCatching { cookieManager.get(URL(finalUrl).toURI(), emptyMap()).entries
-   .filterKeys { it.equals("Cookie", true) }
-   .mapValues { (_, values) -> values.joinToString("; ") }
-  }.getOrDefault(emptyMap())
-  return RomulationDownload(resolved.toString(),fileName,bytes, cookies + ("Referer" to finalUrl))
+  val cookieHeader = runCatching {
+   cookieManager.cookieStore.get(URL(finalUrl).toURI())
+    .joinToString("; ") { cookie -> "${cookie.name}=${cookie.value}" }
+  }.getOrDefault("")
+  val requestHeaders = buildMap<String, String> {
+   if (cookieHeader.isNotBlank()) put("Cookie", cookieHeader)
+   put("Referer", finalUrl)
+  }
+  return RomulationDownload(resolved.toString(),fileName,bytes,requestHeaders)
  }
  private fun get(address:String, referer:String?=null):Pair<String,String>{
   val u=URL(address); require(u.protocol=="https" && u.host=="www.romulation.org")
