@@ -388,7 +388,7 @@ object ArchiveXboxDownloads {
               "Não foi possível retomar o download (HTTP $status). O progresso parcial foi preservado."
             }
             val contentRange = connection.getHeaderField("Content-Range") ?: ""
-            check(Regex("""(?i)^bytes\\s+$offset-\\d+/(?:\\d+|\\*)$""").matches(contentRange.trim())) {
+            check(Regex("""(?i)^bytes\s+$offset-\d+/(?:\d+|\*)$""").matches(contentRange.trim())) {
               "O servidor retornou um intervalo diferente do solicitado. O arquivo parcial foi preservado."
             }
           } else {
