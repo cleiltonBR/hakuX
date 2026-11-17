@@ -7,6 +7,7 @@ import com.rfandango.haku_x.data.Storage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -326,60 +327,99 @@ object ArchiveXboxDownloads {
       partial = root.findFile(partialName)
         ?: root.createFile("application/octet-stream", partialName)
         ?: error("Não foi possível criar o arquivo temporário na pasta de destino.")
-      val offset = partial!!.length().coerceAtLeast(0L)
+      var offset = partial!!.length().coerceAtLeast(0L)
       check(option.bytes <= 0L || offset <= option.bytes) { "O arquivo parcial é maior que o tamanho informado pelo servidor." }
       var completedBytes = offset
-      val connection = (URL(option.downloadUrl).openConnection() as HttpURLConnection).apply {
-        connectTimeout = 20_000
-        readTimeout = 60_000
-        instanceFollowRedirects = true
-        setRequestProperty("User-Agent", "HakuX-Store/1.0")
-        if (offset > 0L) setRequestProperty("Range", "bytes=$offset-")
-      }
-      try {
-        val status = connection.responseCode
-        if (offset > 0L) {
-          check(status == HttpURLConnection.HTTP_PARTIAL) {
-            if (status == HttpURLConnection.HTTP_OK) "O servidor não aceitou a retomada HTTP. O arquivo parcial foi preservado; tente novamente mais tarde."
-            else "Não foi possível retomar o download (HTTP $status). O progresso parcial foi preservado."
-          }
-          val contentRange = connection.getHeaderField("Content-Range") ?: ""
-          check(contentRange.startsWith("bytes $offset-", ignoreCase = true)) {
-            "O servidor retornou um intervalo diferente do solicitado. O arquivo parcial foi preservado."
-          }
-        } else {
-          check(status in 200..299) { "Falha ao baixar o arquivo (HTTP $status)." }
+      var expectedTotal = option.bytes
+      var attempt = 0
+      var transferFinished = false
+      var lastTransferError: Exception? = null
+      while (!transferFinished && attempt < 4) {
+        val connection = (URL(option.downloadUrl).openConnection() as HttpURLConnection).apply {
+          connectTimeout = 25_000
+          readTimeout = 90_000
+          instanceFollowRedirects = true
+          setRequestProperty("User-Agent", "HakuX-Store/1.0")
+          setRequestProperty("Accept-Encoding", "identity")
+          if (offset > 0L) setRequestProperty("Range", "bytes=$offset-")
         }
-        val reportedLength = connection.contentLengthLong
-        val expectedTotal = option.bytes.takeIf { it > 0L } ?: reportedLength.takeIf { it > 0L }?.let { it + offset } ?: 0L
-        app.contentResolver.openOutputStream(partial!!.uri, if (offset > 0L) "wa" else "w")?.use { output ->
-          connection.inputStream.use { input ->
-            val buffer = ByteArray(128 * 1024)
-            var done = offset
-            var lastUpdate = 0L
-            while (true) {
-              currentCoroutineContext().ensureActive()
-              val count = input.read(buffer)
-              if (count < 0) break
-              output.write(buffer, 0, count)
-              done += count
-              val now = System.currentTimeMillis()
-              if (now - lastUpdate >= 300) {
-                completedBytes = done
-                update(entry.copy(done = done, total = expectedTotal, status = ArchiveDownload.Status.DOWNLOADING))
-                lastUpdate = now
-              }
+        try {
+          val status = connection.responseCode
+          if (offset > 0L) {
+            check(status == HttpURLConnection.HTTP_PARTIAL) {
+              if (status == HttpURLConnection.HTTP_OK) "O servidor não aceitou a retomada HTTP. O progresso parcial foi preservado; este link pode não permitir retomada."
+              else "Não foi possível retomar o download (HTTP $status). O progresso parcial foi preservado."
             }
-            output.flush()
-            check(done > 0L) { "O Internet Archive retornou um arquivo vazio." }
-            check(option.bytes <= 0L || done == option.bytes) { "Download incompleto: esperado ${option.bytes} bytes, recebido $done. O progresso foi preservado para continuar." }
-            completedBytes = done
-            update(entry.copy(done = done, total = expectedTotal.takeIf { it > 0L } ?: done, status = ArchiveDownload.Status.DOWNLOADING))
+            val contentRange = connection.getHeaderField("Content-Range") ?: ""
+            check(contentRange.startsWith("bytes $offset-", ignoreCase = true)) {
+              "O servidor retornou um intervalo diferente do solicitado. O arquivo parcial foi preservado."
+            }
+          } else {
+            check(status in 200..299) { "Falha ao baixar o arquivo (HTTP $status)." }
           }
-        } ?: error("Não foi possível gravar na pasta de destino.")
-      } finally {
-        connection.disconnect()
+          val reportedLength = connection.contentLengthLong
+          if (expectedTotal <= 0L) {
+            expectedTotal = if (offset > 0L && reportedLength > 0L) {
+              connection.getHeaderField("Content-Range")?.substringAfterLast('/')?.toLongOrNull()
+                ?: (reportedLength + offset)
+            } else reportedLength.coerceAtLeast(0L)
+          }
+          app.contentResolver.openOutputStream(partial!!.uri, if (offset > 0L) "wa" else "w")?.use { output ->
+            connection.inputStream.use { input ->
+              val buffer = ByteArray(256 * 1024)
+              var done = offset
+              var lastUpdate = 0L
+              while (true) {
+                currentCoroutineContext().ensureActive()
+                val count = input.read(buffer)
+                if (count < 0) break
+                output.write(buffer, 0, count)
+                done += count
+                val now = System.currentTimeMillis()
+                if (now - lastUpdate >= 300) {
+                  completedBytes = done
+                  update(entry.copy(done = done, total = expectedTotal, status = ArchiveDownload.Status.DOWNLOADING))
+                  lastUpdate = now
+                }
+              }
+              output.flush()
+              check(done > 0L) { "O servidor retornou um arquivo vazio." }
+              if (option.bytes > 0L) {
+                check(done == option.bytes) {
+                  "Download incompleto: esperado ${option.bytes} bytes, recebido $done."
+                }
+              }
+              completedBytes = done
+              expectedTotal = expectedTotal.takeIf { it > 0L } ?: done
+            }
+          } ?: error("Não foi possível gravar na pasta de destino.")
+          transferFinished = true
+        } catch (cancelled: CancellationException) {
+          throw cancelled
+        } catch (error: Exception) {
+          lastTransferError = error
+          offset = partial!!.length().coerceAtLeast(0L)
+          completedBytes = offset
+          val retryable = error is java.net.SocketException ||
+            error is java.net.SocketTimeoutException ||
+            error is java.io.EOFException ||
+            error is java.net.UnknownHostException ||
+            (error.message?.contains(Regex("HTTP 5\\d{2}")) == true)
+          if (!retryable || attempt >= 3) throw error
+          attempt++
+          update(entry.copy(
+            done = offset,
+            total = expectedTotal,
+            status = ArchiveDownload.Status.DOWNLOADING,
+            error = "Conexão interrompida. Tentando retomar automaticamente (${attempt}/3)…",
+          ))
+          kotlinx.coroutines.delay(1_500L * attempt)
+        } finally {
+          connection.disconnect()
+        }
       }
+      if (!transferFinished) throw lastTransferError ?: java.io.IOException("Não foi possível concluir o download.")
+
 
       check(partial!!.renameTo(finalName)) { "O download terminou, mas não foi possível finalizar o arquivo." }
       val downloaded = root.findFile(finalName)
