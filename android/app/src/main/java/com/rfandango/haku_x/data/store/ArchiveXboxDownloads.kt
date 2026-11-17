@@ -32,6 +32,7 @@ data class ArchiveDownloadOption(
   val name: String,
   val bytes: Long,
   val downloadUrl: String,
+  val requestHeaders: Map<String, String> = emptyMap(),
 )
 
 data class ArchiveDownload(
@@ -172,7 +173,7 @@ object ArchiveXboxDownloads {
   }
 
   /** Enqueue a direct file URL detected by the in-app browser. */
-  fun enqueueDirect(context: Context, title: String, rawUrl: String, suggestedFileName: String?, totalBytes: Long = 0L) {
+  fun enqueueDirect(context: Context, title: String, rawUrl: String, suggestedFileName: String?, totalBytes: Long = 0L, requestHeaders: Map<String, String> = emptyMap()) {
     require(isAllowedDownloadUrl(rawUrl)) { "Por segurança, só são aceitos downloads HTTP ou HTTPS de hosts públicos." }
     val parsed = URL(rawUrl)
     val candidate = suggestedFileName?.substringAfterLast('/')?.substringAfterLast('\\')
@@ -190,7 +191,43 @@ object ArchiveXboxDownloads {
       .digest(rawUrl.toByteArray(Charsets.UTF_8))
       .take(12).joinToString("") { "%02x".format(it) }
     enqueue(context, identifier, title.ifBlank { safeName.substringBeforeLast('.') },
-      ArchiveDownloadOption(safeName, totalBytes.coerceAtLeast(0L), rawUrl))
+      ArchiveDownloadOption(safeName, totalBytes.coerceAtLeast(0L), rawUrl, requestHeaders.filterKeys { it.equals("Cookie", true) || it.equals("Referer", true) }))
+  }
+
+  /**
+   * Follows redirects explicitly so RomUlation session cookies are never forwarded
+   * to a different host (for example, a CDN). Range headers are retained for resume.
+   */
+  private fun openDownloadConnection(
+    rawUrl: String,
+    offset: Long,
+    requestHeaders: Map<String, String>,
+  ): HttpURLConnection {
+    var current = URL(rawUrl)
+    val originalHost = current.host.lowercase(Locale.ROOT)
+    repeat(6) { redirect ->
+      require(isAllowedDownloadUrl(current.toString())) { "O servidor redirecionou para um destino não permitido." }
+      val connection = (current.openConnection() as HttpURLConnection).apply {
+        connectTimeout = 25_000
+        readTimeout = 90_000
+        instanceFollowRedirects = false
+        setRequestProperty("User-Agent", "HakuX-Store/1.0")
+        setRequestProperty("Accept-Encoding", "identity")
+        if (offset > 0L) setRequestProperty("Range", "bytes=$offset-")
+        if (current.host.equals(originalHost, true)) {
+          requestHeaders.forEach { (name, value) ->
+            if (name.equals("Cookie", true) || name.equals("Referer", true)) setRequestProperty(name, value)
+          }
+        }
+      }
+      val status = connection.responseCode
+      if (status !in setOf(301, 302, 303, 307, 308)) return connection
+      val location = connection.getHeaderField("Location")
+      connection.disconnect()
+      require(!location.isNullOrBlank() && redirect < 5) { "Redirecionamento inválido ou excessivo no download." }
+      current = URL(current, location)
+    }
+    error("O servidor excedeu o limite de redirecionamentos.")
   }
 
   private fun isAllowedDownloadUrl(value: String): Boolean {
@@ -285,7 +322,9 @@ object ArchiveXboxDownloads {
 
   fun resume(context: Context, item: ArchiveDownload) {
     val url = item.downloadUrl ?: return
-    enqueue(context, item.identifier, item.title, ArchiveDownloadOption(item.fileName, item.total, url))
+    val key = downloadKey(item.identifier, item.fileName)
+    val headers = synchronized(this) { requests[key]?.requestHeaders.orEmpty() }
+    enqueue(context, item.identifier, item.title, ArchiveDownloadOption(item.fileName, item.total, url, headers))
   }
 
   private suspend fun processQueue(context: Context) {
@@ -335,14 +374,7 @@ object ArchiveXboxDownloads {
       var transferFinished = false
       var lastTransferError: Exception? = null
       while (!transferFinished && attempt < 4) {
-        val connection = (URL(option.downloadUrl).openConnection() as HttpURLConnection).apply {
-          connectTimeout = 25_000
-          readTimeout = 90_000
-          instanceFollowRedirects = true
-          setRequestProperty("User-Agent", "HakuX-Store/1.0")
-          setRequestProperty("Accept-Encoding", "identity")
-          if (offset > 0L) setRequestProperty("Range", "bytes=$offset-")
-        }
+        val connection = openDownloadConnection(option.downloadUrl, offset, option.requestHeaders)
         try {
           val status = connection.responseCode
           if (offset > 0L) {
