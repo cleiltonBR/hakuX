@@ -1,15 +1,18 @@
 package com.rfandango.haku_x.data.store
 
+import java.net.CookieManager
+import java.net.CookiePolicy
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
 
 data class RomulationXboxGame(val id:String,val title:String,val region:String,val sizeLabel:String,val detailsUrl:String)
 data class RomulationXboxPage(val games:List<RomulationXboxGame>,val page:Int,val totalPages:Int)
-data class RomulationDownload(val url:String,val fileName:String,val bytes:Long)
+data class RomulationDownload(val url:String,val fileName:String,val bytes:Long,val requestHeaders:Map<String,String> = emptyMap())
 
 object RomulationXboxRepository {
  private const val BASE="https://www.romulation.org"
+ private val cookieManager = CookieManager(null, CookiePolicy.ACCEPT_ALL)
  fun search(query:String,page:Int=1):RomulationXboxPage {
   require(page>0)
   val q=query.trim()
@@ -21,7 +24,7 @@ object RomulationXboxRepository {
   return RomulationXboxPage(games,page,maxOf(page,pages))
  }
  fun resolveDownload(game:RomulationXboxGame):RomulationDownload {
-  val (html,finalUrl)=get(game.detailsUrl)
+  val (html,finalUrl)=get(game.detailsUrl, "$BASE/roms/XBOX")
   val text=clean(html)
   require(Regex("(?i)Can Download\\s+Yes").containsMatchIn(text)) { "A RomUlation não indica este jogo como disponível." }
   val fileName=Regex("""(?i)Full Name\s+([^|]+?\.(?:7z|zip|rar|iso|xiso|cso|cci))""").find(text)?.groupValues?.get(1)?.trim() ?: error("Nome do arquivo não informado.")
@@ -32,15 +35,22 @@ object RomulationXboxRepository {
    ?: error("A página não forneceu um link oficial de download.")
   val resolved=URL(URL(finalUrl),decode(link))
   require(resolved.protocol=="https" && resolved.host.equals("www.romulation.org",true)) { "Destino de download inválido." }
-  return RomulationDownload(resolved.toString(),fileName,bytes)
+  val cookies = runCatching { cookieManager.get(URL(finalUrl).toURI(), emptyMap()).entries
+   .filterKeys { it.equals("Cookie", true) }
+   .mapValues { (_, values) -> values.joinToString("; ") }
+  }.getOrDefault(emptyMap())
+  return RomulationDownload(resolved.toString(),fileName,bytes, cookies + ("Referer" to finalUrl))
  }
- private fun get(address:String):Pair<String,String>{
+ private fun get(address:String, referer:String?=null):Pair<String,String>{
   val u=URL(address); require(u.protocol=="https" && u.host=="www.romulation.org")
   val c=u.openConnection() as HttpURLConnection
   c.connectTimeout=15000;c.readTimeout=30000;c.instanceFollowRedirects=true
   c.setRequestProperty("User-Agent","HakuX-Store/1.0 (Android)")
   c.setRequestProperty("Accept","text/html,application/xhtml+xml")
+  if (!referer.isNullOrBlank()) c.setRequestProperty("Referer",referer)
+  runCatching { cookieManager.get(u.toURI(), emptyMap()) }.getOrNull()?.forEach { (name, values) -> values.forEach { c.addRequestProperty(name,it) } }
   try { val status=c.responseCode; require(status in 200..299){"RomUlation respondeu HTTP $status."}
+   runCatching { cookieManager.put(u.toURI(), c.headerFields) }
    return c.inputStream.bufferedReader(Charsets.UTF_8).use{it.readText()} to c.url.toString()
   } finally { c.disconnect() }
  }
