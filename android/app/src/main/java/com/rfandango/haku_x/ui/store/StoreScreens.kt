@@ -198,15 +198,15 @@ fun StoreScreen() {
         verticalAlignment = Alignment.CenterVertically,
       ) {
         androidx.compose.material3.OutlinedButton(
-          onClick = { selectedStoreTab = "vimm" },
+          onClick = { selectedStoreTab = "romulation" },
           shape = RoundedCornerShape(18.dp),
           border = BorderStroke(1.dp, Color(0xFF39FF14)),
           contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 8.dp),
         ) {
           Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("V", color = Color(0xFF39FF14), style = MaterialTheme.typography.titleLarge)
-            Text("Vimm's", color = Color.White, style = MaterialTheme.typography.labelSmall)
-            Text("Lair", color = Color.White, style = MaterialTheme.typography.labelSmall)
+            Text("R", color = Color(0xFF39FF14), style = MaterialTheme.typography.titleLarge)
+            Text("RomUlation", color = Color.White, style = MaterialTheme.typography.labelSmall)
+            Text("Xbox", color = Color.White, style = MaterialTheme.typography.labelSmall)
           }
         }
         androidx.compose.material3.OutlinedButton(
@@ -372,6 +372,12 @@ fun StoreScreen() {
       }
     }
     if (loading && results.isNotEmpty()) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+    } else if (selectedStoreTab == "romulation") {
+      Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text("RomUlation · Xbox", modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleLarge, color = Color.White)
+        TextButton(onClick = { selectedStoreTab = "catalog" }) { Text("Voltar", color = Color(0xFF39FF14)) }
+      }
+      RomulationXboxStoreScreen()
     } else if (selectedStoreTab == "vimm") {
       Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(modifier = Modifier.weight(1f)) {
