@@ -6,6 +6,7 @@ import java.net.URLEncoder
 
 data class RomulationXboxGame(val id:String,val title:String,val region:String,val sizeLabel:String,val detailsUrl:String)
 data class RomulationXboxPage(val games:List<RomulationXboxGame>,val page:Int,val totalPages:Int)
+data class RomulationDownload(val url:String,val fileName:String,val bytes:Long)
 
 object RomulationXboxRepository {
  private const val BASE="https://www.romulation.org"
@@ -19,16 +20,19 @@ object RomulationXboxRepository {
   val pages=Regex("""(?i)href=["'][^"']*[?&]page=(\d+)["']""").findAll(html).mapNotNull{it.groupValues[1].toIntOrNull()}.maxOrNull()?:page
   return RomulationXboxPage(games,page,maxOf(page,pages))
  }
- fun resolveDownload(game:RomulationXboxGame):String {
+ fun resolveDownload(game:RomulationXboxGame):RomulationDownload {
   val (html,finalUrl)=get(game.detailsUrl)
   val text=clean(html)
   require(Regex("(?i)Can Download\\s+Yes").containsMatchIn(text)) { "A RomUlation não indica este jogo como disponível." }
+  val fileName=Regex("""(?i)Full Name\\s+([^|]+?\\.(?:7z|zip|rar|iso|xiso|cso|cci))""").find(text)?.groupValues?.get(1)?.trim() ?: error("Nome do arquivo não informado.")
+  val sizeMatch=Regex("""(?i)Filesize\\s+([0-9.]+)\\s*(GB|MB|KB)""").find(text)
+  val bytes=sizeMatch?.let { m -> (m.groupValues[1].toDoubleOrNull() ?: 0.0).let { n -> (n * when(m.groupValues[2].uppercase()) { "GB" -> 1073741824.0; "MB" -> 1048576.0; "KB" -> 1024.0; else -> 1.0 }).toLong() } } ?: 0L
   val link=Regex("""(?is)<a\b[^>]*href\s*=\s*["']([^"']+)["'][^>]*>(.*?)</a>""").findAll(html)
    .firstOrNull{clean(it.groupValues[2]).contains("Download",true)}?.groupValues?.get(1)
    ?: error("A página não forneceu um link oficial de download.")
   val resolved=URL(URL(finalUrl),decode(link))
   require(resolved.protocol=="https" && resolved.host.equals("www.romulation.org",true)) { "Destino de download inválido." }
-  return resolved.toString()
+  return RomulationDownload(resolved.toString(),fileName,bytes)
  }
  private fun get(address:String):Pair<String,String>{
   val u=URL(address); require(u.protocol=="https" && u.host=="www.romulation.org")
