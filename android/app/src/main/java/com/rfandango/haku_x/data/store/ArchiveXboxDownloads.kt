@@ -414,10 +414,11 @@ object ArchiveXboxDownloads {
               (if (status >= 400) connection.errorStream else connection.inputStream)
                 ?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
             }.getOrDefault("")
-            val guestLinkRejected = page.contains("did not map to your ip", true) ||
-              page.contains("restart the download process", true) ||
-              page.contains("download link", true) && page.contains("ip", true)
-            if (guestLinkRejected && !activeOption.refreshUrl.isNullOrBlank() && guestRefreshes < 2) {
+            // Any HTML response from a RomUlation guest URL is an interstitial/error page,
+            // not a game archive. The site changes the wording of these pages, so do not
+            // depend on a specific English error phrase before refreshing the one-time link.
+            val isRomulationDownload = activeOption.refreshUrl?.startsWith("https://www.romulation.org/") == true
+            if (isRomulationDownload && guestRefreshes < 2) {
               val fresh = RomulationXboxRepository.refreshDownload(activeOption.refreshUrl, entry.title)
               activeOption = ArchiveDownloadOption(option.name, fresh.bytes, fresh.url, fresh.requestHeaders, option.refreshUrl)
               synchronized(this) { requests[downloadKey(entry.identifier, entry.fileName)] = activeOption }
@@ -433,7 +434,9 @@ object ArchiveXboxDownloads {
                 error = "Link temporário renovado. Reiniciando o download…"))
               continue
             }
-            error("A RomUlation devolveu uma página HTML, não o jogo. O link temporário foi renovado ${guestRefreshes} vez(es), mas o servidor ainda recusou a transferência. Verifique a sessão, o IP ou os pontos disponíveis na conta.")
+            val diagnostic = page.replace(Regex("(?is)<script[^>]*>.*?</script>|<style[^>]*>.*?</style>|<[^>]+>"), " ")
+              .replace(Regex("\\s+"), " ").trim().take(240)
+            error("A RomUlation devolveu HTML em vez do jogo mesmo após ${guestRefreshes} renovação(ões). Resposta do site: ${diagnostic.ifBlank { "sem mensagem legível" }}")
           }
           val reportedLength = connection.contentLengthLong
           if (expectedTotal <= 0L) {
