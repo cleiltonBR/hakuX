@@ -61,7 +61,7 @@ internal fun RomulationXboxStoreScreen() {
         busy=game.id;message="Obtendo link oficial para ${game.title}…"
         try{
          val download=withContext(Dispatchers.IO){RomulationXboxRepository.resolveDownload(game)}
-         ArchiveXboxDownloads.enqueueDirect(context,game.title,download.url,download.fileName,download.bytes,download.requestHeaders)
+         ArchiveXboxDownloads.enqueueDirect(context,game.title,download.url,download.fileName,download.bytes,download.requestHeaders,download.detailsUrl)
          message="Download adicionado à fila interna do HakuX."
         }catch(e:Exception){message=e.message?:"Não foi possível iniciar o download."}
         finally{busy=null}
