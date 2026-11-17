@@ -379,7 +379,8 @@ object ArchiveXboxDownloads {
           val status = connection.responseCode
           if (offset > 0L && status == HttpURLConnection.HTTP_OK) {
             // The origin ignored Range and is sending the file from byte zero.
-            // Restart safely instead of appending duplicate bytes or failing immediately.
+            // Truncate the partial SAF file so the new response cannot duplicate bytes.
+            // This fallback keeps the transfer usable even when the origin lacks resume support.
             offset = 0L
             completedBytes = 0L
             expectedTotal = connection.contentLengthLong.takeIf { it > 0L } ?: option.bytes
