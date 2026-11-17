@@ -8,7 +8,7 @@ import java.net.URLEncoder
 
 data class RomulationXboxGame(val id:String,val title:String,val region:String,val sizeLabel:String,val detailsUrl:String)
 data class RomulationXboxPage(val games:List<RomulationXboxGame>,val page:Int,val totalPages:Int)
-data class RomulationDownload(val url:String,val fileName:String,val bytes:Long,val requestHeaders:Map<String,String> = emptyMap())
+data class RomulationDownload(val url:String,val fileName:String,val bytes:Long,val requestHeaders:Map<String,String> = emptyMap(),val detailsUrl:String)
 
 object RomulationXboxRepository {
  private const val BASE="https://www.romulation.org"
@@ -22,6 +22,10 @@ object RomulationXboxRepository {
   val games=parseCatalog(html,finalUrl)
   val pages=Regex("""(?i)href=["'][^"']*[?&]page=(\d+)["']""").findAll(html).mapNotNull{it.groupValues[1].toIntOrNull()}.maxOrNull()?:page
   return RomulationXboxPage(games,page,maxOf(page,pages))
+ }
+ fun refreshDownload(detailsUrl:String,title:String="RomUlation"):RomulationDownload {
+  val id=runCatching { URL(detailsUrl).path.substringAfterLast('/') }.getOrDefault("romulation")
+  return resolveDownload(RomulationXboxGame(id,title,"","",detailsUrl))
  }
  fun resolveDownload(game:RomulationXboxGame):RomulationDownload {
   val (html,finalUrl)=get(game.detailsUrl, "$BASE/roms/XBOX")
@@ -43,7 +47,7 @@ object RomulationXboxRepository {
    if (cookieHeader.isNotBlank()) put("Cookie", cookieHeader)
    put("Referer", finalUrl)
   }
-  return RomulationDownload(resolved.toString(),fileName,bytes,requestHeaders)
+  return RomulationDownload(resolved.toString(),fileName,bytes,requestHeaders,game.detailsUrl)
  }
  private fun get(address:String, referer:String?=null):Pair<String,String>{
   val u=URL(address); require(u.protocol=="https" && u.host=="www.romulation.org")
