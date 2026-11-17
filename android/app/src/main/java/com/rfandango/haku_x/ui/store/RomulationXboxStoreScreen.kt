@@ -71,7 +71,7 @@ internal fun RomulationXboxStoreScreen() {
     }
    }
    if(page<pages)item(span={androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan)}){
-    OutlinedButton(onClick={ {load(false)} },enabled=!loading,modifier=Modifier.fillMaxWidth()){Text("Carregar próxima página")}
+    OutlinedButton(onClick={ load(false) },enabled=!loading,modifier=Modifier.fillMaxWidth()){Text("Carregar próxima página")}
    }
   }
  }
