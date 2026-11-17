@@ -24,8 +24,8 @@ object RomulationXboxRepository {
   val (html,finalUrl)=get(game.detailsUrl)
   val text=clean(html)
   require(Regex("(?i)Can Download\\s+Yes").containsMatchIn(text)) { "A RomUlation não indica este jogo como disponível." }
-  val fileName=Regex("""(?i)Full Name\\s+([^|]+?\\.(?:7z|zip|rar|iso|xiso|cso|cci))""").find(text)?.groupValues?.get(1)?.trim() ?: error("Nome do arquivo não informado.")
-  val sizeMatch=Regex("""(?i)Filesize\\s+([0-9.]+)\\s*(GB|MB|KB)""").find(text)
+  val fileName=Regex("""(?i)Full Name\s+([^|]+?\.(?:7z|zip|rar|iso|xiso|cso|cci))""").find(text)?.groupValues?.get(1)?.trim() ?: error("Nome do arquivo não informado.")
+  val sizeMatch=Regex("""(?i)Filesize\s+([0-9.]+)\s*(GB|MB|KB)""").find(text)
   val bytes=sizeMatch?.let { m -> (m.groupValues[1].toDoubleOrNull() ?: 0.0).let { n -> (n * when(m.groupValues[2].uppercase()) { "GB" -> 1073741824.0; "MB" -> 1048576.0; "KB" -> 1024.0; else -> 1.0 }).toLong() } } ?: 0L
   val link=Regex("""(?is)<a\b[^>]*href\s*=\s*["']([^"']+)["'][^>]*>(.*?)</a>""").findAll(html)
    .firstOrNull{clean(it.groupValues[2]).contains("Download",true)}?.groupValues?.get(1)
@@ -59,5 +59,5 @@ object RomulationXboxRepository {
   return out.values.toList()
  }
  private fun clean(s:String)=decode(s.replace(Regex("(?is)<[^>]+>")," ")).replace(Regex("\\s+")," ").trim()
- private fun decode(s:String)=s.replace("&amp;","&",true).replace("&quot;",""""""",true).replace("&#39;","'",true).replace("&lt;","<",true).replace("&gt;",">",true).replace("&nbsp;"," ",true)
+ private fun decode(s:String)=s.replace("&amp;","&",true).replace("&#39;","\u0027",true).replace("&lt;","<",true).replace("&gt;",">",true).replace("&nbsp;"," ",true)
 }
