@@ -58,7 +58,10 @@ object RomulationXboxRepository {
   if (!referer.isNullOrBlank()) c.setRequestProperty("Referer",referer)
   runCatching { cookieManager.get(u.toURI(), emptyMap()) }.getOrNull()?.forEach { (name, values) -> values.forEach { c.addRequestProperty(name,it) } }
   try { val status=c.responseCode; require(status in 200..299){"RomUlation respondeu HTTP $status."}
-   runCatching { cookieManager.put(u.toURI(), c.headerFields) }
+   runCatching {
+    cookieManager.put(u.toURI(), c.headerFields)
+    cookieManager.put(c.url.toURI(), c.headerFields)
+   }
    return c.inputStream.bufferedReader(Charsets.UTF_8).use{it.readText()} to c.url.toString()
   } finally { c.disconnect() }
  }
