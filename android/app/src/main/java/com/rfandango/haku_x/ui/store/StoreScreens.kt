@@ -372,12 +372,12 @@ fun StoreScreen() {
       }
     }
     if (loading && results.isNotEmpty()) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-    } else if (selectedStoreTab == "romulation") {
+    } else if (selectedStoreTab == "minerva") {
       Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text("RomUlation · Xbox", modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleLarge, color = Color.White)
+        Text("MiNERVA Archive · Xbox", modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleLarge, color = Color.White)
         TextButton(onClick = { selectedStoreTab = "catalog" }) { Text("Voltar", color = Color(0xFF39FF14)) }
       }
-      RomulationXboxStoreScreen()
+      MinervaArchiveStoreScreen(onOpenDownloads = { selectedStoreTab = "torrents" })
     } else if (selectedStoreTab == "vimm") {
       Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(modifier = Modifier.weight(1f)) {
