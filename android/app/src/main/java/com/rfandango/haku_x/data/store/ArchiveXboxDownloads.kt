@@ -33,7 +33,6 @@ data class ArchiveDownloadOption(
   val bytes: Long,
   val downloadUrl: String,
   val requestHeaders: Map<String, String> = emptyMap(),
-  val refreshUrl: String? = null,
 )
 
 data class ArchiveDownload(
@@ -82,7 +81,6 @@ object ArchiveXboxDownloads {
           val statusName = row.optString("status", "FAILED")
           val priorStatus = runCatching { ArchiveDownload.Status.valueOf(statusName) }.getOrDefault(ArchiveDownload.Status.FAILED)
           val url = row.optString("url").takeIf { isAllowedDownloadUrl(it) }
-          val refreshUrl = row.optString("refreshUrl").takeIf { it.startsWith("https://www.romulation.org/") }
           val identifier = row.optString("identifier")
           val fileName = row.optString("fileName")
           if (identifier.isBlank() || fileName.isBlank() || url == null) continue
@@ -103,7 +101,7 @@ object ArchiveXboxDownloads {
             val actualBytes = partial?.length()?.coerceAtLeast(0L) ?: 0L
             add(item.copy(done = actualBytes))
           } else add(item)
-          requests[downloadKey(identifier, fileName)] = ArchiveDownloadOption(fileName, item.total, url, refreshUrl = refreshUrl)
+          requests[downloadKey(identifier, fileName)] = ArchiveDownloadOption(fileName, item.total, url)
         }
       }
       mutableDownloads.value = restored
@@ -125,7 +123,6 @@ object ArchiveXboxDownloads {
         put("status", item.status.name)
         put("outputName", item.outputName)
         put("url", item.downloadUrl)
-        put("refreshUrl", requests[downloadKey(item.identifier, item.fileName)]?.refreshUrl)
       })
     }
     context.getSharedPreferences("hakux_store_downloads", Context.MODE_PRIVATE)
@@ -176,7 +173,7 @@ object ArchiveXboxDownloads {
   }
 
   /** Enqueue a direct file URL detected by the in-app browser. */
-  fun enqueueDirect(context: Context, title: String, rawUrl: String, suggestedFileName: String?, totalBytes: Long = 0L, requestHeaders: Map<String, String> = emptyMap(), refreshUrl: String? = null) {
+  fun enqueueDirect(context: Context, title: String, rawUrl: String, suggestedFileName: String?, totalBytes: Long = 0L, requestHeaders: Map<String, String> = emptyMap()) {
     require(isAllowedDownloadUrl(rawUrl)) { "Por segurança, só são aceitos downloads HTTP ou HTTPS de hosts públicos." }
     val parsed = URL(rawUrl)
     val candidate = suggestedFileName?.substringAfterLast('/')?.substringAfterLast('\\')
@@ -194,13 +191,10 @@ object ArchiveXboxDownloads {
       .digest(rawUrl.toByteArray(Charsets.UTF_8))
       .take(12).joinToString("") { "%02x".format(it) }
     enqueue(context, identifier, title.ifBlank { safeName.substringBeforeLast('.') },
-      ArchiveDownloadOption(safeName, totalBytes.coerceAtLeast(0L), rawUrl, requestHeaders.filterKeys { it.equals("Cookie", true) || it.equals("Referer", true) }, refreshUrl))
+      ArchiveDownloadOption(safeName, totalBytes.coerceAtLeast(0L), rawUrl, requestHeaders.filterKeys { it.equals("Cookie", true) || it.equals("Referer", true) }))
   }
 
-  /**
-   * Follows redirects explicitly so RomUlation session cookies are never forwarded
-   * to a different host (for example, a CDN). Range headers are retained for resume.
-   */
+  /** Follows redirects safely; Range headers are retained for resume. */
   private fun openDownloadConnection(
     rawUrl: String,
     offset: Long,
@@ -327,7 +321,7 @@ object ArchiveXboxDownloads {
     val url = item.downloadUrl ?: return
     val key = downloadKey(item.identifier, item.fileName)
     val saved = synchronized(this) { requests[key] }
-    enqueue(context, item.identifier, item.title, ArchiveDownloadOption(item.fileName, item.total, url, saved?.requestHeaders.orEmpty(), saved?.refreshUrl))
+    enqueue(context, item.identifier, item.title, ArchiveDownloadOption(item.fileName, item.total, url, saved?.requestHeaders.orEmpty()))
   }
 
   private suspend fun processQueue(context: Context) {
@@ -374,15 +368,6 @@ object ArchiveXboxDownloads {
       var completedBytes = offset
       var expectedTotal = option.bytes
       var activeOption = option
-      var guestRefreshes = 0
-      if (!activeOption.refreshUrl.isNullOrBlank()) {
-        val fresh = RomulationXboxRepository.refreshDownload(activeOption.refreshUrl, entry.title)
-        activeOption = ArchiveDownloadOption(option.name, fresh.bytes, fresh.url, fresh.requestHeaders, option.refreshUrl)
-        synchronized(this) { requests[downloadKey(entry.identifier, entry.fileName)] = activeOption }
-        expectedTotal = fresh.bytes.takeIf { it > 0L } ?: expectedTotal
-        update(entry.copy(downloadUrl = fresh.url, total = expectedTotal))
-        guestRefreshes++
-      }
       var attempt = 0
       var transferFinished = false
       var lastTransferError: Exception? = null
@@ -414,29 +399,9 @@ object ArchiveXboxDownloads {
               (if (status >= 400) connection.errorStream else connection.inputStream)
                 ?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
             }.getOrDefault("")
-            // Any HTML response from a RomUlation guest URL is an interstitial/error page,
-            // not a game archive. The site changes the wording of these pages, so do not
-            // depend on a specific English error phrase before refreshing the one-time link.
-            val isRomulationDownload = activeOption.refreshUrl?.startsWith("https://www.romulation.org/") == true
-            if (isRomulationDownload && guestRefreshes < 2) {
-              val fresh = RomulationXboxRepository.refreshDownload(activeOption.refreshUrl, entry.title)
-              activeOption = ArchiveDownloadOption(option.name, fresh.bytes, fresh.url, fresh.requestHeaders, option.refreshUrl)
-              synchronized(this) { requests[downloadKey(entry.identifier, entry.fileName)] = activeOption }
-              offset = 0L
-              completedBytes = 0L
-              expectedTotal = fresh.bytes.takeIf { it > 0L } ?: option.bytes
-              app.contentResolver.openOutputStream(partial!!.uri, "w")?.use { it.flush() }
-                ?: error("Não foi possível reiniciar o arquivo temporário.")
-              guestRefreshes++
-              attempt = 0
-              update(entry.copy(done = 0L, total = expectedTotal, downloadUrl = fresh.url,
-                status = ArchiveDownload.Status.DOWNLOADING,
-                error = "Link temporário renovado. Reiniciando o download…"))
-              continue
-            }
             val diagnostic = page.replace(Regex("(?is)<script[^>]*>.*?</script>|<style[^>]*>.*?</style>|<[^>]+>"), " ")
               .replace(Regex("\\s+"), " ").trim().take(240)
-            error("A RomUlation devolveu HTML em vez do jogo mesmo após ${guestRefreshes} renovação(ões). Resposta do site: ${diagnostic.ifBlank { "sem mensagem legível" }}")
+            error("O servidor devolveu uma página HTML em vez do arquivo: ${diagnostic.ifBlank { "sem mensagem legível" }}")
           }
           val reportedLength = connection.contentLengthLong
           if (expectedTotal <= 0L) {
