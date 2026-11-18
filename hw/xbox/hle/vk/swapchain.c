@@ -4132,8 +4132,14 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
          * reused one output image several times in the same command buffer.
          * Use the existing lightweight RCAS fragment pass for generated frames
          * so LSFG keeps its sharpening without multiplying NIS compute cost. */
+        const float generated_vw = sx * (float)ww;
+        const float generated_vh = sy * (float)wh;
+        const bool generated_needs_downscale =
+            (float)generated_w > generated_vw * 1.01f ||
+            (float)generated_h > generated_vh * 1.01f;
         const bool generated_rcas = nis && lsfg_generated_ready[i] &&
                                     generated_w >= 2 && generated_h >= 2 &&
+                                    !generated_needs_downscale &&
                                     g_ps.pipe[P_RCAS] != VK_NULL_HANDLE;
         VkImage generated_dst = g_ps.img[image_index];
         barrier(cb, generated_dst, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
