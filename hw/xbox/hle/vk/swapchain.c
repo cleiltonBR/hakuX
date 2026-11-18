@@ -4127,28 +4127,14 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
         const uint32_t generated_h = g_ps.lsfg_generated_h;
         VkImageView generated_view = lsfg_generated_ready[i]
             ? g_ps.lsfg_generated[g_ps.cur][i].view : src;
-        bool generated_nis = false;
-        bool generated_nis_sharpen_only = false;
-        if (nis && lsfg_generated_ready[i] && generated_w >= 2 && generated_h >= 2) {
-            const uint32_t target_w = (uint32_t)(sx * (float)ww + 0.5f);
-            const uint32_t target_h = (uint32_t)(sy * (float)wh + 0.5f);
-            const bool requires_downscale = target_w <= generated_w || target_h <= generated_h;
-            uint32_t nis_w = generated_w, nis_h = generated_h;
-            if (!requires_downscale) {
-                nis_w = MIN(target_w, generated_w * 2u);
-                nis_h = MIN(target_h, generated_h * 2u);
-            }
-            const float nrx = (float)generated_w / (float)nis_w;
-            const float nry = (float)generated_h / (float)nis_h;
-            if (nis_w >= generated_w && nis_h >= generated_h &&
-                nrx >= 0.5f && nrx <= 1.0f && nry >= 0.5f && nry <= 1.0f &&
-                nis_dispatch(cb, f, i + 1u, generated_view, generated_w, generated_h,
-                             nis_w, nis_h, nis_sharpness)) {
-                generated_view = g_ps.nis_out_view;
-                generated_nis = true;
-                generated_nis_sharpen_only = requires_downscale;
-            }
-        }
+        /* NIS remains a single compute pass on the real frame. Running another
+         * full NIS dispatch for every interpolated frame saturated the GPU and
+         * reused one output image several times in the same command buffer.
+         * Use the existing lightweight RCAS fragment pass for generated frames
+         * so LSFG keeps its sharpening without multiplying NIS compute cost. */
+        const bool generated_rcas = nis && lsfg_generated_ready[i] &&
+                                    generated_w >= 2 && generated_h >= 2 &&
+                                    g_ps.pipe[P_RCAS] != VK_NULL_HANDLE;
         VkImage generated_dst = g_ps.img[image_index];
         barrier(cb, generated_dst, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
                 VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, 0,
@@ -4160,9 +4146,13 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
             -sx, -sy, sx, sy, 0.0f, 0.0f, 0.0f, 0.0f,
             g_ps.rot[0], g_ps.rot[1], g_ps.rot[2], g_ps.rot[3]
         };
-        unsigned generated_pipeline = P_BILINEAR;
-        if (generated_nis && generated_nis_sharpen_only &&
-            (rx > 1.01f || ry > 1.01f) && average && g_ps.pipe[P_AREA]) {
+        unsigned generated_pipeline = generated_rcas ? P_RCAS : P_BILINEAR;
+        if (generated_rcas) {
+            /* Match the NIS sharpness control using RCAS's stop-based input. */
+            generated_pc[4] = exp2f(-nis_sharpness);
+        }
+        if ((!generated_rcas) && (rx > 1.01f || ry > 1.01f) &&
+            average && g_ps.pipe[P_AREA]) {
             generated_pipeline = P_AREA;
             generated_pc[4] = rx;
             generated_pc[5] = ry;
