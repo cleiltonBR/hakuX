@@ -69,6 +69,9 @@ object CustomCoverSource {
     }.getOrNull()
   }
 
+  /** Blocking; callers must use Dispatchers.IO. Returns the cached 3D-cover manifest. */
+  fun manifestJson(context: Context): String? = loadManifest(context)?.toString()
+
   private fun loadManifest(context: Context): JSONObject? {
     val file = File(context.applicationContext.filesDir, "custom_xbox_covers_manifest.json")
     if (file.isFile && System.currentTimeMillis() - file.lastModified() < MANIFEST_TTL_MS) {
