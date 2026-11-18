@@ -195,15 +195,18 @@ internal fun MinervaArchiveStoreScreen(onOpenDownloads: () -> Unit) {
                     (function() {
                       const data = $manifest;
                       const covers = data.covers || {};
+                      // Ignore region/disc tags when matching: MiNERVA lists
+                      // USA, Europe, Japan and other releases separately, while
+                      // the shared 3D-cover set may contain only one artwork.
                       const normalize = value => value.toLowerCase()
                         .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-                        .replace(/\.zip$/i, '').replace(/[^a-z0-9]+/g, '');
+                        .replace(/\.zip$/i, '').replace(/\([^)]*\)/g, ' ')
+                        .replace(/[^a-z0-9]+/g, '');
                       const index = {};
                       Object.keys(covers).forEach(title => {
                         const url = covers[title];
-                        index[normalize(title)] = url;
-                        const base = title.replace(/\s*\\([^)]*\\)\s*$/, '');
-                        index[normalize(base)] = index[normalize(base)] || url;
+                        const key = normalize(title);
+                        if (key && !index[key]) index[key] = url;
                       });
                       function addCovers() {
                         document.querySelectorAll('a[href*="/rom?id="]').forEach(link => {
@@ -212,11 +215,9 @@ internal fun MinervaArchiveStoreScreen(onOpenDownloads: () -> Unit) {
                           if (!title) return;
                           let key = normalize(title);
                           let image = index[key];
-                          let candidate = title.replace(/\.zip$/i, '');
-                          while (!image && /\s*\\([^)]*\\)\s*$/.test(candidate)) {
-                            candidate = candidate.replace(/\s*\\([^)]*\\)\s*$/, '');
-                            image = index[normalize(candidate)];
-                          }
+                          // normalize() removes regional suffixes from both
+                          // catalog names and manifest names, so every release
+                          // resolves to the same available 3D artwork.
                           if (!image) return;
                           const cover = document.createElement('img');
                           cover.src = image;
