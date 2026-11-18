@@ -10,9 +10,16 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -41,23 +48,23 @@ internal fun MinervaArchiveStoreScreen(onOpenDownloads: () -> Unit) {
   val scope = rememberCoroutineScope()
   var message by remember { mutableStateOf("Catálogo Redump · Microsoft Xbox") }
   var webView by remember { mutableStateOf<WebView?>(null) }
+  var availableFiles by remember { mutableStateOf<List<TorrentDownloadManager.TorrentFileEntry>>(emptyList()) }
+  var selectedIndices by remember { mutableStateOf<Set<Int>>(emptySet()) }
+  var pendingTorrent by remember { mutableStateOf<File?>(null) }
+  var selecting by remember { mutableStateOf(false) }
+  var busy by remember { mutableStateOf(false) }
 
   fun enqueueMagnet(magnet: String) {
-    scope.launch {
-      try {
-        withContext(Dispatchers.IO) { TorrentDownloadManager.addMagnet(context, magnet) }
-        message = "Magnet adicionado à fila BitTorrent interna do HakuX."
-      } catch (error: Exception) {
-        message = error.message ?: "Não foi possível adicionar o magnet."
-      }
-    }
+    message = "Para evitar baixar a coleção Xbox inteira, use “Download Torrent”. O HakuX abrirá a seleção dos jogos."
   }
 
   fun enqueueTorrent(torrentUrl: String) {
+    if (busy) return
     scope.launch {
-      message = "Obtendo torrent do MiNERVA…"
+      busy = true
+      message = "Obtendo catálogo torrent do MiNERVA…"
       try {
-        withContext(Dispatchers.IO) {
+        val target = withContext(Dispatchers.IO) {
           val parsed = URL(torrentUrl)
           require(parsed.protocol == "https" && parsed.host.equals("minerva-archive.org", true)) {
             "Endereço torrent fora do domínio MiNERVA."
@@ -68,28 +75,89 @@ internal fun MinervaArchiveStoreScreen(onOpenDownloads: () -> Unit) {
           connection.instanceFollowRedirects = true
           connection.setRequestProperty("User-Agent", "HakuX-Android/1.0")
           try {
-            check(connection.responseCode in 200..299) {
-              "MiNERVA respondeu HTTP ${connection.responseCode}."
-            }
-            check(connection.contentLengthLong <= 64L * 1024L * 1024L) {
-              "O arquivo torrent excede o limite de 64 MiB."
-            }
+            check(connection.responseCode in 200..299) { "MiNERVA respondeu HTTP ${connection.responseCode}." }
+            check(connection.contentLengthLong <= 64L * 1024L * 1024L) { "O arquivo torrent excede o limite de 64 MiB." }
             val directory = File(context.filesDir, "torrent-sources").apply { mkdirs() }
-            val target = File(directory, "minerva-${System.currentTimeMillis()}.torrent")
+            val file = File(directory, "minerva-${System.currentTimeMillis()}.torrent")
             connection.inputStream.use { input ->
-              target.outputStream().use { output -> input.copyTo(output) }
+              file.outputStream().use { output ->
+                val buffer = ByteArray(64 * 1024)
+                var total = 0L
+                while (true) {
+                  val count = input.read(buffer)
+                  if (count < 0) break
+                  total += count
+                  require(total <= 64L * 1024L * 1024L) { "O arquivo torrent excede o limite de 64 MiB." }
+                  output.write(buffer, 0, count)
+                }
+              }
             }
-            check(target.length() in 1..(64L * 1024L * 1024L)) { "Arquivo torrent inválido ou muito grande." }
-            TorrentDownloadManager.addTorrentFile(context, target)
-          } finally {
-            connection.disconnect()
+            check(file.length() > 0L) { "O MiNERVA retornou um arquivo torrent vazio." }
+            file
+          } finally { connection.disconnect() }
+        }
+        val entries = withContext(Dispatchers.IO) { TorrentDownloadManager.inspectTorrentFile(target) }
+        check(entries.isNotEmpty()) { "Nenhum arquivo ZIP foi encontrado neste torrent." }
+        pendingTorrent = target
+        availableFiles = entries
+        selectedIndices = emptySet()
+        selecting = true
+        message = "Selecione somente os jogos que deseja baixar."
+      } catch (error: Exception) {
+        message = error.message ?: "Não foi possível preparar a seleção do torrent."
+      } finally { busy = false }
+    }
+  }
+
+  if (selecting) {
+    AlertDialog(
+      onDismissRequest = { selecting = false; pendingTorrent = null },
+      title = { Text("Escolher jogos para baixar") },
+      text = {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+          Text("${availableFiles.size} arquivos ZIP disponíveis. Apenas os marcados serão baixados.")
+          Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            TextButton(onClick = { selectedIndices = availableFiles.map { it.index }.toSet() }) { Text("Todos") }
+            TextButton(onClick = { selectedIndices = emptySet() }) { Text("Limpar") }
+          }
+          LazyColumn(Modifier.heightIn(max = 420.dp)) {
+            items(availableFiles, key = { it.index }) { entry ->
+              Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), horizontalArrangement = Arrangement.Start) {
+                Checkbox(
+                  checked = entry.index in selectedIndices,
+                  onCheckedChange = { checked ->
+                    selectedIndices = if (checked) selectedIndices + entry.index else selectedIndices - entry.index
+                  },
+                )
+                Text(File(entry.path).name, modifier = Modifier.padding(top = 12.dp), style = MaterialTheme.typography.bodySmall)
+              }
+            }
           }
         }
-        message = "Torrent adicionado à fila interna. Abra Downloads para acompanhar."
-      } catch (error: Exception) {
-        message = error.message ?: "Não foi possível obter o torrent."
-      }
-    }
+      },
+      confirmButton = {
+        Button(
+          enabled = selectedIndices.isNotEmpty() && !busy,
+          onClick = {
+            val torrent = pendingTorrent ?: return@Button
+            val chosen = availableFiles.filter { it.index in selectedIndices }
+            scope.launch {
+              busy = true
+              try {
+                withContext(Dispatchers.IO) { TorrentDownloadManager.addTorrentFile(context, torrent, chosen) }
+                message = "${chosen.size} arquivo(s) selecionado(s). O HakuX baixará somente esses ZIPs."
+                selecting = false
+                pendingTorrent = null
+                onOpenDownloads()
+              } catch (error: Exception) {
+                message = error.message ?: "Não foi possível adicionar os arquivos selecionados."
+              } finally { busy = false }
+            }
+          },
+        ) { Text(if (busy) "Adicionando…" else "Baixar selecionados (${selectedIndices.size})") }
+      },
+      dismissButton = { TextButton(onClick = { selecting = false; pendingTorrent = null }) { Text("Cancelar") } },
+    )
   }
 
   Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -108,25 +176,17 @@ internal fun MinervaArchiveStoreScreen(onOpenDownloads: () -> Unit) {
           webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
               val target = request.url.toString()
-              if (target.startsWith("magnet:", true)) {
-                enqueueMagnet(target)
-                return true
-              }
+              if (target.startsWith("magnet:", true)) { enqueueMagnet(target); return true }
               if (target.startsWith("https://minerva-archive.org/", true) &&
                 target.substringBefore('?').endsWith(".torrent", true)
-              ) {
-                enqueueTorrent(target)
-                return true
-              }
+              ) { enqueueTorrent(target); return true }
               return false
             }
-
             override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
               message = "Navegando no catálogo MiNERVA…"
             }
-
             override fun onPageFinished(view: WebView, url: String?) {
-              message = "Escolha um jogo e toque em Open Magnet Link ou Download Torrent."
+              message = "Abra um jogo e toque em Download Torrent para escolher os ZIPs."
             }
           }
           setDownloadListener(DownloadListener { url, _, _, _, _ ->
@@ -144,10 +204,6 @@ internal fun MinervaArchiveStoreScreen(onOpenDownloads: () -> Unit) {
   }
 
   DisposableEffect(Unit) {
-    onDispose {
-      webView?.stopLoading()
-      webView?.destroy()
-      webView = null
-    }
+    onDispose { webView?.stopLoading(); webView?.destroy(); webView = null }
   }
 }
