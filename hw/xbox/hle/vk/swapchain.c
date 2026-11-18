@@ -3843,7 +3843,8 @@ static void log_path(unsigned p, bool fxaa, bool nis, int upscale, bool use_fsr,
     s_vh = vh;
 
     const char *path = nis
-        ? (upscale == HLE_UPSCALE_FSR ? "NVIDIA Image Scaling (FSR request bypassed)" : "NVIDIA Image Scaling")
+        ? (fsr_rcas ? "NVIDIA Image Scaling + RCAS" :
+           upscale == HLE_UPSCALE_FSR ? "NVIDIA Image Scaling (FSR request bypassed)" : "NVIDIA Image Scaling")
         : fsr_easu ? (fsr_rcas ? "FSR 1.0 (EASU + RCAS)" : "FSR 1.0 (EASU)")
         : fsr_rcas ? "FSR 1.0 (RCAS only)"
         : use_fsr ? "FSR 1.0 selected (no EASU upscale needed)"
@@ -4078,6 +4079,12 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
             p = P_AREA;
             pc[4] = rx;
             pc[5] = ry;
+        } else if (nis_done && cas && g_ps.pipe[P_RCAS]) {
+            /* NIS has already upscaled/sharpened the source. Apply the user's
+             * independent CAS/RCAS sharpening as the final pass, without
+             * dispatching NIS a second time or replacing its output. */
+            p = P_RCAS;
+            pc[4] = exp2f(-cas_sharpness);
         } else if (use_fsr) {
             if (fsr_easu) {
                 src = g_ps.fs_view;
@@ -4106,12 +4113,13 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
             pc[7] = (float)g_ps.f.h;
         }
         quad(cb, f, 0, g_ps.pipe[p], src, pc, iw, ih);
-        const bool fsr_rcas = use_fsr && cas && g_ps.pipe[P_RCAS] && p == P_RCAS;
+        const bool final_rcas = cas && g_ps.pipe[P_RCAS] && p == P_RCAS;
+        const bool fsr_rcas = use_fsr && final_rcas;
         nis_status(8, nis_done ? (nis_sharpen_only ? 4 : 3) :
                    fsr_easu ? (fsr_rcas ? 6 : 5) : fsr_rcas ? 7 : use_fsr ? 8 :
                    p == P_AREA ? 1 : p == P_SGSR ? 2 : 0);
-        nis_status(11, fsr_rcas ? 1 : 0);
-        log_path(p, fxaa_done, nis_done, upscale, use_fsr, fsr_easu, fsr_rcas,
+        nis_status(11, final_rcas ? 1 : 0);
+        log_path(p, fxaa_done, nis_done, upscale, use_fsr, fsr_easu, final_rcas,
                  (uint32_t)(vw + 0.5f), (uint32_t)(vh + 0.5f));
     }
     T.vkCmdEndRendering(cb);
