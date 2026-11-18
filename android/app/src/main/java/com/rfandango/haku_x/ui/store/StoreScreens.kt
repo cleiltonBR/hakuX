@@ -198,14 +198,14 @@ fun StoreScreen() {
         verticalAlignment = Alignment.CenterVertically,
       ) {
         androidx.compose.material3.OutlinedButton(
-          onClick = { selectedStoreTab = "romulation" },
+          onClick = { selectedStoreTab = "minerva" },
           shape = RoundedCornerShape(18.dp),
           border = BorderStroke(1.dp, Color(0xFF39FF14)),
           contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 8.dp),
         ) {
           Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text("R", color = Color(0xFF39FF14), style = MaterialTheme.typography.titleLarge)
-            Text("RomUlation", color = Color.White, style = MaterialTheme.typography.labelSmall)
+            Text("MiNERVA", color = Color.White, style = MaterialTheme.typography.labelSmall)
             Text("Xbox", color = Color.White, style = MaterialTheme.typography.labelSmall)
           }
         }
