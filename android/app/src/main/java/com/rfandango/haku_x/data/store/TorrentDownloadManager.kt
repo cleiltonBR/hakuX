@@ -59,8 +59,6 @@ object TorrentDownloadManager {
   private val handles = ConcurrentHashMap<String, TorrentHandle>()
   private val sources = linkedMapOf<String, String>()
   private val pausedIds = ConcurrentHashMap.newKeySet<String>()
-  // Keep newly added selective torrents paused until their per-file priorities are applied.
-  private val selectionPausedIds = ConcurrentHashMap.newKeySet<String>()
   private val selectedFileIndices = linkedMapOf<String, MutableSet<Int>>()
   private val appliedFileSelections = mutableMapOf<String, Set<Int>>()
   private val selectedFilePaths = linkedMapOf<String, MutableMap<Int, String>>()
@@ -354,8 +352,10 @@ object TorrentDownloadManager {
       // leaves a race in which unselected files may begin downloading.
       val priorities = Priority.array(Priority.IGNORE, info.numFiles())
       validEntries.forEach { entry -> priorities[entry.index] = Priority.DEFAULT }
-      selectionPausedIds.add(hash)
-      engine.download(info, downloadDirectory(appContext), null, priorities, null, TorrentFlags.PAUSED)
+      // Libtorrent receives the complete per-file priority vector as part of
+      // add_torrent_params. Do not add the torrent paused: AUTO_MANAGED lets
+      // checking finish and peer discovery start without a second resume race.
+      engine.download(info, downloadDirectory(appContext), null, priorities, null, TorrentFlags.AUTO_MANAGED)
     } else {
       engine.download(info, downloadDirectory(appContext))
     }
@@ -364,7 +364,6 @@ object TorrentDownloadManager {
     if (selectedFiles.isNotEmpty() && handle != null && handle.isValid()) {
       handles[hash] = handle
       applySelectedFiles(hash, handle)
-      if (selectionPausedIds.remove(hash)) handle.resume()
     }
     mutableDownloads.value = mutableDownloads.value.filterNot { it.id == hash } +
       TorrentDownload(hash, file.nameWithoutExtension, file.absolutePath)
@@ -391,7 +390,6 @@ object TorrentDownloadManager {
   fun remove(id: String) {
     handles.remove(id)?.takeIf { it.isValid() }?.let { engine.remove(it) }
     pausedIds.remove(id)
-    selectionPausedIds.remove(id)
     sources.remove(id)
     selectedFileIndices.remove(id)
     appliedFileSelections.remove(id)
@@ -442,7 +440,6 @@ object TorrentDownloadManager {
                 updateLocal(id) { it.copy(state = TorrentDownload.State.WAITING_METADATA) }
               } else {
                 applySelectedFiles(id, handle)
-                if (selectionPausedIds.remove(id)) handle.resume()
                 val status = handle.status()
                 val nativeState = status.state().name
                 val state = when {
