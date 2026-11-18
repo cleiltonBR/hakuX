@@ -84,7 +84,9 @@ typedef struct PsFrame {
     VkSemaphore acquired;       /* its swapchain image is ready */
     VkSemaphore lsfg_acquired[3]; /* extra swapchain images for generated frames */
     VkDescriptorSet set[6];     /* window, FXAA, EASU and up to three generated-frame draws */
-    VkDescriptorSet nis_set;
+    /* One immutable descriptor set per dispatch recorded in this command buffer:
+     * real frame plus up to three LSFG-generated frames. */
+    VkDescriptorSet nis_set[4];
     uint64_t value;             /* its last submit's on the timeline */
     bool ramp_stale;            /* its share of the ramp buffer is behind */
 } PsFrame;
@@ -2989,14 +2991,17 @@ static bool nis_compute_pipeline_init(void)
     };
     if (T.vkCreateComputePipelines(g_hvk.dev, VK_NULL_HANDLE, 1, &pci,
                                    NULL, &g_ps.nis_pipe) != VK_SUCCESS) return false;
-    VkDescriptorSetLayout layouts[PS_FRAMES] = { g_ps.nis_dsl, g_ps.nis_dsl, g_ps.nis_dsl };
-    VkDescriptorSet sets[PS_FRAMES];
+    VkDescriptorSetLayout layouts[PS_FRAMES * 4];
+    VkDescriptorSet sets[PS_FRAMES * 4];
+    for (unsigned i = 0; i < ARRAY_SIZE(layouts); ++i) layouts[i] = g_ps.nis_dsl;
     VkDescriptorSetAllocateInfo ai = {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-        .descriptorPool = g_ps.dp, .descriptorSetCount = PS_FRAMES, .pSetLayouts = layouts
+        .descriptorPool = g_ps.dp, .descriptorSetCount = ARRAY_SIZE(layouts), .pSetLayouts = layouts
     };
     if (T.vkAllocateDescriptorSets(g_hvk.dev, &ai, sets) != VK_SUCCESS || !nis_config_buffer_init()) return false;
-    for (unsigned i = 0; i < PS_FRAMES; i++) g_ps.fr[i].nis_set = sets[i];
+    for (unsigned i = 0; i < PS_FRAMES; ++i)
+        for (unsigned slot = 0; slot < 4; ++slot)
+            g_ps.fr[i].nis_set[slot] = sets[i * 4u + slot];
     return nis_upload_coefficients();
 }
 
@@ -3083,13 +3088,13 @@ static bool init(void)
         .pSetLayouts = &g_ps.dsl, .pushConstantRangeCount = 1, .pPushConstantRanges = &pcr };
     VkDescriptorPoolSize ps[5] = {
         { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, PS_FRAMES * 6 },
-        { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, PS_FRAMES * 7 },
-        { VK_DESCRIPTOR_TYPE_SAMPLER, PS_FRAMES },
-        { VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, PS_FRAMES * 3 },
-        { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, PS_FRAMES }
+        { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, PS_FRAMES * 10 },
+        { VK_DESCRIPTOR_TYPE_SAMPLER, PS_FRAMES * 4 },
+        { VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, PS_FRAMES * 12 },
+        { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, PS_FRAMES * 4 }
     };
     VkDescriptorPoolCreateInfo pci = {
-        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO, .maxSets = PS_FRAMES * 7,
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO, .maxSets = PS_FRAMES * 10,
         .poolSizeCount = ARRAY_SIZE(ps), .pPoolSizes = ps };
     VkBufferCreateInfo bci = { .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, .size = PS_FRAMES * PS_RAMP,
                                .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT };
@@ -3684,16 +3689,17 @@ static bool nis_output_target(uint32_t w, uint32_t h)
     return true;
 }
 
-static bool nis_dispatch(VkCommandBuffer cb, PsFrame *frame, VkImageView input,
-                         uint32_t input_w, uint32_t input_h, uint32_t output_w, uint32_t output_h,
-                         float sharpness)
+static bool nis_dispatch(VkCommandBuffer cb, PsFrame *frame, unsigned descriptor_slot,
+                         VkImageView input, uint32_t input_w, uint32_t input_h,
+                         uint32_t output_w, uint32_t output_h, float sharpness)
 {
     /* Report the exact reason when NIS cannot run; do not silently fall back. */
     static int last_failure = -1;
     static uint32_t last_w, last_h, last_ow, last_oh;
     static int last_sharpness = -1;
     int failure = 0;
-    if (!g_ps.nis_resources_ready || !g_ps.nis_pipe || !frame->nis_set ||
+    if (descriptor_slot >= ARRAY_SIZE(frame->nis_set) || !g_ps.nis_resources_ready ||
+        !g_ps.nis_pipe || !frame->nis_set[descriptor_slot] ||
         !g_ps.nis_config_map || !g_ps.nis_coef_scale_view || !g_ps.nis_coef_usm_view) {
         failure = 1; /* compute pipeline/descriptors/coefficients not ready */
     } else if (!input || input_w < 2 || input_h < 2 ||
@@ -3708,7 +3714,7 @@ static bool nis_dispatch(VkCommandBuffer cb, PsFrame *frame, VkImageView input,
         if (failure != last_failure) {
             hle_log("hakuX-hle-back", "NIS dispatch skipped: reason=%d ready=%d pipe=%d set=%d config=%d coef=%d/%d input=%ux%u output=%ux%u",
                     failure, g_ps.nis_resources_ready, g_ps.nis_pipe != VK_NULL_HANDLE,
-                    frame->nis_set != VK_NULL_HANDLE, g_ps.nis_config_map != NULL,
+                    frame->nis_set[descriptor_slot] != VK_NULL_HANDLE, g_ps.nis_config_map != NULL,
                     g_ps.nis_coef_scale_view != VK_NULL_HANDLE, g_ps.nis_coef_usm_view != VK_NULL_HANDLE,
                     input_w, input_h, output_w, output_h);
             last_failure = failure;
@@ -3738,17 +3744,17 @@ static bool nis_dispatch(VkCommandBuffer cb, PsFrame *frame, VkImageView input,
         { .imageView = g_ps.nis_coef_usm_view, .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL }
     };
     VkWriteDescriptorSet writes[6] = {
-        { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstSet = frame->nis_set, .dstBinding = 0,
+        { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstSet = frame->nis_set[descriptor_slot], .dstBinding = 0,
           .descriptorCount = 1, .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .pBufferInfo = &buffer },
-        { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstSet = frame->nis_set, .dstBinding = 1,
+        { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstSet = frame->nis_set[descriptor_slot], .dstBinding = 1,
           .descriptorCount = 1, .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER, .pImageInfo = &sampler },
-        { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstSet = frame->nis_set, .dstBinding = 2,
+        { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstSet = frame->nis_set[descriptor_slot], .dstBinding = 2,
           .descriptorCount = 1, .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, .pImageInfo = &images[0] },
-        { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstSet = frame->nis_set, .dstBinding = 3,
+        { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstSet = frame->nis_set[descriptor_slot], .dstBinding = 3,
           .descriptorCount = 1, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, .pImageInfo = &images[1] },
-        { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstSet = frame->nis_set, .dstBinding = 4,
+        { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstSet = frame->nis_set[descriptor_slot], .dstBinding = 4,
           .descriptorCount = 1, .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, .pImageInfo = &images[2] },
-        { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstSet = frame->nis_set, .dstBinding = 5,
+        { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstSet = frame->nis_set[descriptor_slot], .dstBinding = 5,
           .descriptorCount = 1, .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, .pImageInfo = &images[3] }
     };
     T.vkUpdateDescriptorSets(g_hvk.dev, ARRAY_SIZE(writes), writes, 0, NULL);
@@ -3758,7 +3764,7 @@ static bool nis_dispatch(VkCommandBuffer cb, PsFrame *frame, VkImageView input,
     barrier(cb, g_ps.nis_out, g_ps.nis_out_layout, VK_IMAGE_LAYOUT_GENERAL, old_stage, old_access,
             VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
     T.vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_COMPUTE, g_ps.nis_pipe);
-    T.vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_COMPUTE, g_ps.nis_pl, 0, 1, &frame->nis_set, 0, NULL);
+    T.vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_COMPUTE, g_ps.nis_pl, 0, 1, &frame->nis_set[descriptor_slot], 0, NULL);
     uint32_t gx = 0, gy = 0;
     hle_nis_get_dispatch_size(output_w, output_h, &gx, &gy);
     if (!gx || !gy) return false;
@@ -3984,7 +3990,7 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
              * for the final area/bilinear presentation pass. */
             nis_status(6, (int)g_ps.f.w);
             nis_status(7, (int)g_ps.f.h);
-            if (nis_dispatch(cb, f, src, g_ps.f.w, g_ps.f.h,
+            if (nis_dispatch(cb, f, 0, src, g_ps.f.w, g_ps.f.h,
                              g_ps.f.w, g_ps.f.h, nis_sharpness)) {
                 src = g_ps.nis_out_view;
                 nis_done = true;
@@ -4002,7 +4008,7 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
             nis_status(7, (int)nis_h);
             if (nis_w >= g_ps.f.w && nis_h >= g_ps.f.h &&
                 nrx >= 0.5f && nrx <= 1.0f && nry >= 0.5f && nry <= 1.0f) {
-                if (nis_dispatch(cb, f, src, g_ps.f.w, g_ps.f.h, nis_w, nis_h, nis_sharpness)) {
+                if (nis_dispatch(cb, f, 0, src, g_ps.f.w, g_ps.f.h, nis_w, nis_h, nis_sharpness)) {
                     src = g_ps.nis_out_view;
                     nis_done = true;
                 }
@@ -4117,18 +4123,51 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
      * descriptor set so recorded draws never observe a later descriptor update. */
     for (unsigned i = 0; i < lsfg_acquired_count; ++i) {
         const uint32_t image_index = lsfg_acquired_indices[i];
-        const VkImageView generated_view = lsfg_generated_ready[i]
+        const uint32_t generated_w = g_ps.lsfg_generated_w;
+        const uint32_t generated_h = g_ps.lsfg_generated_h;
+        VkImageView generated_view = lsfg_generated_ready[i]
             ? g_ps.lsfg_generated[g_ps.cur][i].view : src;
+        bool generated_nis = false;
+        bool generated_nis_sharpen_only = false;
+        if (nis && lsfg_generated_ready[i] && generated_w >= 2 && generated_h >= 2) {
+            const uint32_t target_w = (uint32_t)(sx * (float)ww + 0.5f);
+            const uint32_t target_h = (uint32_t)(sy * (float)wh + 0.5f);
+            const bool requires_downscale = target_w <= generated_w || target_h <= generated_h;
+            uint32_t nis_w = generated_w, nis_h = generated_h;
+            if (!requires_downscale) {
+                nis_w = MIN(target_w, generated_w * 2u);
+                nis_h = MIN(target_h, generated_h * 2u);
+            }
+            const float nrx = (float)generated_w / (float)nis_w;
+            const float nry = (float)generated_h / (float)nis_h;
+            if (nis_w >= generated_w && nis_h >= generated_h &&
+                nrx >= 0.5f && nrx <= 1.0f && nry >= 0.5f && nry <= 1.0f &&
+                nis_dispatch(cb, f, i + 1u, generated_view, generated_w, generated_h,
+                             nis_w, nis_h, nis_sharpness)) {
+                generated_view = g_ps.nis_out_view;
+                generated_nis = true;
+                generated_nis_sharpen_only = requires_downscale;
+            }
+        }
         VkImage generated_dst = g_ps.img[image_index];
         barrier(cb, generated_dst, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
                 VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, 0,
                 VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT);
         rendering(cb, g_ps.view[image_index], iw, ih, true);
-        const float generated_pc[12] = {
+        const float vw = sx * (float)ww, vh = sy * (float)wh;
+        const float rx = (float)generated_w / vw, ry = (float)generated_h / vh;
+        float generated_pc[12] = {
             -sx, -sy, sx, sy, 0.0f, 0.0f, 0.0f, 0.0f,
             g_ps.rot[0], g_ps.rot[1], g_ps.rot[2], g_ps.rot[3]
         };
-        quad(cb, f, 3u + i, g_ps.pipe[P_BILINEAR], generated_view,
+        unsigned generated_pipeline = P_BILINEAR;
+        if (generated_nis && generated_nis_sharpen_only &&
+            (rx > 1.01f || ry > 1.01f) && average && g_ps.pipe[P_AREA]) {
+            generated_pipeline = P_AREA;
+            generated_pc[4] = rx;
+            generated_pc[5] = ry;
+        }
+        quad(cb, f, 3u + i, g_ps.pipe[generated_pipeline], generated_view,
              generated_pc, iw, ih);
         T.vkCmdEndRendering(cb);
         barrier(cb, generated_dst, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
