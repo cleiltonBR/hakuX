@@ -32,6 +32,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.rfandango.haku_x.data.CustomCoverSource
 import com.rfandango.haku_x.data.store.TorrentDownloadManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -187,6 +188,58 @@ internal fun MinervaArchiveStoreScreen(onOpenDownloads: () -> Unit) {
             }
             override fun onPageFinished(view: WebView, url: String?) {
               message = "Abra um jogo e toque em Download Torrent para escolher os ZIPs."
+              scope.launch {
+                val manifest = withContext(Dispatchers.IO) { CustomCoverSource.manifestJson(context) }
+                if (manifest != null && view === webView) {
+                  val script = """
+                    (function() {
+                      const data = $manifest;
+                      const covers = data.covers || {};
+                      const normalize = value => value.toLowerCase()
+                        .normalize('NFD').replace(/[\\u0300-\\u036f]/g, '')
+                        .replace(/\\.zip$/i, '').replace(/[^a-z0-9]+/g, '');
+                      const index = {};
+                      Object.keys(covers).forEach(title => {
+                        const url = covers[title];
+                        index[normalize(title)] = url;
+                        const base = title.replace(/\\s*\\([^)]*\\)\\s*$/, '');
+                        index[normalize(base)] = index[normalize(base)] || url;
+                      });
+                      function addCovers() {
+                        document.querySelectorAll('a[href*="/rom?id="]').forEach(link => {
+                          if (link.querySelector('img[data-hakux-cover="true"]')) return;
+                          const title = (link.textContent || '').trim();
+                          if (!title) return;
+                          let key = normalize(title);
+                          let image = index[key];
+                          let candidate = title.replace(/\\.zip$/i, '');
+                          while (!image && /\\s*\\([^)]*\\)\\s*$/.test(candidate)) {
+                            candidate = candidate.replace(/\\s*\\([^)]*\\)\\s*$/, '');
+                            image = index[normalize(candidate)];
+                          }
+                          if (!image) return;
+                          const cover = document.createElement('img');
+                          cover.src = image;
+                          cover.alt = 'Capa 3D de ' + title;
+                          cover.dataset.hakuxCover = 'true';
+                          cover.loading = 'lazy';
+                          cover.style.cssText = 'width:76px;height:108px;object-fit:contain;flex:none;margin-right:12px;border-radius:5px;filter:drop-shadow(0 3px 5px #0009)';
+                          link.style.setProperty('display', 'flex', 'important');
+                          link.style.setProperty('align-items', 'center', 'important');
+                          link.style.setProperty('min-height', '116px', 'important');
+                          link.insertBefore(cover, link.firstChild);
+                        });
+                      }
+                      addCovers();
+                      if (!window.__hakuxCoverObserver) {
+                        window.__hakuxCoverObserver = new MutationObserver(addCovers);
+                        window.__hakuxCoverObserver.observe(document.body, {childList:true,subtree:true});
+                      }
+                    })();
+                  """.trimIndent()
+                  view.evaluateJavascript(script, null)
+                }
+              }
             }
           }
           setDownloadListener(DownloadListener { url, _, _, _, _ ->
