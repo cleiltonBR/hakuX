@@ -59,6 +59,8 @@ object TorrentDownloadManager {
   private val handles = ConcurrentHashMap<String, TorrentHandle>()
   private val sources = linkedMapOf<String, String>()
   private val pausedIds = ConcurrentHashMap.newKeySet<String>()
+  // Keep newly added selective torrents paused until their per-file priorities are applied.
+  private val selectionPausedIds = ConcurrentHashMap.newKeySet<String>()
   private val selectedFileIndices = linkedMapOf<String, MutableSet<Int>>()
   private val appliedFileSelections = mutableMapOf<String, Set<Int>>()
   private val selectedFilePaths = linkedMapOf<String, MutableMap<Int, String>>()
@@ -341,10 +343,24 @@ object TorrentDownloadManager {
       selectedFileTitles[hash] = validEntries.associate { it.index to File(it.path).nameWithoutExtension }.toMutableMap()
     }
     ensureEngine(appContext)
-    engine.download(info, downloadDirectory(appContext))
+    if (selectedFiles.isNotEmpty()) {
+      // Set file priorities in add_torrent_params before libtorrent can request
+      // pieces. Starting the whole 16 TB collection and prioritizing afterward
+      // leaves a race in which unselected files may begin downloading.
+      val priorities = Priority.array(Priority.IGNORE, info.numFiles())
+      validEntries.forEach { priorities[it.index] = Priority.DEFAULT }
+      selectionPausedIds.add(hash)
+      engine.download(info, downloadDirectory(appContext), null, priorities, null, TorrentFlags.PAUSED)
+    } else {
+      engine.download(info, downloadDirectory(appContext))
+    }
     sources[hash] = file.absolutePath
     val handle = engine.find(Sha1Hash.parseHex(hash))
-    if (selectedFiles.isNotEmpty() && handle != null && handle.isValid()) applySelectedFiles(hash, handle)
+    if (selectedFiles.isNotEmpty() && handle != null && handle.isValid()) {
+      handles[hash] = handle
+      applySelectedFiles(hash, handle)
+      if (selectionPausedIds.remove(hash)) handle.resume()
+    }
     mutableDownloads.value = mutableDownloads.value.filterNot { it.id == hash } +
       TorrentDownload(hash, file.nameWithoutExtension, file.absolutePath)
     if (persist) persist()
@@ -370,6 +386,7 @@ object TorrentDownloadManager {
   fun remove(id: String) {
     handles.remove(id)?.takeIf { it.isValid() }?.let { engine.remove(it) }
     pausedIds.remove(id)
+    selectionPausedIds.remove(id)
     sources.remove(id)
     selectedFileIndices.remove(id)
     appliedFileSelections.remove(id)
@@ -420,6 +437,7 @@ object TorrentDownloadManager {
                 updateLocal(id) { it.copy(state = TorrentDownload.State.WAITING_METADATA) }
               } else {
                 applySelectedFiles(id, handle)
+                if (selectionPausedIds.remove(id)) handle.resume()
                 val status = handle.status()
                 val nativeState = status.state().name
                 val state = when {
@@ -435,8 +453,8 @@ object TorrentDownloadManager {
                 updateLocal(id) {
                   it.copy(
                     name = if (it.name == "Obtendo metadados…") status.name().takeIf(String::isNotBlank) ?: it.name else it.name,
-                    done = status.totalDone().coerceAtLeast(0L),
-                    total = status.total().coerceAtLeast(0L),
+                    done = status.totalWantedDone().coerceAtLeast(0L),
+                    total = status.totalWanted().coerceAtLeast(0L),
                     downloadRate = status.downloadRate().coerceAtLeast(0),
                     uploadRate = status.uploadRate().coerceAtLeast(0),
                     connectedPeers = status.numPeers().coerceAtLeast(0),
