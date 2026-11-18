@@ -333,22 +333,27 @@ object TorrentDownloadManager {
     require(info.isValid()) { "O arquivo .torrent é inválido." }
     val hash = info.infoHash().toHex()
     if (sources.containsKey(hash)) return
-    if (selectedFiles.isNotEmpty()) {
-      val validEntries = selectedFiles.filter { entry ->
+    val validEntries = if (selectedFiles.isNotEmpty()) {
+      selectedFiles.filter { entry ->
         entry.index in 0 until info.numFiles() &&
           normalizeTorrentPath(info.files().filePath(entry.index)) == normalizeTorrentPath(entry.path)
+      }.also { entries ->
+        require(entries.isNotEmpty()) { "A seleção não corresponde aos arquivos deste torrent." }
       }
-      require(validEntries.isNotEmpty()) { "A seleção não corresponde aos arquivos deste torrent." }
+    } else {
+      emptyList()
+    }
+    if (validEntries.isNotEmpty()) {
       selectedFilePaths[hash] = validEntries.associate { it.index to it.path }.toMutableMap()
       selectedFileTitles[hash] = validEntries.associate { it.index to File(it.path).nameWithoutExtension }.toMutableMap()
     }
     ensureEngine(appContext)
-    if (selectedFiles.isNotEmpty()) {
+    if (validEntries.isNotEmpty()) {
       // Set file priorities in add_torrent_params before libtorrent can request
       // pieces. Starting the whole 16 TB collection and prioritizing afterward
       // leaves a race in which unselected files may begin downloading.
       val priorities = Priority.array(Priority.IGNORE, info.numFiles())
-      validEntries.forEach { priorities[it.index] = Priority.DEFAULT }
+      validEntries.forEach { entry -> priorities[entry.index] = Priority.DEFAULT }
       selectionPausedIds.add(hash)
       engine.download(info, downloadDirectory(appContext), null, priorities, null, TorrentFlags.PAUSED)
     } else {
