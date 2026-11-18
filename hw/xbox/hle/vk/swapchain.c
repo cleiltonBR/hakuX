@@ -1482,7 +1482,8 @@ static void log_path(unsigned p, bool fxaa, bool nis, uint32_t vw, uint32_t vh)
     s_vw = vw;
     s_vh = vh;
     hle_log("hakuX-hle-back", "present: %ux%u%s into %ux%u: %s", s_w, s_h, fxaa ? " after FXAA" : "", vw, vh,
-            nis ? "NVIDIA Image Scaling" : p == P_AREA ? "averaged down" : p == P_RCAS ? "FSR 1.0 (RCAS)" :
+            nis ? (p == P_RCAS ? "NVIDIA Image Scaling + RCAS" : "NVIDIA Image Scaling") :
+            p == P_AREA ? "averaged down" : p == P_RCAS ? "FSR 1.0 (RCAS)" :
             p == P_SGSR ? "scaled up by SGSR" : "bilinear");
 }
 
@@ -1647,6 +1648,16 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
             p = P_AREA;
             pc[4] = rx;
             pc[5] = ry;
+        } else if (nis_done && cas && g_ps.pipe[P_RCAS]) {
+            /* NIS has already produced the scaled image. Keep CAS independent:
+             * apply RCAS as a final pass without dispatching NIS again. */
+            p = P_RCAS;
+            pc[4] = exp2f(-cas_sharpness);
+        } else if (!nis_done && cas && upscale != HLE_UPSCALE_SGSR &&
+                   upscale != HLE_UPSCALE_FSR && g_ps.pipe[P_RCAS]) {
+            /* CAS must also work when selected without NIS or FSR. */
+            p = P_RCAS;
+            pc[4] = exp2f(-cas_sharpness);
         } else if (use_fsr) {
             if (fsr_easu) {
                 src = g_ps.fs_view;
