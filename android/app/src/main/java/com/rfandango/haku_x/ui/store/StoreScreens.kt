@@ -204,7 +204,7 @@ fun StoreScreen() {
           contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 8.dp),
         ) {
           Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("R", color = Color(0xFF39FF14), style = MaterialTheme.typography.titleLarge)
+            Text("M", color = Color(0xFF39FF14), style = MaterialTheme.typography.titleLarge)
             Text("MiNERVA", color = Color.White, style = MaterialTheme.typography.labelSmall)
             Text("Xbox", color = Color.White, style = MaterialTheme.typography.labelSmall)
           }
