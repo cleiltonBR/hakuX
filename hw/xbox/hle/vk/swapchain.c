@@ -4085,6 +4085,13 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
              * dispatching NIS a second time or replacing its output. */
             p = P_RCAS;
             pc[4] = exp2f(-cas_sharpness);
+        } else if (!nis_done && cas && upscale != HLE_UPSCALE_SGSR &&
+                   upscale != HLE_UPSCALE_FSR && g_ps.pipe[P_RCAS]) {
+            /* CAS/RCAS must also run when selected without NIS or FSR.
+             * In this path it is the final presentation filter, rather than
+             * silently falling back to bilinear with the CAS toggle ignored. */
+            p = P_RCAS;
+            pc[4] = exp2f(-cas_sharpness);
         } else if (use_fsr) {
             if (fsr_easu) {
                 src = g_ps.fs_view;
