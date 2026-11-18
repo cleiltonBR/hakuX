@@ -299,20 +299,52 @@ object TorrentDownloadManager {
     }
   }
 
+  data class TorrentFileEntry(val index: Int, val path: String)
+
+  fun inspectTorrentFile(file: File): List<TorrentFileEntry> {
+    require(file.isFile && file.length() > 0L) { "O arquivo .torrent está vazio ou não existe." }
+    val info = TorrentInfo(file)
+    require(info.isValid()) { "O arquivo .torrent é inválido." }
+    return (0 until info.numFiles())
+      .map { index -> TorrentFileEntry(index, info.files().filePath(index)) }
+      .filter { it.path.endsWith(".zip", ignoreCase = true) }
+  }
+
   fun addTorrentFile(appContext: Context, file: File) {
     addTorrentFileInternal(appContext.applicationContext, file, persist = true)
   }
 
+  fun addTorrentFile(appContext: Context, file: File, selectedFiles: List<TorrentFileEntry>) {
+    require(selectedFiles.isNotEmpty()) { "Selecione ao menos um arquivo ZIP para baixar." }
+    addTorrentFileInternal(appContext.applicationContext, file, persist = true, selectedFiles = selectedFiles)
+  }
+
   @Synchronized
-  private fun addTorrentFileInternal(appContext: Context, file: File, persist: Boolean) {
+  private fun addTorrentFileInternal(
+    appContext: Context,
+    file: File,
+    persist: Boolean,
+    selectedFiles: List<TorrentFileEntry> = emptyList(),
+  ) {
     require(file.isFile && file.length() > 0L) { "O arquivo .torrent está vazio ou não existe." }
     val info = TorrentInfo(file)
     require(info.isValid()) { "O arquivo .torrent é inválido." }
     val hash = info.infoHash().toHex()
     if (sources.containsKey(hash)) return
+    if (selectedFiles.isNotEmpty()) {
+      val validEntries = selectedFiles.filter { entry ->
+        entry.index in 0 until info.numFiles() &&
+          normalizeTorrentPath(info.files().filePath(entry.index)) == normalizeTorrentPath(entry.path)
+      }
+      require(validEntries.isNotEmpty()) { "A seleção não corresponde aos arquivos deste torrent." }
+      selectedFilePaths[hash] = validEntries.associate { it.index to it.path }.toMutableMap()
+      selectedFileTitles[hash] = validEntries.associate { it.index to File(it.path).nameWithoutExtension }.toMutableMap()
+    }
     ensureEngine(appContext)
     engine.download(info, downloadDirectory(appContext))
     sources[hash] = file.absolutePath
+    val handle = engine.find(Sha1Hash.parseHex(hash))
+    if (selectedFiles.isNotEmpty() && handle != null && handle.isValid()) applySelectedFiles(hash, handle)
     mutableDownloads.value = mutableDownloads.value.filterNot { it.id == hash } +
       TorrentDownload(hash, file.nameWithoutExtension, file.absolutePath)
     if (persist) persist()
