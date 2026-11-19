@@ -44,6 +44,7 @@ import android.widget.Toast
 import android.window.OnBackInvokedDispatcher
 import androidx.documentfile.provider.DocumentFile
 import com.rfandango.haku_x.data.AppPrefs
+import com.rfandango.haku_x.data.RetroArchShaderStore
 import com.rfandango.haku_x.data.CheatInfo
 import com.rfandango.haku_x.data.Controllers
 import com.rfandango.haku_x.data.GameOverrides
@@ -1491,7 +1492,8 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
       "CAS" to if (prefs.cas) "Ativado" else "Desativado",
       "Intensidade CAS" to "%.1f".format(java.util.Locale.US, prefs.casSharpness),
       "NIS" to if (prefs.nis) "Ativado" else "Desativado",
-      "Nitidez NIS" to "${(prefs.nisSharpness * 100).toInt()}%"
+      "Nitidez NIS" to "${(prefs.nisSharpness * 100).toInt()}%",
+      "Biblioteca de shaders RetroArch" to "${RetroArchShaderStore.listPresets(File(filesDir, \"retroarch-shaders\")).size} preset(s) instalados"
     )
     showSeriesXMenu("Imagem e gráficos", entries) { which ->
       when (which) {
@@ -1558,6 +1560,30 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
             showRuntimeGraphics()
           }
         }
+        8 -> showRuntimeRetroArchShaders()
+      }
+    }
+  }
+
+  /** Select an installed preset from the quick menu; actual rendering is gated on backend support. */
+  private fun showRuntimeRetroArchShaders() {
+    val prefs = AppPrefs(this)
+    val presets = RetroArchShaderStore.listPresets(File(filesDir, "retroarch-shaders"))
+    val entries = mutableListOf<Pair<String, String>>()
+    entries += "Desativar seleção" to "Remove o preset salvo"
+    presets.forEach { preset ->
+      val selected = prefs.retroArchPresetPath == preset.relativePath
+      val backend = if (preset.requiresSlangCompiler) "Slang · backend ainda não disponível" else "GLSL multipass · backend ainda em integração"
+      entries += (if (selected) "✓ " else "") + preset.relativePath.substringAfterLast('/') to "$backend · ${preset.passCount} passe(s)"
+    }
+    if (presets.isEmpty()) entries += "Nenhum preset instalado" to "Importe pacotes em Configurações > Gráficos"
+    showSeriesXMenu("Shaders RetroArch", entries) { index ->
+      if (index == 0) {
+        prefs.retroArchPresetPath = ""
+        showRuntimeRetroArchShaders()
+      } else if (presets.isNotEmpty()) {
+        prefs.retroArchPresetPath = presets[index - 1].relativePath
+        showRuntimeRetroArchShaders()
       }
     }
   }
