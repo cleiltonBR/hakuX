@@ -66,6 +66,7 @@ add_library(hakux_hle STATIC
   ${NC_HLE}/shader/psh.c
   ${NC_HLE}/shader/vsh.c
   ${NC_HLE}/tex/xdk_res.c
+  ${NC_HLE}/tex/tex_dump.c
   ${NC_HLE}/tex/xg_swizzle.c
   ${NC_HLE}/uma/uma.c
   ${NC_HLE}/util/thread.c
