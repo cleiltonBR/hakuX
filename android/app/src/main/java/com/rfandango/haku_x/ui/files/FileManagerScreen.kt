@@ -11,13 +11,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Description
-import androidx.compose.material.icons.filled.FileUpload
-import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material3.Icon
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -107,7 +104,7 @@ fun FileManagerScreen(onBack: () -> Unit) {
         if (current != null) {
           ListItem(
             headlineContent = { Text("Voltar") },
-            leadingContent = { Icon(Icons.Filled.Folder, contentDescription = null) },
+            leadingContent = { Text("📁") },
             modifier = Modifier.clickable { current = current?.parent },
           )
         }
@@ -122,8 +119,7 @@ fun FileManagerScreen(onBack: () -> Unit) {
             Text((if (file.isDirectory) "Pasta" else "Arquivo") + " • " + Formatter.formatShortFileSize(context, size))
           },
           leadingContent = {
-            Icon(if (file.isDirectory) Icons.Filled.Folder else Icons.Filled.Description, contentDescription = null,
-              tint = MaterialTheme.colorScheme.primary)
+            Text(if (file.isDirectory) "📁" else "📄")
           },
           trailingContent = {
             IconButton(onClick = { exportTarget = file; picker.launch(null) }, enabled = !busy) {
