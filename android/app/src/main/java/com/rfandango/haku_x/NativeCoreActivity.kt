@@ -343,6 +343,12 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     args += "cas_sharpness=${settings.casSharpness}"
     args += "nis=${if (settings.nis) 1 else 0}"
     args += "nis_sharpness=${settings.nisSharpness}"
+    /* The selected RetroArch preset is passed to the native renderer by absolute path.
+     * The renderer backend consumes it separately; selection alone does not apply effects. */
+    prefs.retroArchPresetPath.takeIf { it.isNotBlank() }?.let { relative ->
+      runCatching { File(filesDir, "retroarch-shaders/$relative").canonicalFile }
+        .getOrNull()?.takeIf { it.isFile }?.let { args += "retroarch_preset=${it.absolutePath}" }
+    }
     /* LSFG shader resources are read from the user's private app-storage copy.
      * The DLL itself is never loaded as executable code. */
     val lsfgPrefs = AppPrefs(this)
