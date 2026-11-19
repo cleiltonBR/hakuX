@@ -74,8 +74,8 @@ fun FileManagerScreen(onBack: () -> Unit) {
           }
         }
         busy = false
-        result.onSuccess { snackbar.showSnackbar("Exportação concluída: \${source.name}") }
-          .onFailure { snackbar.showSnackbar("Falha ao exportar: \${it.message ?: "erro desconhecido"}") }
+        result.onSuccess { snackbar.showSnackbar("Exportação concluída: ${source.name}") }
+          .onFailure { snackbar.showSnackbar("Falha ao exportar: ${it.message ?: "erro desconhecido"}") }
       }
     }
   }
@@ -142,13 +142,13 @@ private fun File.sizeRecursively(): Long {
 private fun copyInto(context: Context, source: File, destination: DocumentFile) {
   if (source.isDirectory) {
     val folder = destination.createDirectory(source.name)
-      ?: error("Não foi possível criar a pasta \${source.name}.")
+      ?: error("Não foi possível criar a pasta ${source.name}.")
     source.listFiles()?.forEach { child -> copyInto(context, child, folder) }
   } else {
     val target = destination.createFile("application/octet-stream", source.name)
-      ?: error("Não foi possível criar o arquivo \${source.name}.")
+      ?: error("Não foi possível criar o arquivo ${source.name}.")
     context.contentResolver.openOutputStream(target.uri, "w")?.use { output ->
       source.inputStream().use { input -> input.copyTo(output, 128 * 1024) }
-    } ?: error("Não foi possível gravar o arquivo \${source.name}.")
+    } ?: error("Não foi possível gravar o arquivo ${source.name}.")
   }
 }
