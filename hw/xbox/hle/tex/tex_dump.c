@@ -109,7 +109,7 @@ bool hle_tex_dump_submit(uint32_t id, uint32_t format, uint32_t width, uint32_t 
     pthread_once(&g_dump_once, tex_dump_start);
     if (!g_dump_dir[0] || !pixels || !size || !width || !height ||
         (format != 0x0C && format != 0x0E && format != 0x0F &&
-         format != 0x06 && format != 0x07 && format != 0x0A && format != 0x1A)) {
+         format != 0x06 && format != 0x12)) {
         return false;
     }
     TexDumpItem *item = calloc(1, sizeof(*item));
