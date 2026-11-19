@@ -217,6 +217,11 @@ class AppPrefs(context: Context) {
     get() = (((sp.getInt(KEY_LSFG_FLOW_SCALE, 100).coerceIn(25, 100) + 12) / 25) * 25).coerceIn(25, 100)
     set(value) = sp.edit { putInt(KEY_LSFG_FLOW_SCALE, (((value.coerceIn(25, 100) + 12) / 25) * 25).coerceIn(25, 100)) }
 
+  /** Selected RetroArch preset path relative to the private shader library; selection is metadata-only until the renderer backend is wired. */
+  var retroArchPresetPath: String
+    get() = sp.getString(KEY_RETROARCH_PRESET, "") ?: ""
+    set(value) = sp.edit { if (value.isBlank()) remove(KEY_RETROARCH_PRESET) else putString(KEY_RETROARCH_PRESET, value) }
+
   /** LSFG shader source imported by the user; the executable DLL is never loaded. */
   var lsfgDllPath: String
     get() = sp.getString(KEY_LSFG_DLL_PATH, "") ?: ""
