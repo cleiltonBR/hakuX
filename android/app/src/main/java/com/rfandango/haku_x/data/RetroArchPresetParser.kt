@@ -102,7 +102,7 @@ object RetroArchPresetParser {
     if (value.length >= 2 && value.first() == '"' && value.last() == '"') value.substring(1, value.length - 1) else value
 
   private fun safeRelativePath(raw: String, key: String): String {
-    val normalized = raw.replace('\\\\', '/').trim()
+    val normalized = raw.replace('\\', '/').trim()
     require(normalized.isNotEmpty()) { "$key tem caminho vazio" }
     require(!normalized.startsWith('/') && !normalized.startsWith("//")) {
       "$key precisa usar caminho relativo ao preset"
