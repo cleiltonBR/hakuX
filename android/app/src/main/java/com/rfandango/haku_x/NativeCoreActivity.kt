@@ -318,7 +318,14 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
       args += "version=$it"
     }
     /* The app's settings, under this game's overrides. */
-    val settings = RunSettings(AppPrefs(this), gameOverrides())
+    val prefs = AppPrefs(this)
+    val settings = RunSettings(prefs, gameOverrides())
+    /* Native DDS capture is opt-in and isolated per game. PNG export and
+     * SAF-folder publishing are handled by the Android-side exporter. */
+    if (prefs.textureDumpEnabled && prefs.textureDumpFormat == AppPrefs.TEXTURE_DUMP_DDS) {
+      val dumpDir = File(filesDir, "texture-dumps/${gameKey()}").apply { mkdirs() }
+      args += "texdump_dir=${dumpDir.absolutePath}"
+    }
     /* Every frame presented at once, no vblank wait: on by default. */
     if (settings.uncapped) {
       args += "uncap"
