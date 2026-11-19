@@ -373,7 +373,6 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
      * this network (their broadcasts reach it under the multicast lock), or
      * through an XLink Kai engine; the Internet through NAT, Insignia's DNS
      * server given by DHCP (Xbox Live); off, no cable. */
-    val prefs = AppPrefs(this)
     when (prefs.networkMode) {
       AppPrefs.NET_LAN -> {
         args += "net=lan"
