@@ -37,6 +37,21 @@ class AppPrefs(context: Context) {
       gamesFolders = listOfNotNull(value) + gamesFolders.drop(1)
     }
 
+  /** SAF destination for per-game texture dumps. */
+  var textureDumpFolderUri: Uri?
+    get() = sp.getString(KEY_TEXTURE_DUMP_FOLDER, null)?.let(Uri::parse)
+    set(value) = sp.edit { if (value == null) remove(KEY_TEXTURE_DUMP_FOLDER) else putString(KEY_TEXTURE_DUMP_FOLDER, value.toString()) }
+
+  /** Texture dumping is opt-in; native capture is wired separately. */
+  var textureDumpEnabled: Boolean
+    get() = sp.getBoolean(KEY_TEXTURE_DUMP_ENABLED, false)
+    set(value) = sp.edit { putBoolean(KEY_TEXTURE_DUMP_ENABLED, value) }
+
+  /** dds, png or both. */
+  var textureDumpFormat: String
+    get() = sp.getString(KEY_TEXTURE_DUMP_FORMAT, TEXTURE_DUMP_DDS) ?: TEXTURE_DUMP_DDS
+    set(value) = sp.edit { putString(KEY_TEXTURE_DUMP_FORMAT, value.takeIf { it in TEXTURE_DUMP_FORMATS } ?: TEXTURE_DUMP_DDS) }
+
   /** Destination chosen for games downloaded from the integrated store. */
   var downloadFolderUri: Uri?
     get() = sp.getString(KEY_DOWNLOAD_FOLDER, null)?.let(Uri::parse) ?: gamesFolderUri
@@ -334,6 +349,13 @@ class AppPrefs(context: Context) {
     private const val KEY_GAMES_FOLDER = "gamesFolderUri"
     private const val KEY_GAMES_FOLDERS = "gamesFolders"
     private const val KEY_DOWNLOAD_FOLDER = "store_download_folder"
+    private const val KEY_TEXTURE_DUMP_FOLDER = "texture_dump_folder_uri"
+    private const val KEY_TEXTURE_DUMP_ENABLED = "texture_dump_enabled"
+    private const val KEY_TEXTURE_DUMP_FORMAT = "texture_dump_format"
+    const val TEXTURE_DUMP_DDS = "dds"
+    const val TEXTURE_DUMP_PNG = "png"
+    const val TEXTURE_DUMP_BOTH = "both"
+    val TEXTURE_DUMP_FORMATS = setOf(TEXTURE_DUMP_DDS, TEXTURE_DUMP_PNG, TEXTURE_DUMP_BOTH)
     private const val KEY_SETUP_COMPLETE = "setup_complete"
     private const val KEY_PREVIOUS_MIGRATED = "previous_version_migrated"
     private const val KEY_SHOW_FPS = "show_fps"
