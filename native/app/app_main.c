@@ -613,6 +613,10 @@ EXPORT int SDL_main(int argc, char *argv[])
         if (nc_option(&opt, argv[i])) {
             continue;                           /* the core's (native/core/options.h) */
         }
+        if (!strncmp(argv[i], "texdump_dir=", 12) && argv[i][12]) {
+            setenv("HAKUX_TEXTURE_DUMP_DIR", argv[i] + 12, 1);
+            nc_log("hakuX-app", "texture dump enabled: %s", argv[i] + 12);
+        }
         if (!strcmp(argv[i], "padinput=sdl")) {
             g_sdl_pads = true;
         }
