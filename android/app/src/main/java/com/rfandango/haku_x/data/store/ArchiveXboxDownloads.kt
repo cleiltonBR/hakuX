@@ -261,6 +261,24 @@ object ArchiveXboxDownloads {
 
     val extension = source.extension.lowercase(Locale.ROOT)
     if (extension in ARCHIVE_EXTENSIONS) {
+      // Keep the original archive in the user-selected folder as well as the
+      // extracted game, so torrent payloads are not hidden in app-private storage.
+      val archivesFolder = root.findFile("HakuX - Arquivos Torrent")
+        ?.takeIf { it.isDirectory }
+        ?: root.createDirectory("HakuX - Arquivos Torrent")
+        ?: error("Não foi possível criar a pasta para guardar os arquivos originais dos torrents.")
+      val archiveName = uniqueName(archivesFolder, source.name)
+      val savedArchive = archivesFolder.createFile("application/octet-stream", archiveName)
+        ?: error("Não foi possível guardar o arquivo original do torrent.")
+      try {
+        app.contentResolver.openOutputStream(savedArchive.uri, "w")?.use { output ->
+          source.inputStream().use { input -> input.copyTo(output, 128 * 1024) }
+        } ?: error("Não foi possível gravar o arquivo original do torrent.")
+      } catch (error: Exception) {
+        savedArchive.delete()
+        throw error
+      }
+
       val stagingDirectory = File(app.cacheDir, "hakux-torrent-extract-" + UUID.randomUUID())
       var extractedFolder: DocumentFile? = null
       try {
