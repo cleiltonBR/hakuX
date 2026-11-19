@@ -119,7 +119,7 @@ fun FileManagerScreen(onBack: () -> Unit) {
                 runCatching {
                   val files = paths.map(::File).filter { it.exists() }
                   val topLevel = files.filter { candidate ->
-                    files.none { other -> other != candidate && candidate.toPath().startsWith(other.toPath()) }
+                    files.none { other -> other != candidate && candidate.absolutePath.startsWith(other.absolutePath + File.separator) }
                   }
                   var deleted = 0
                   topLevel.forEach { file ->
