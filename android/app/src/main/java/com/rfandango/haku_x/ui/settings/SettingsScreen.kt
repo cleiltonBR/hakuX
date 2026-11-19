@@ -86,6 +86,7 @@ fun SettingsScreen(
   onEditControls: () -> Unit,
   onControllers: () -> Unit,
   onHardDisk: () -> Unit,
+  onFileManager: () -> Unit,
   onGpuDriver: () -> Unit,
   /** The first-start screen again: the xemu-based release's data brought over. */
   onMigrate: () -> Unit,
@@ -360,6 +361,11 @@ fun SettingsScreen(
         headlineContent = { Text(stringResource(R.string.hdd_title)) },
         supportingContent = { Text(stringResource(R.string.hdd_settings_desc)) },
         modifier = Modifier.clickable(onClick = onHardDisk),
+      )
+      ListItem(
+        headlineContent = { Text("Gerenciador de arquivos") },
+        supportingContent = { Text("Visualizar e exportar arquivos internos do HakuX sem apagá-los.") },
+        modifier = Modifier.clickable(onClick = onFileManager),
       )
       if (previous) {
         ListItem(
