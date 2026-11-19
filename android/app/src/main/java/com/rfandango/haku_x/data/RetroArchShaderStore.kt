@@ -119,6 +119,33 @@ object RetroArchShaderStore {
     }
   }
 
+
+  /** Presets already installed in the private library, validated before being shown. */
+  fun listPresets(libraryRoot: File): List<InstalledPreset> {
+    if (!libraryRoot.isDirectory) return emptyList()
+    return libraryRoot.walkTopDown()
+      .filter { it.isFile && it.extension.lowercase() in setOf("glslp", "slangp") }
+      .mapNotNull { file ->
+        runCatching {
+          val preset = RetroArchPresetParser.parse(file.name, file.readText(Charsets.UTF_8))
+          val root = libraryRoot.canonicalFile
+          val canonical = file.canonicalFile
+          require(canonical.path.startsWith(root.path + File.separator))
+          val base = file.parentFile ?: libraryRoot
+          (preset.passes.map { it.shaderPath } + preset.texturePaths.values).forEach { relative ->
+            val dependency = File(base, relative).canonicalFile
+            require(dependency.path.startsWith(root.path + File.separator) && dependency.isFile)
+          }
+          InstalledPreset(
+            relativePath = file.relativeTo(libraryRoot).invariantSeparatorsPath,
+            format = preset.format,
+            passCount = preset.passes.size,
+            requiresSlangCompiler = preset.requiresSlangCompiler,
+          )
+        }.getOrNull()
+      }.toList()
+  }
+
   private fun normalizeEntryPath(raw: String): String {
     val normalized = raw.replace('\\', '/').trim()
     require(normalized.isNotBlank() && !normalized.startsWith('/') && !Regex("^[A-Za-z]:").containsMatchIn(normalized)) {
