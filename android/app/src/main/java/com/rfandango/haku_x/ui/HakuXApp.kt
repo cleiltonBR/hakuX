@@ -44,6 +44,7 @@ import com.rfandango.haku_x.ui.common.ConfirmDialog
 import com.rfandango.haku_x.ui.controls.ControlsEditorScreen
 import com.rfandango.haku_x.ui.driver.GpuDriverScreen
 import com.rfandango.haku_x.ui.hdd.HddScreen
+import com.rfandango.haku_x.ui.files.FileManagerScreen
 import com.rfandango.haku_x.ui.insignia.InsigniaWizard
 import com.rfandango.haku_x.ui.library.LibraryScreen
 import com.rfandango.haku_x.ui.store.DownloadsScreen
@@ -68,6 +69,7 @@ private object Routes {
   const val CONTROLS = "controls"
   const val CONTROLLERS = "controllers"
   const val HDD = "hdd"
+  const val FILE_MANAGER = "file_manager"
   const val GPU_DRIVER = "gpu_driver"
   /** Insignia's setup wizard (Xbox Live). */
   const val INSIGNIA = "insignia"
@@ -213,6 +215,7 @@ fun HakuXApp(
         onEditControls = { nav.navigate(Routes.CONTROLS) },
         onControllers = { nav.navigate(Routes.CONTROLLERS) },
         onHardDisk = { nav.navigate(Routes.HDD) },
+        onFileManager = { nav.navigate(Routes.FILE_MANAGER) },
         onGpuDriver = { nav.navigate(Routes.GPU_DRIVER) },
         onMigrate = { nav.navigate(Routes.MIGRATE_AGAIN) },
         onInsignia = { nav.navigate(Routes.INSIGNIA) },
@@ -233,6 +236,9 @@ fun HakuXApp(
     }
     composable(Routes.HDD) {
       HddScreen(onBack = { nav.popBackStack() })
+    }
+    composable(Routes.FILE_MANAGER) {
+      FileManagerScreen(onBack = { nav.popBackStack() })
     }
     composable(Routes.CONTROLLERS) {
       ControllersScreen(onBack = { nav.popBackStack() }, onMap = { nav.navigate(Routes.mapping(it)) })
