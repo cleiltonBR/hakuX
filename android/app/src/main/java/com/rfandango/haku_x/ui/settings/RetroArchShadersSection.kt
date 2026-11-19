@@ -42,11 +42,13 @@ internal fun RetroArchShadersSection(prefs: AppPrefs) {
     if (uri != null) {
       scope.launch {
         importing = true
-        val result = withContext(Dispatchers.IO) {
-          val name = queryDisplayName(context, uri) ?: "shader-pack.zip"
-          context.contentResolver.openInputStream(uri)?.use { input ->
-            RetroArchShaderStore.importZip(input, name, library)
-          } ?: error("Não foi possível abrir o arquivo selecionado")
+        val result = runCatching {
+          withContext(Dispatchers.IO) {
+            val name = queryDisplayName(context, uri) ?: "shader-pack.zip"
+            context.contentResolver.openInputStream(uri)?.use { input ->
+              RetroArchShaderStore.importZip(input, name, library)
+            } ?: error("Não foi possível abrir o arquivo selecionado")
+          }
         }
         importing = false
         result.onSuccess {
