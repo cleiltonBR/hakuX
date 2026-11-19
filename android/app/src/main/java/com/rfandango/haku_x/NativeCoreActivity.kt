@@ -1493,7 +1493,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
       "Intensidade CAS" to "%.1f".format(java.util.Locale.US, prefs.casSharpness),
       "NIS" to if (prefs.nis) "Ativado" else "Desativado",
       "Nitidez NIS" to "${(prefs.nisSharpness * 100).toInt()}%",
-      "Biblioteca de shaders RetroArch" to "${RetroArchShaderStore.listPresets(File(filesDir, \"retroarch-shaders\")).size} preset(s) instalados"
+      "Biblioteca de shaders RetroArch" to "${RetroArchShaderStore.listPresets(File(filesDir, "retroarch-shaders")).size} preset(s) instalados"
     )
     showSeriesXMenu("Imagem e gráficos", entries) { which ->
       when (which) {
