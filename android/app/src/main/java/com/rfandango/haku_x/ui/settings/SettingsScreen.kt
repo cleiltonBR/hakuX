@@ -59,6 +59,7 @@ import com.rfandango.haku_x.data.PreviousVersion
 import com.rfandango.haku_x.data.Storage
 import com.rfandango.haku_x.data.Updates
 import com.rfandango.haku_x.ui.common.ActionItem
+import com.rfandango.haku_x.ui.settings.RetroArchShadersSection
 import com.rfandango.haku_x.ui.common.ChoiceDialog
 import com.rfandango.haku_x.ui.common.ConfirmDialog
 import com.rfandango.haku_x.ui.common.DeleteButton
@@ -470,6 +471,7 @@ fun SettingsScreen(
 
       if (selectedSettingsCategory == "graphics") {
       Section(stringResource(R.string.settings_section_graphics))
+      RetroArchShadersSection(prefs)
       ListItem(
         headlineContent = { Text("Lossless Scaling · Frame Generation") },
         supportingContent = {
