@@ -99,6 +99,10 @@ fun SettingsScreen(
   val scope = rememberCoroutineScope()
 
   var folders by remember { mutableStateOf(prefs.gamesFolders) }
+  var textureDumpEnabled by remember { mutableStateOf(prefs.textureDumpEnabled) }
+  var textureDumpFolder by remember { mutableStateOf(prefs.textureDumpFolderUri) }
+  var textureDumpFormat by remember { mutableStateOf(prefs.textureDumpFormat) }
+  var textureDumpFormatDialog by remember { mutableStateOf(false) }
   var replacing by remember { mutableStateOf<Uri?>(null) }     /* the folder a pick replaces; null: adds */
   var removing by remember { mutableStateOf<Uri?>(null) }
   var uncapped by remember { mutableStateOf(prefs.uncapped) }
@@ -156,7 +160,16 @@ fun SettingsScreen(
       }
     }
   }
-  val pickLsfgDll = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+  val pickTextureDumpFolder = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri: Uri? ->
+    if (uri != null) {
+      val old = textureDumpFolder
+      Storage.persistPermission(context, uri)
+      textureDumpFolder = uri
+      prefs.textureDumpFolderUri = uri
+      if (old != null && old != uri) Storage.releasePermission(context, old)
+    }
+  }
+    val pickLsfgDll = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
     if (uri != null) {
       runCatching { LosslessDllStore.import(context, uri) }
         .onSuccess { file ->
@@ -379,6 +392,32 @@ fun SettingsScreen(
         )
       }
 
+      Section("Dump de texturas")
+      SwitchItem(
+        title = "Ativar captura de texturas",
+        summary = "Permite exportar texturas do jogo em execução. A captura nativa ainda está em integração.",
+        checked = textureDumpEnabled,
+        onChange = { textureDumpEnabled = it; prefs.textureDumpEnabled = it },
+      )
+      ListItem(
+        headlineContent = { Text("Pasta de destino") },
+        supportingContent = {
+          Text(textureDumpFolder?.let { Storage.folderLabel(context, it) } ?: "Nenhuma pasta selecionada")
+        },
+        modifier = Modifier.clickable { pickTextureDumpFolder.launch(textureDumpFolder) },
+      )
+      ListItem(
+        headlineContent = { Text("Formato de exportação") },
+        supportingContent = {
+          Text(when (textureDumpFormat) {
+            AppPrefs.TEXTURE_DUMP_PNG -> "PNG"
+            AppPrefs.TEXTURE_DUMP_BOTH -> "DDS + PNG"
+            else -> "DDS"
+          })
+        },
+        modifier = Modifier.clickable { textureDumpFormatDialog = true },
+      )
+
       if (selectedSettingsCategory == "console") NetworkSettings(prefs, onInsignia)
 
       }
@@ -584,7 +623,20 @@ fun SettingsScreen(
     }
   }
 
-  if (languageDialog) {
+  if (textureDumpFormatDialog) {
+    ChoiceDialog(
+      title = "Formato de exportação",
+      options = listOf(
+        AppPrefs.TEXTURE_DUMP_DDS to "DDS",
+        AppPrefs.TEXTURE_DUMP_PNG to "PNG",
+        AppPrefs.TEXTURE_DUMP_BOTH to "DDS + PNG",
+      ),
+      current = textureDumpFormat,
+      onPick = { textureDumpFormat = it; prefs.textureDumpFormat = it; textureDumpFormatDialog = false },
+      onDismiss = { textureDumpFormatDialog = false },
+    )
+  }
+    if (languageDialog) {
     ChoiceDialog(
       title = stringResource(R.string.settings_language),
       options = LANGUAGES.map { it to languageLabel(it) },
