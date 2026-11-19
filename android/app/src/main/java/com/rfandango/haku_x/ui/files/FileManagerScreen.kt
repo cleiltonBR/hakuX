@@ -93,7 +93,7 @@ fun FileManagerScreen(onBack: () -> Unit) {
 
   SubScreen(
     title = "Gerenciador de arquivos",
-    onBack = { if (current != null) current = current?.parent else onBack() },
+    onBack = { if (current != null) current = current?.parentFile else onBack() },
     subtitle = current?.absolutePath ?: "Armazenamento privado do HakuX",
     snackbar = snackbar,
   ) { padding ->
@@ -105,7 +105,7 @@ fun FileManagerScreen(onBack: () -> Unit) {
           ListItem(
             headlineContent = { Text("Voltar") },
             leadingContent = { Text("📁") },
-            modifier = Modifier.clickable { current = current?.parent },
+            modifier = Modifier.clickable { current = current?.parentFile },
           )
         }
         if (busy) Hint("Exportando arquivos…")
@@ -123,7 +123,7 @@ fun FileManagerScreen(onBack: () -> Unit) {
           },
           trailingContent = {
             IconButton(onClick = { exportTarget = file; picker.launch(null) }, enabled = !busy) {
-              Icon(Icons.Filled.FileUpload, contentDescription = "Exportar \${entry.label}")
+              Icon(Icons.Filled.Share, contentDescription = "Exportar \${entry.label}")
             }
           },
           modifier = Modifier.clickable(enabled = file.isDirectory) { current = file },
