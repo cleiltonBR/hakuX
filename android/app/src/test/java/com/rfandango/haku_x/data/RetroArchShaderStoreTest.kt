@@ -27,7 +27,8 @@ class RetroArchShaderStoreTest {
     )
 
     assertTrue(result.directory.isDirectory)
-    assertEquals(3, result.presets.single().passCount.let { result.fileCount })
+    assertEquals(4, result.fileCount)
+    assertEquals(1, result.presets.single().passCount)
     assertEquals("crt/crt.glslp", result.presets.single().relativePath)
     assertTrue(File(result.directory, "crt/shaders/crt.glsl").isFile)
     assertTrue(File(result.directory, "crt/textures/mask.png").isFile)
