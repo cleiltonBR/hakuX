@@ -49,7 +49,7 @@ object RetroArchPresetParser {
     } catch (error: Exception) {
       throw IllegalArgumentException("Preset inválido: " + (error.message ?: "erro de leitura"), error)
     }
-    val values = properties.stringPropertyNames().associateWith { properties.getProperty(it).trim() }
+    val values = properties.stringPropertyNames().associateWith { key -> unquote(properties.getProperty(key).trim()) }
     val declaredCount = values["shaders"]?.toIntOrNull()
     val indexedPasses = values.keys.mapNotNull { key ->
       passKey.matchEntire(key)?.groupValues?.get(1)?.toIntOrNull()
@@ -97,6 +97,9 @@ object RetroArchPresetParser {
 
     return RetroArchShaderPreset(format, passes, textures, parameters, values)
   }
+
+  private fun unquote(value: String): String =
+    if (value.length >= 2 && value.first() == '"' && value.last() == '"') value.substring(1, value.length - 1) else value
 
   private fun safeRelativePath(raw: String, key: String): String {
     val normalized = raw.replace('\\\\', '/').trim()
