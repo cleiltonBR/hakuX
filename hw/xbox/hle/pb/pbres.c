@@ -10,6 +10,7 @@
 #include "hw/xbox/hle/mem/guestmem.h"
 #include "hw/xbox/hle/pb/pbres.h"
 #include "hw/xbox/hle/tex/xdk_res.h"
+#include "hw/xbox/hle/tex/tex_dump.h"
 #include "hw/xbox/hle/tex/xg_swizzle.h"
 #include "hw/xbox/hle/vk/back.h"
 #include "hw/xbox/hle/vk/guest_ram.h"
@@ -374,6 +375,9 @@ static bool tex_define(uint32_t id, const uint32_t h5[5], const HleResDesc *dp,
             pos += n;
         }
     }
+    /* Copy the completed upload into a bounded worker queue; disk I/O stays
+     * off the render thread. */
+    hle_tex_dump_submit(id, oxfmt, d.w, d.h, depth, levels, faces, dst, total);
     {   /* debug: HAKUX_HLE_TEXDUMP=<id>, that texture's linear texels once */
         static int64_t want = -2;
         if (want == -2) {
