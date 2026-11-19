@@ -10,13 +10,17 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -47,6 +51,8 @@ fun FileManagerScreen(onBack: () -> Unit) {
   var exportTarget by remember { mutableStateOf<File?>(null) }
   var busy by remember { mutableStateOf(false) }
   var refresh by remember { mutableStateOf(0) }
+  var selectedPaths by remember { mutableStateOf<Set<String>>(emptySet()) }
+  var showDeleteConfirmation by remember { mutableStateOf(false) }
 
   val roots by produceState<List<BrowserEntry>>(initialValue = emptyList(), refresh) {
     value = withContext(Dispatchers.IO) {
@@ -91,42 +97,128 @@ fun FileManagerScreen(onBack: () -> Unit) {
     value = withContext(Dispatchers.IO) { entries.associate { it.file.absolutePath to it.file.sizeRecursively() } }
   }
 
+  val selectedCount = selectedPaths.size
+  val allSelected = entries.isNotEmpty() && entries.all { it.file.absolutePath in selectedPaths }
+
+  if (showDeleteConfirmation) {
+    AlertDialog(
+      onDismissRequest = { showDeleteConfirmation = false },
+      title = { Text("Excluir permanentemente?") },
+      text = {
+        Text("Você está prestes a excluir $selectedCount item(ns), incluindo todo o conteúdo das pastas selecionadas. Esta ação não pode ser desfeita.")
+      },
+      confirmButton = {
+        TextButton(
+          enabled = !busy,
+          onClick = {
+            showDeleteConfirmation = false
+            val paths = selectedPaths.toList()
+            busy = true
+            scope.launch {
+              val result = withContext(Dispatchers.IO) {
+                runCatching {
+                  val files = paths.map(::File).filter { it.exists() }
+                  val topLevel = files.filter { candidate ->
+                    files.none { other -> other != candidate && candidate.toPath().startsWith(other.toPath()) }
+                  }
+                  var deleted = 0
+                  topLevel.forEach { file ->
+                    check(file.deleteRecursively()) { "Não foi possível excluir ${file.name}." }
+                    deleted++
+                  }
+                  deleted
+                }
+              }
+              busy = false
+              selectedPaths = emptySet()
+              refresh++
+              result.onSuccess { snackbar.showSnackbar("$it item(ns) excluído(s) permanentemente.") }
+                .onFailure { snackbar.showSnackbar("Falha ao excluir: ${it.message ?: "erro desconhecido"}") }
+            }
+          },
+        ) { Text("Excluir permanentemente") }
+      },
+      dismissButton = {
+        TextButton(onClick = { showDeleteConfirmation = false }) { Text("Cancelar") }
+      },
+    )
+  }
+
   SubScreen(
     title = "Gerenciador de arquivos",
-    onBack = { if (current != null) current = current?.parentFile else onBack() },
+    onBack = {
+      selectedPaths = emptySet()
+      if (current != null) current = current?.parentFile else onBack()
+    },
     subtitle = current?.absolutePath ?: "Armazenamento privado do HakuX",
     snackbar = snackbar,
   ) { padding ->
     LazyColumn(Modifier.fillMaxSize().padding(padding)) {
       item {
-        Hint("Visualize os dados internos do aplicativo e exporte arquivos ou pastas para um local acessível no Android. Nada será apagado ou movido.")
+        Hint("Navegue pelos dados internos, selecione um ou vários itens e exporte cópias. A exclusão é permanente e só ocorre após confirmação.")
         Section(if (current == null) "Pastas e arquivos do aplicativo" else current?.name ?: "Conteúdo")
         if (current != null) {
           ListItem(
             headlineContent = { Text("Voltar") },
             leadingContent = { Text("📁") },
-            modifier = Modifier.clickable { current = current?.parentFile },
+            modifier = Modifier.clickable {
+              current = current?.parentFile
+              selectedPaths = emptySet()
+            },
           )
         }
-        if (busy) Hint("Exportando arquivos…")
+        if (entries.isNotEmpty()) {
+          ListItem(
+            headlineContent = { Text(if (allSelected) "Desmarcar todos" else "Selecionar todos") },
+            supportingContent = { Text("$selectedCount selecionado(s)") },
+            leadingContent = {
+              Checkbox(
+                checked = allSelected,
+                onCheckedChange = { checked ->
+                  selectedPaths = if (checked) entries.map { it.file.absolutePath }.toSet() else emptySet()
+                },
+                enabled = !busy,
+              )
+            },
+            trailingContent = {
+              IconButton(
+                onClick = { showDeleteConfirmation = true },
+                enabled = selectedCount > 0 && !busy,
+              ) {
+                Icon(Icons.Filled.Delete, contentDescription = "Excluir itens selecionados")
+              }
+            },
+          )
+        }
+        if (busy) Hint("Processando arquivos…")
       }
       items(entries, key = { it.file.absolutePath }) { entry ->
         val file = entry.file
-        val size = sizes[file.absolutePath] ?: 0L
+        val path = file.absolutePath
+        val size = sizes[path] ?: 0L
         ListItem(
           headlineContent = { Text(entry.label, maxLines = 1) },
           supportingContent = {
             Text((if (file.isDirectory) "Pasta" else "Arquivo") + " • " + Formatter.formatShortFileSize(context, size))
           },
           leadingContent = {
-            Text(if (file.isDirectory) "📁" else "📄")
+            Checkbox(
+              checked = path in selectedPaths,
+              onCheckedChange = { checked ->
+                selectedPaths = if (checked) selectedPaths + path else selectedPaths - path
+              },
+              enabled = !busy,
+            )
           },
           trailingContent = {
             IconButton(onClick = { exportTarget = file; picker.launch(null) }, enabled = !busy) {
-              Icon(Icons.Filled.Share, contentDescription = "Exportar \${entry.label}")
+              Icon(Icons.Filled.Share, contentDescription = "Exportar ${entry.label}")
             }
           },
-          modifier = Modifier.clickable(enabled = file.isDirectory) { current = file },
+          modifier = Modifier.clickable(enabled = file.isDirectory && !busy) {
+            current = file
+            selectedPaths = emptySet()
+          },
         )
       }
       if (entries.isEmpty()) item { Hint("Esta pasta está vazia ou não pôde ser lida.") }
