@@ -54,8 +54,14 @@ object RetroArchPresetParser {
     val indexedPasses = values.keys.mapNotNull { key ->
       passKey.matchEntire(key)?.groupValues?.get(1)?.toIntOrNull()
     }
-    val count = declaredCount ?: ((indexedPasses.maxOrNull() ?: -1) + 1)
-    require(count in 1..MAX_PASSES) { "Quantidade de passes inválida: $count (limite: $MAX_PASSES)" }
+    // Some third-party/official-pack metadata declares shaders=0 while still
+    // providing indexed shaderN entries. Prefer the actual pass declarations
+    // in that case instead of rejecting an otherwise usable preset.
+    val inferredCount = (indexedPasses.maxOrNull() ?: -1) + 1
+    val count = declaredCount?.takeIf { it > 0 } ?: inferredCount
+    require(count in 1..MAX_PASSES) {
+      "Quantidade de passes inválida: $count (limite: $MAX_PASSES) em $fileName"
+    }
 
     val passes = (0 until count).map { index ->
       val shader = values["shader$index"]
