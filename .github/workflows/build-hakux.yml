@@ -126,6 +126,26 @@ jobs:
           git -C adrenotools apply "$GITHUB_WORKSPACE/tools/native/adrenotools-kgsl-context-priority.patch"
           ls -la "$NC_DEPS"
 
+      - name: Testar reflexão de shaders RetroArch SPIR-V no host
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/retroarch-spirv-test"
+          glslangValidator -V --target-env vulkan1.1 -S vert \
+            tests/hle/shaders/retroarch_reflect.vert \
+            -o "$RUNNER_TEMP/retroarch-spirv-test/vertex.spv"
+          glslangValidator -V --target-env vulkan1.1 -S frag \
+            tests/hle/shaders/retroarch_reflect.frag \
+            -o "$RUNNER_TEMP/retroarch-spirv-test/fragment.spv"
+          cc -std=c11 -Wall -Wextra -Werror -I"$GITHUB_WORKSPACE" \
+            -I"$NC_DEPS/spirv_reflect" \
+            tests/hle/test_retroarch_spirv.c \
+            hw/xbox/hle/shader/retroarch_spirv.c \
+            "$NC_DEPS/spirv_reflect/spirv_reflect.c" \
+            -o "$RUNNER_TEMP/retroarch-spirv-test/test_retroarch_spirv"
+          "$RUNNER_TEMP/retroarch-spirv-test/test_retroarch_spirv" \
+            "$RUNNER_TEMP/retroarch-spirv-test/vertex.spv" \
+            "$RUNNER_TEMP/retroarch-spirv-test/fragment.spv"
+
       - name: Preparar shaders FSR 1.0 (sempre garantir o caminho FSR)
         run: |
           F=hw/xbox/hle/vk/swapchain.c
