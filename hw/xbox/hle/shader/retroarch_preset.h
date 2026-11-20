@@ -2,7 +2,7 @@
 #define HW_XBOX_HLE_SHADER_RETROARCH_PRESET_H
 #include <stdbool.h>
 #include <stddef.h>
-#define HLE_RA_MAX_PASSES 32
+#define HLE_RA_MAX_PASSES 64
 #define HLE_RA_PATH_MAX 1024
 typedef struct HleRaPass {
     char shader[HLE_RA_PATH_MAX];
