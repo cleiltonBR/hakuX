@@ -387,21 +387,25 @@ bool hle_ra_pass_gpu_create(const HleRaProgram *program, unsigned pass_index,
         }
         VkDescriptorPoolCreateInfo pool_info = {
             .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-            .maxSets = created.set_count,
+            .maxSets = created.set_count * HLE_RA_FRAME_SLOTS,
             .poolSizeCount = pool_size_count,
             .pPoolSizes = pool_sizes,
         };
         if (g_hvk.t.vkCreateDescriptorPool(g_hvk.dev, &pool_info, NULL,
                                            &created.descriptor_pool) != VK_SUCCESS)
             goto done;
+        VkDescriptorSetLayout layouts[HLE_RA_FRAME_SLOTS * 8];
+        for (unsigned frame = 0; frame < HLE_RA_FRAME_SLOTS; ++frame)
+            memcpy(&layouts[frame * created.set_count], created.set_layouts,
+                   created.set_count * sizeof(layouts[0]));
         VkDescriptorSetAllocateInfo set_info = {
             .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
             .descriptorPool = created.descriptor_pool,
-            .descriptorSetCount = created.set_count,
-            .pSetLayouts = created.set_layouts,
+            .descriptorSetCount = created.set_count * HLE_RA_FRAME_SLOTS,
+            .pSetLayouts = layouts,
         };
         if (g_hvk.t.vkAllocateDescriptorSets(g_hvk.dev, &set_info,
-                                              created.descriptor_sets) != VK_SUCCESS)
+                                              &created.descriptor_sets[0][0]) != VK_SUCCESS)
             goto done;
     }
 
@@ -550,7 +554,7 @@ bool hle_ra_pass_gpu_update_input(const HleRaProgram *program, unsigned pass_ind
                                   const HleRaTarget *input, HleRaPassGpu *pass)
 {
     if (!program || !input || !input->view || !pass || !pass->sampler ||
-        pass_index >= program->preset.pass_count) return false;
+        pass_index >= program->preset.pass_count || frame_slot >= HLE_RA_FRAME_SLOTS) return false;
     VkWriteDescriptorSet writes[HLE_RA_SPIRV_MAX_DESCRIPTORS];
     VkDescriptorImageInfo images[HLE_RA_SPIRV_MAX_DESCRIPTORS];
     uint32_t count = 0;
@@ -566,7 +570,7 @@ bool hle_ra_pass_gpu_update_input(const HleRaProgram *program, unsigned pass_ind
         };
         writes[count] = (VkWriteDescriptorSet) {
             .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-            .dstSet = pass->descriptor_sets[d->set], .dstBinding = d->binding,
+            .dstSet = pass->descriptor_sets[frame_slot][d->set], .dstBinding = d->binding,
             .descriptorCount = 1, .descriptorType = type, .pImageInfo = &images[count]
         };
         ++count;
@@ -577,12 +581,12 @@ bool hle_ra_pass_gpu_update_input(const HleRaProgram *program, unsigned pass_ind
 
 bool hle_ra_pass_gpu_record(VkCommandBuffer cb, const HleRaProgram *program,
                             unsigned pass_index, VkImageView source_view,
-                            HleRaTarget *target, HleRaPassGpu *pass)
+                            HleRaTarget *target, unsigned frame_slot, HleRaPassGpu *pass)
 {
-    if (!cb || !source_view || !target || !target->framebuffer ||
+    if (!cb || !source_view || !target || frame_slot >= HLE_RA_FRAME_SLOTS || !target->framebuffer ||
         !target->render_pass || !pass || !pass->pipeline) return false;
     HleRaTarget input = { .view = source_view, .layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
-    if (!hle_ra_pass_gpu_update_input(program, pass_index, &input, pass) ||
+    if (!hle_ra_pass_gpu_update_input(program, pass_index, &input, frame_slot, pass) ||
         !hle_ra_target_transition(cb, target, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)) return false;
     VkClearValue clear = { .color = { .float32 = { 0.f, 0.f, 0.f, 1.f } } };
     VkRenderPassBeginInfo begin = { .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,

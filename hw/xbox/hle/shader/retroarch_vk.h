@@ -5,6 +5,7 @@
 #include "hw/xbox/hle/shader/retroarch_spirv.h"
 #include "hw/xbox/hle/vk/vkdev.h"
 
+#define HLE_RA_FRAME_SLOTS 3
 #define HLE_RA_TARGET_MAX_PIXELS (16384u * 16384u)
 
 typedef struct HleRaTarget {
@@ -24,7 +25,7 @@ typedef struct HleRaPassGpu {
     VkPipeline pipeline;
     VkSampler sampler;
     VkDescriptorPool descriptor_pool;
-    VkDescriptorSet descriptor_sets[8];
+    VkDescriptorSet descriptor_sets[HLE_RA_FRAME_SLOTS][8];
     VkDescriptorSetLayout set_layouts[8];
     VkPipelineLayout pipeline_layout;
     uint32_t set_count;
@@ -55,10 +56,10 @@ void hle_ra_pass_gpu_destroy(HleRaPassGpu *pass);
 /* Bind the preceding pass output (or source image) to reflected sampled-image
  * descriptors. Unsupported buffer/storage descriptors fail closed. */
 bool hle_ra_pass_gpu_update_input(const HleRaProgram *program, unsigned pass_index,
-                                  const HleRaTarget *input, HleRaPassGpu *pass);
+                                  const HleRaTarget *input, unsigned frame_slot, HleRaPassGpu *pass);
 bool hle_ra_pass_gpu_record(VkCommandBuffer cb, const HleRaProgram *program,
                             unsigned pass_index, VkImageView source_view,
-                            HleRaTarget *target, HleRaPassGpu *pass);
+                            HleRaTarget *target, unsigned frame_slot, HleRaPassGpu *pass);
 
 /* Record a supported layout transition in cb and update the tracked layout.
  * Call before rendering into a target or sampling it; never inside a render pass. */

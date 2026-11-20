@@ -3152,7 +3152,7 @@ static bool ra_presenter_record(VkCommandBuffer cb, VkImageView *source)
     VkImageView input = *source;
     for (unsigned i = 0; i < g_ra.program.preset.pass_count; ++i) {
         if (!hle_ra_pass_gpu_record(cb, &g_ra.program, i, input,
-                                    &g_ra.targets.passes[i], &g_ra.passes[i])) return false;
+                                    &g_ra.targets.passes[i], g_ps.cur, &g_ra.passes[i])) return false;
         input = g_ra.targets.passes[i].view;
     }
     *source = input;
