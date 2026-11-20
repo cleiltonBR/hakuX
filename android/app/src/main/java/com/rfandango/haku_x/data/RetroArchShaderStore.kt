@@ -155,11 +155,11 @@ object RetroArchShaderStore {
       require(canonical.length() in 1..(1024L * 1024L)) { "Preset vazio ou grande demais: ${file.name}" }
       val lines = canonical.readLines(Charsets.UTF_8)
       val declared = lines.firstNotNullOfOrNull { line ->
-        Regex("""^\\s*shaders\\s*=\\s*(\\d+)\\s*$""", RegexOption.IGNORE_CASE)
+        Regex("""^\s*shaders\s*=\s*(\d+)\s*$""", RegexOption.IGNORE_CASE)
           .matchEntire(line)?.groupValues?.get(1)?.toIntOrNull()
       }
       val shaderEntries = lines.mapNotNull { line ->
-        Regex("""^\\s*shader(\\d+)\\s*=\\s*(.*?)\\s*$""", RegexOption.IGNORE_CASE)
+        Regex("""^\s*shader(\d+)\s*=\s*(.*?)\s*$""", RegexOption.IGNORE_CASE)
           .matchEntire(line)?.let { match ->
             val raw = match.groupValues[2].trim().removeSurrounding("\"")
             match.groupValues[1].toIntOrNull()?.let { it to raw }
@@ -182,7 +182,7 @@ object RetroArchShaderStore {
         }
       }
       val references = lines.mapNotNull { line ->
-        Regex("""^\\s*#reference\\s+"([^"]+)"\\s*$""", RegexOption.IGNORE_CASE)
+        Regex("""^\s*#reference\s+"([^"]+)"\s*$""", RegexOption.IGNORE_CASE)
           .matchEntire(line)?.groupValues?.get(1)
       }.filter { it.substringAfterLast('.', "").lowercase() in setOf("glslp", "slangp") }
       val inheritedCount = references.sumOf { reference ->
