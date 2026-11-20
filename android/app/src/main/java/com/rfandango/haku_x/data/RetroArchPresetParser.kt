@@ -110,7 +110,11 @@ object RetroArchPresetParser {
     require(!Regex("^[A-Za-z]:").containsMatchIn(normalized)) {
       "$key não pode usar caminho absoluto do Windows"
     }
-    require(normalized.split('/').none { it == ".." || it.isEmpty() }) {
+    // RetroArch's official presets legitimately reference sibling shader files
+    // (for example: shader1 = ../stock.glsl). Keep relative parent segments here;
+    // the installer and installed-library scanner resolve the final canonical
+    // path and reject anything that escapes the package/library root.
+    require(normalized.split('/').none { it.isEmpty() }) {
       "$key contém caminho inseguro"
     }
     return normalized.split('/').filterNot { it == "." }.joinToString("/")
