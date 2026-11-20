@@ -58,17 +58,19 @@ class RetroArchShaderStoreTest {
   }
 
   @Test fun installsReferenceOnlyMegaBezelPresetWithBaseChainAboveRuntimePassLimit() {
-    val baseShaders = (0 until 40).joinToString("\\n") { index ->
+    val baseShaders = (0 until 40).joinToString("\n") { index ->
       "shader$index = shaders/pass$index.slang"
     }
     val files = mutableListOf(
       "bezel/Presets/MBZ__0__SMOOTH-ADV.slangp" to
-        "#reference \\"Root_Presets/base.slangp\\"\\n#reference \\"../../resource/params/base.params\\"",
-      "bezel/Presets/Root_Presets/base.slangp" to "shaders = 40\\n$baseShaders",
+        """#reference "Root_Presets/base.slangp"
+#reference "../resource/params/base.params"""",
+      "bezel/Presets/Root_Presets/base.slangp" to """shaders = 40
+$baseShaders""",
       "bezel/resource/params/base.params" to "# parameters",
     )
     (0 until 40).forEach { index ->
-      files += "bezel/shaders/pass$index.slang" to "void main() {}"
+      files += "bezel/Presets/Root_Presets/shaders/pass$index.slang" to "void main() {}"
     }
     val result = RetroArchShaderStore.importZip(
       ByteArrayInputStream(zip(*files.toTypedArray())), "Mega Bezel.zip", temporary.root,
