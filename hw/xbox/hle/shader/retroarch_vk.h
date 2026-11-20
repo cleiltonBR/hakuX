@@ -1,0 +1,32 @@
+#ifndef HW_XBOX_HLE_SHADER_RETROARCH_VK_H
+#define HW_XBOX_HLE_SHADER_RETROARCH_VK_H
+
+#include "hw/xbox/hle/shader/retroarch_runtime.h"
+#include "hw/xbox/hle/vk/vkdev.h"
+
+#define HLE_RA_TARGET_MAX_PIXELS (16384u * 16384u)
+
+typedef struct HleRaTarget {
+    VkImage image;
+    VkDeviceMemory memory;
+    VkImageView view;
+    VkImageLayout layout;
+    uint32_t width, height;
+} HleRaTarget;
+
+typedef struct HleRaTargets {
+    unsigned count;
+    HleRaTarget passes[HLE_RA_MAX_PASSES];
+} HleRaTargets;
+
+/* Allocate one RGBA8 render/sample target for each preset pass. Dimensions
+ * follow RetroArch's source/absolute/viewport scale metadata. Temporal
+ * frame_count values other than one are rejected until history is implemented.
+ * The output must be zero-initialized or previously released. */
+bool hle_ra_targets_create(const HleRaProgram *program,
+                           uint32_t source_width, uint32_t source_height,
+                           uint32_t viewport_width, uint32_t viewport_height,
+                           HleRaTargets *out);
+void hle_ra_targets_destroy(HleRaTargets *targets);
+
+#endif
