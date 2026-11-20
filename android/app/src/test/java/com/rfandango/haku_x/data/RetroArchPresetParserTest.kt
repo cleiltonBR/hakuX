@@ -45,14 +45,14 @@ class RetroArchPresetParserTest {
   @Test fun acceptsParentRelativeReferencesUsedByOfficialPacks() {
     val preset = RetroArchPresetParser.parse(
       "test.glslp",
-      "shaders = 1\\nshader0 = ../stock.glsl",
+      "shaders = 1\nshader0 = ../stock.glsl",
     )
     assertEquals("../stock.glsl", preset.passes.single().shaderPath)
   }
 
   @Test fun rejectsAbsoluteShaderPaths() {
-    assertInvalid("shaders = 1\\nshader0 = /outside.glsl")
-    assertInvalid("shaders = 1\\nshader0 = C:\\\\outside.glsl")
+    assertInvalid("shaders = 1\nshader0 = /outside.glsl")
+    assertInvalid("shaders = 1\nshader0 = C:\\outside.glsl")
   }
 
   @Test fun rejectsMissingPassAndInvalidPassCount() {
