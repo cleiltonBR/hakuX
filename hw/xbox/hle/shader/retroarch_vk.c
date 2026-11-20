@@ -102,6 +102,10 @@ void hle_ra_targets_destroy(HleRaTargets *targets)
     if (g_hvk.dev) {
         for (unsigned i = 0; i < HLE_RA_MAX_PASSES; ++i) {
             HleRaTarget *target = &targets->passes[i];
+            if (target->framebuffer)
+                g_hvk.t.vkDestroyFramebuffer(g_hvk.dev, target->framebuffer, NULL);
+            if (target->render_pass)
+                g_hvk.t.vkDestroyRenderPass(g_hvk.dev, target->render_pass, NULL);
             if (target->view) g_hvk.t.vkDestroyImageView(g_hvk.dev, target->view, NULL);
             if (target->image) g_hvk.t.vkDestroyImage(g_hvk.dev, target->image, NULL);
             if (target->memory) g_hvk.t.vkFreeMemory(g_hvk.dev, target->memory, NULL);
@@ -186,6 +190,49 @@ bool hle_ra_targets_create(const HleRaProgram *program,
         if (g_hvk.t.vkCreateImageView(g_hvk.dev, &view_info, NULL,
                                       &target->view) != VK_SUCCESS)
             goto fail;
+        VkAttachmentDescription attachment = {
+            .format = VK_FORMAT_R8G8B8A8_UNORM,
+            .samples = VK_SAMPLE_COUNT_1_BIT,
+            .loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+            .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+            .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+            .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+            .initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            .finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        };
+        VkAttachmentReference color = {
+            .attachment = 0,
+            .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        };
+        VkSubpassDescription subpass = {
+            .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+            .colorAttachmentCount = 1,
+            .pColorAttachments = &color,
+        };
+        VkRenderPassCreateInfo render_pass_info = {
+            .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+            .attachmentCount = 1,
+            .pAttachments = &attachment,
+            .subpassCount = 1,
+            .pSubpasses = &subpass,
+        };
+        if (g_hvk.t.vkCreateRenderPass(g_hvk.dev, &render_pass_info, NULL,
+                                       &target->render_pass) != VK_SUCCESS)
+            goto fail;
+
+        VkFramebufferCreateInfo framebuffer_info = {
+            .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+            .renderPass = target->render_pass,
+            .attachmentCount = 1,
+            .pAttachments = &target->view,
+            .width = target->width,
+            .height = target->height,
+            .layers = 1,
+        };
+        if (g_hvk.t.vkCreateFramebuffer(g_hvk.dev, &framebuffer_info, NULL,
+                                        &target->framebuffer) != VK_SUCCESS)
+            goto fail;
+
         target->layout = VK_IMAGE_LAYOUT_UNDEFINED;
         input_width = target->width;
         input_height = target->height;

@@ -10,6 +10,8 @@ typedef struct HleRaTarget {
     VkImage image;
     VkDeviceMemory memory;
     VkImageView view;
+    VkRenderPass render_pass;
+    VkFramebuffer framebuffer;
     VkImageLayout layout;
     uint32_t width, height;
 } HleRaTarget;
@@ -26,8 +28,9 @@ typedef struct HleRaTargets {
     HleRaTarget passes[HLE_RA_MAX_PASSES];
 } HleRaTargets;
 
-/* Allocate one RGBA8 render/sample target for each preset pass. Dimensions
- * follow RetroArch's source/absolute/viewport scale metadata. Temporal
+/* Allocate one RGBA8 render/sample target, compatible render pass and framebuffer
+ * for each preset pass. Dimensions follow RetroArch's source/absolute/viewport
+ * scale metadata. Temporal
  * frame_count values other than one are rejected until history is implemented.
  * The output must be zero-initialized or previously released. */
 bool hle_ra_targets_create(const HleRaProgram *program,
