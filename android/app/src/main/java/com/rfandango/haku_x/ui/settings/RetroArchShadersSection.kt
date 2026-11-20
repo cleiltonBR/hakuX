@@ -23,6 +23,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.rfandango.haku_x.data.AppPrefs
 import com.rfandango.haku_x.data.RetroArchShaderStore
+import com.rfandango.haku_x.data.RetroArchShaderDownload
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
