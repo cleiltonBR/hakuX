@@ -566,7 +566,7 @@ bool hle_ra_pass_gpu_update_input(const HleRaProgram *program, unsigned pass_ind
         const HleRaSpirvDescriptor *d = &pass->descriptors[i];
         VkDescriptorType type;
         if (!ra_vk_descriptor_type(d->type, &type) || d->count != 1 ||
-            d->set >= pass->set_count || !pass->descriptor_sets[d->set]) return false;
+            d->set >= pass->set_count || !pass->descriptor_sets[frame_slot][d->set]) return false;
         images[count] = (VkDescriptorImageInfo) {
             .sampler = type == VK_DESCRIPTOR_TYPE_SAMPLER || type == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER ? pass->sampler : VK_NULL_HANDLE,
             .imageView = type == VK_DESCRIPTOR_TYPE_SAMPLER ? VK_NULL_HANDLE : input->view,
@@ -604,7 +604,7 @@ bool hle_ra_pass_gpu_record(VkCommandBuffer cb, const HleRaProgram *program,
     g_hvk.t.vkCmdSetScissor(cb, 0, 1, &scissor);
     g_hvk.t.vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, pass->pipeline);
     if (pass->set_count) g_hvk.t.vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS,
-        pass->pipeline_layout, 0, pass->set_count, pass->descriptor_sets, 0, NULL);
+        pass->pipeline_layout, 0, pass->set_count, pass->descriptor_sets[frame_slot], 0, NULL);
     g_hvk.t.vkCmdDraw(cb, 3, 1, 0, 0);
     g_hvk.t.vkCmdEndRenderPass(cb);
     return hle_ra_target_transition(cb, target, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
