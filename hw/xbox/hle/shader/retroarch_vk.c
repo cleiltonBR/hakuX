@@ -1,5 +1,4 @@
 #include "hw/xbox/hle/shader/retroarch_vk.h"
-#include <math.h>
 #include <string.h>
 
 static bool scaled_dimension(uint32_t base, float scale, uint32_t *out)
@@ -30,6 +29,68 @@ static bool target_dimensions(const HleRaPass *pass,
     default:
         return false;
     }
+}
+
+bool hle_ra_target_transition(VkCommandBuffer cb, HleRaTarget *target,
+                              VkImageLayout new_layout)
+{
+    if (!cb || !target || !target->image) return false;
+    const VkImageLayout old_layout = target->layout;
+    if (old_layout == new_layout) return true;
+
+    VkPipelineStageFlags src_stage;
+    VkAccessFlags src_access;
+    switch (old_layout) {
+    case VK_IMAGE_LAYOUT_UNDEFINED:
+        src_stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+        src_access = 0;
+        break;
+    case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL:
+        src_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        src_access = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        break;
+    case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL:
+        src_stage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        src_access = VK_ACCESS_SHADER_READ_BIT;
+        break;
+    default:
+        return false;
+    }
+
+    VkPipelineStageFlags dst_stage;
+    VkAccessFlags dst_access;
+    switch (new_layout) {
+    case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL:
+        dst_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        dst_access = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        break;
+    case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL:
+        dst_stage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        dst_access = VK_ACCESS_SHADER_READ_BIT;
+        break;
+    default:
+        return false;
+    }
+
+    VkImageMemoryBarrier barrier = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        .srcAccessMask = src_access,
+        .dstAccessMask = dst_access,
+        .oldLayout = old_layout,
+        .newLayout = new_layout,
+        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .image = target->image,
+        .subresourceRange = {
+            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+            .baseMipLevel = 0, .levelCount = 1,
+            .baseArrayLayer = 0, .layerCount = 1,
+        },
+    };
+    g_hvk.t.vkCmdPipelineBarrier(cb, src_stage, dst_stage, 0,
+                                  0, NULL, 0, NULL, 1, &barrier);
+    target->layout = new_layout;
+    return true;
 }
 
 void hle_ra_targets_destroy(HleRaTargets *targets)

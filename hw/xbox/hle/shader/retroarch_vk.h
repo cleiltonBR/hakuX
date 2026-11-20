@@ -29,4 +29,9 @@ bool hle_ra_targets_create(const HleRaProgram *program,
                            HleRaTargets *out);
 void hle_ra_targets_destroy(HleRaTargets *targets);
 
+/* Record a supported layout transition in cb and update the tracked layout.
+ * Call before rendering into a target or sampling it; never inside a render pass. */
+bool hle_ra_target_transition(VkCommandBuffer cb, HleRaTarget *target,
+                              VkImageLayout new_layout);
+
 #endif
