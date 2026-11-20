@@ -3127,11 +3127,8 @@ static bool ra_presenter_prepare(uint32_t sw, uint32_t sh, uint32_t vw, uint32_t
         g_ra.viewport_w == vw && g_ra.viewport_h == vh) return true;
     ra_presenter_drop_gpu();
     if (!hle_ra_targets_create(&g_ra.program, sw, sh, vw, vh, &g_ra.targets)) goto fail;
-    /* NIS/FSR and the presenter's final geometry still use the game frame's
-     * dimensions. Until those paths carry explicit RA output dimensions, only
-     * accept chains whose final pass returns to the original source size. */
-    if (!g_ra.targets.count ||
-        g_ra.targets.passes[g_ra.targets.count - 1].width != sw ||
+    /* Preserve the source geometry consumed by the existing NIS/FSR paths. */
+    if (!g_ra.targets.count || g_ra.targets.passes[g_ra.targets.count - 1].width != sw ||
         g_ra.targets.passes[g_ra.targets.count - 1].height != sh) goto fail;
     for (unsigned i = 0; i < g_ra.program.preset.pass_count; ++i)
         if (!hle_ra_pass_gpu_create(&g_ra.program, i, &g_ra.targets.passes[i], &g_ra.passes[i])) goto fail;

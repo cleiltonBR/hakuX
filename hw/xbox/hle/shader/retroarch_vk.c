@@ -324,6 +324,23 @@ bool hle_ra_pass_gpu_create(const HleRaProgram *program, unsigned pass_index,
             !info.descriptors[i].count) goto done;
         if (info.descriptors[i].set > max_set) max_set = info.descriptors[i].set;
     }
+    /* Initial supported subset: one sampled source, optional separate sampler.
+     * UBOs, storage resources, arrays and push constants are rejected until
+     * RetroArch parameter/history binding is implemented. */
+    if (info.push_constant_count || info.descriptor_count > 2u) goto done;
+    uint32_t sampled_bindings = 0;
+    for (uint32_t i = 0; i < info.descriptor_count; ++i) {
+        VkDescriptorType type;
+        if (!ra_vk_descriptor_type(info.descriptors[i].type, &type) ||
+            info.descriptors[i].count != 1 ||
+            (type != VK_DESCRIPTOR_TYPE_SAMPLER &&
+             type != VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE &&
+             type != VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)) goto done;
+        if (type != VK_DESCRIPTOR_TYPE_SAMPLER) ++sampled_bindings;
+        created.descriptors[i] = info.descriptors[i];
+    }
+    if (sampled_bindings != 1u) goto done;
+    created.descriptor_count = info.descriptor_count;
     created.set_count = info.descriptor_count ? max_set + 1 : 0;
 
     for (uint32_t set = 0; set < created.set_count; ++set) {
@@ -533,58 +550,54 @@ bool hle_ra_pass_gpu_update_input(const HleRaProgram *program, unsigned pass_ind
                                   const HleRaTarget *input, HleRaPassGpu *pass)
 {
     if (!program || !input || !input->view || !pass || !pass->sampler ||
-        pass_index >= program->preset.pass_count ||
-        input->layout != VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-        return false;
-
-    size_t word_count = 0;
-    uint32_t *words = hle_ra_program_compile_pass(program, pass_index,
-                                                   HLE_SHADER_FRAGMENT,
-                                                   &word_count);
-    if (!words) return false;
-    HleRaSpirvInfo info;
-    bool ok = hle_ra_spirv_inspect(words, word_count, HLE_SHADER_FRAGMENT, &info);
-    g_free(words);
-    if (!ok) return false;
-
+        pass_index >= program->preset.pass_count) return false;
     VkWriteDescriptorSet writes[HLE_RA_SPIRV_MAX_DESCRIPTORS];
     VkDescriptorImageInfo images[HLE_RA_SPIRV_MAX_DESCRIPTORS];
-    uint32_t write_count = 0;
-    for (uint32_t i = 0; i < info.descriptor_count; ++i) {
-        const HleRaSpirvDescriptor *d = &info.descriptors[i];
+    uint32_t count = 0;
+    for (uint32_t i = 0; i < pass->descriptor_count; ++i) {
+        const HleRaSpirvDescriptor *d = &pass->descriptors[i];
         VkDescriptorType type;
         if (!ra_vk_descriptor_type(d->type, &type) || d->count != 1 ||
-            d->set >= pass->set_count ||
-            !pass->descriptor_sets[d->set])
-            return false;
-        if (type != VK_DESCRIPTOR_TYPE_SAMPLER &&
-            type != VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE &&
-            type != VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
-            return false;
-
-        VkDescriptorImageInfo image = {
-            .sampler = type == VK_DESCRIPTOR_TYPE_SAMPLER ||
-                       type == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER
-                           ? pass->sampler : VK_NULL_HANDLE,
-            .imageView = type == VK_DESCRIPTOR_TYPE_SAMPLER
-                             ? VK_NULL_HANDLE : input->view,
-            .imageLayout = type == VK_DESCRIPTOR_TYPE_SAMPLER
-                               ? VK_IMAGE_LAYOUT_UNDEFINED
-                               : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            d->set >= pass->set_count || !pass->descriptor_sets[d->set]) return false;
+        images[count] = (VkDescriptorImageInfo) {
+            .sampler = type == VK_DESCRIPTOR_TYPE_SAMPLER || type == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER ? pass->sampler : VK_NULL_HANDLE,
+            .imageView = type == VK_DESCRIPTOR_TYPE_SAMPLER ? VK_NULL_HANDLE : input->view,
+            .imageLayout = type == VK_DESCRIPTOR_TYPE_SAMPLER ? VK_IMAGE_LAYOUT_UNDEFINED : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
         };
-        images[write_count] = image;
-        writes[write_count] = (VkWriteDescriptorSet) {
+        writes[count] = (VkWriteDescriptorSet) {
             .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-            .dstSet = pass->descriptor_sets[d->set],
-            .dstBinding = d->binding,
-            .descriptorCount = 1,
-            .descriptorType = type,
-            .pImageInfo = &images[write_count],
+            .dstSet = pass->descriptor_sets[d->set], .dstBinding = d->binding,
+            .descriptorCount = 1, .descriptorType = type, .pImageInfo = &images[count]
         };
-        ++write_count;
+        ++count;
     }
-    if (write_count)
-        g_hvk.t.vkUpdateDescriptorSets(g_hvk.dev, write_count, writes, 0, NULL);
+    if (count) g_hvk.t.vkUpdateDescriptorSets(g_hvk.dev, count, writes, 0, NULL);
     return true;
 }
 
+bool hle_ra_pass_gpu_record(VkCommandBuffer cb, const HleRaProgram *program,
+                            unsigned pass_index, VkImageView source_view,
+                            HleRaTarget *target, HleRaPassGpu *pass)
+{
+    if (!cb || !source_view || !target || !target->framebuffer ||
+        !target->render_pass || !pass || !pass->pipeline) return false;
+    HleRaTarget input = { .view = source_view, .layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
+    if (!hle_ra_pass_gpu_update_input(program, pass_index, &input, pass) ||
+        !hle_ra_target_transition(cb, target, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)) return false;
+    VkClearValue clear = { .color = { .float32 = { 0.f, 0.f, 0.f, 1.f } } };
+    VkRenderPassBeginInfo begin = { .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+        .renderPass = target->render_pass, .framebuffer = target->framebuffer,
+        .renderArea = { .offset = { 0, 0 }, .extent = { target->width, target->height } },
+        .clearValueCount = 1, .pClearValues = &clear };
+    g_hvk.t.vkCmdBeginRenderPass(cb, &begin, VK_SUBPASS_CONTENTS_INLINE);
+    VkViewport viewport = { 0.f, 0.f, (float)target->width, (float)target->height, 0.f, 1.f };
+    VkRect2D scissor = { .offset = { 0, 0 }, .extent = { target->width, target->height } };
+    g_hvk.t.vkCmdSetViewport(cb, 0, 1, &viewport);
+    g_hvk.t.vkCmdSetScissor(cb, 0, 1, &scissor);
+    g_hvk.t.vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, pass->pipeline);
+    if (pass->set_count) g_hvk.t.vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS,
+        pass->pipeline_layout, 0, pass->set_count, pass->descriptor_sets, 0, NULL);
+    g_hvk.t.vkCmdDraw(cb, 3, 1, 0, 0);
+    g_hvk.t.vkCmdEndRenderPass(cb);
+    return hle_ra_target_transition(cb, target, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+}
