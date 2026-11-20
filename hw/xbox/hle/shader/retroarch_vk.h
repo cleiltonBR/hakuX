@@ -18,8 +18,6 @@ typedef struct HleRaTarget {
 } HleRaTarget;
 
 typedef struct HleRaPassGpu {
-    uint32_t descriptor_count;
-    HleRaSpirvDescriptor descriptors[HLE_RA_SPIRV_MAX_DESCRIPTORS];
     VkShaderModule fragment;
     VkPipeline pipeline;
     VkSampler sampler;
@@ -56,9 +54,6 @@ void hle_ra_pass_gpu_destroy(HleRaPassGpu *pass);
  * descriptors. Unsupported buffer/storage descriptors fail closed. */
 bool hle_ra_pass_gpu_update_input(const HleRaProgram *program, unsigned pass_index,
                                   const HleRaTarget *input, HleRaPassGpu *pass);
-bool hle_ra_pass_gpu_record(VkCommandBuffer cb, const HleRaProgram *program,
-                            unsigned pass_index, VkImageView source_view,
-                            HleRaTarget *target, HleRaPassGpu *pass);
 
 /* Record a supported layout transition in cb and update the tracked layout.
  * Call before rendering into a target or sampling it; never inside a render pass. */
