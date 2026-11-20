@@ -14,6 +14,13 @@ typedef struct HleRaTarget {
     uint32_t width, height;
 } HleRaTarget;
 
+typedef struct HleRaPassGpu {
+    VkShaderModule fragment;
+    VkDescriptorSetLayout set_layouts[8];
+    VkPipelineLayout pipeline_layout;
+    uint32_t set_count;
+} HleRaPassGpu;
+
 typedef struct HleRaTargets {
     unsigned count;
     HleRaTarget passes[HLE_RA_MAX_PASSES];
@@ -28,6 +35,12 @@ bool hle_ra_targets_create(const HleRaProgram *program,
                            uint32_t viewport_width, uint32_t viewport_height,
                            HleRaTargets *out);
 void hle_ra_targets_destroy(HleRaTargets *targets);
+
+/* Compile one preset fragment pass and create its reflected descriptor and
+ * pipeline layouts. Unsupported descriptor layouts fail closed. */
+bool hle_ra_pass_gpu_create(const HleRaProgram *program, unsigned pass_index,
+                            HleRaPassGpu *out);
+void hle_ra_pass_gpu_destroy(HleRaPassGpu *pass);
 
 /* Record a supported layout transition in cb and update the tracked layout.
  * Call before rendering into a target or sampling it; never inside a render pass. */

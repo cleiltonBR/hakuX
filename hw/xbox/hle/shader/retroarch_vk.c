@@ -1,4 +1,6 @@
 #include "hw/xbox/hle/shader/retroarch_vk.h"
+#include "hw/xbox/hle/shader/retroarch_spirv.h"
+#include <spirv_reflect.h>
 #include <string.h>
 
 static bool scaled_dimension(uint32_t base, float scale, uint32_t *out)
@@ -196,4 +198,136 @@ bool hle_ra_targets_create(const HleRaProgram *program,
 fail:
     hle_ra_targets_destroy(&created);
     return false;
+}
+
+
+static bool ra_vk_descriptor_type(uint32_t reflected, VkDescriptorType *out)
+{
+    if (!out) return false;
+    switch ((SpvReflectDescriptorType)reflected) {
+    case SPV_REFLECT_DESCRIPTOR_TYPE_SAMPLER:
+        *out = VK_DESCRIPTOR_TYPE_SAMPLER; return true;
+    case SPV_REFLECT_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
+        *out = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER; return true;
+    case SPV_REFLECT_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
+        *out = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE; return true;
+    case SPV_REFLECT_DESCRIPTOR_TYPE_STORAGE_IMAGE:
+        *out = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE; return true;
+    case SPV_REFLECT_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
+        *out = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER; return true;
+    case SPV_REFLECT_DESCRIPTOR_TYPE_STORAGE_BUFFER:
+        *out = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER; return true;
+    default:
+        return false;
+    }
+}
+
+void hle_ra_pass_gpu_destroy(HleRaPassGpu *pass)
+{
+    if (!pass) return;
+    if (g_hvk.dev) {
+        if (pass->pipeline_layout)
+            g_hvk.t.vkDestroyPipelineLayout(g_hvk.dev, pass->pipeline_layout, NULL);
+        for (unsigned i = 0; i < ARRAY_SIZE(pass->set_layouts); ++i) {
+            if (pass->set_layouts[i])
+                g_hvk.t.vkDestroyDescriptorSetLayout(g_hvk.dev, pass->set_layouts[i], NULL);
+        }
+        if (pass->fragment)
+            g_hvk.t.vkDestroyShaderModule(g_hvk.dev, pass->fragment, NULL);
+    }
+    memset(pass, 0, sizeof(*pass));
+}
+
+bool hle_ra_pass_gpu_create(const HleRaProgram *program, unsigned pass_index,
+                            HleRaPassGpu *out)
+{
+    if (!program || !out || !g_hvk.dev ||
+        pass_index >= program->preset.pass_count) return false;
+
+    size_t word_count = 0;
+    uint32_t *words = hle_ra_program_compile_pass(program, pass_index,
+                                                   HLE_SHADER_FRAGMENT,
+                                                   &word_count);
+    if (!words) return false;
+
+    HleRaSpirvInfo info;
+    bool ok = hle_ra_spirv_inspect(words, word_count, HLE_SHADER_FRAGMENT, &info);
+    HleRaPassGpu created = {0};
+    if (!ok) goto done;
+
+    VkShaderModuleCreateInfo module_info = {
+        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize = word_count * sizeof(*words),
+        .pCode = words,
+    };
+    if (g_hvk.t.vkCreateShaderModule(g_hvk.dev, &module_info, NULL,
+                                    &created.fragment) != VK_SUCCESS)
+        goto done;
+
+    uint32_t max_set = 0;
+    for (uint32_t i = 0; i < info.descriptor_count; ++i) {
+        if (info.descriptors[i].set >= ARRAY_SIZE(created.set_layouts) ||
+            !info.descriptors[i].count) goto done;
+        if (info.descriptors[i].set > max_set) max_set = info.descriptors[i].set;
+    }
+    created.set_count = info.descriptor_count ? max_set + 1 : 0;
+
+    for (uint32_t set = 0; set < created.set_count; ++set) {
+        VkDescriptorSetLayoutBinding bindings[HLE_RA_SPIRV_MAX_DESCRIPTORS];
+        uint32_t count = 0;
+        for (uint32_t i = 0; i < info.descriptor_count; ++i) {
+            const HleRaSpirvDescriptor *d = &info.descriptors[i];
+            if (d->set != set) continue;
+            VkDescriptorType type;
+            if (!ra_vk_descriptor_type(d->type, &type)) goto done;
+            bindings[count++] = (VkDescriptorSetLayoutBinding) {
+                .binding = d->binding,
+                .descriptorType = type,
+                .descriptorCount = d->count,
+                .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+            };
+        }
+        VkDescriptorSetLayoutCreateInfo layout_info = {
+            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+            .bindingCount = count,
+            .pBindings = count ? bindings : NULL,
+        };
+        if (g_hvk.t.vkCreateDescriptorSetLayout(g_hvk.dev, &layout_info, NULL,
+                                                 &created.set_layouts[set]) != VK_SUCCESS)
+            goto done;
+    }
+
+    VkPushConstantRange ranges[HLE_RA_SPIRV_MAX_PUSH_CONSTANTS];
+    for (uint32_t i = 0; i < info.push_constant_count; ++i) {
+        const HleRaSpirvPushConstant *p = &info.push_constants[i];
+        if ((p->offset & 3u) || (p->size & 3u) ||
+            p->offset > g_hvk.props.limits.maxPushConstantsSize ||
+            p->size > g_hvk.props.limits.maxPushConstantsSize - p->offset)
+            goto done;
+        ranges[i] = (VkPushConstantRange) {
+            .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+            .offset = p->offset,
+            .size = p->size,
+        };
+    }
+    VkPipelineLayoutCreateInfo pipeline_info = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+        .setLayoutCount = created.set_count,
+        .pSetLayouts = created.set_count ? created.set_layouts : NULL,
+        .pushConstantRangeCount = info.push_constant_count,
+        .pPushConstantRanges = info.push_constant_count ? ranges : NULL,
+    };
+    if (g_hvk.t.vkCreatePipelineLayout(g_hvk.dev, &pipeline_info, NULL,
+                                       &created.pipeline_layout) != VK_SUCCESS)
+        goto done;
+
+    hle_ra_pass_gpu_destroy(out);
+    *out = created;
+    memset(&created, 0, sizeof(created));
+    ok = true;
+
+done:
+    hle_ra_pass_gpu_destroy(&created);
+    g_free(words);
+    return ok;
 }
