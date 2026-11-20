@@ -92,24 +92,23 @@ object RetroArchShaderStore {
       val presetFiles = staging.walkTopDown().filter { it.isFile && it.extension.lowercase() in setOf("glslp", "slangp") }.toList()
       require(presetFiles.isNotEmpty()) { "O ZIP não contém presets .glslp ou .slangp" }
 
-      val installed = presetFiles.map { file ->
-        val text = file.readText(Charsets.UTF_8)
-        val preset = RetroArchPresetParser.parse(file.name, text)
-        val presetParent = file.parentFile ?: staging
-        val declaredFiles = preset.passes.map { it.shaderPath } + preset.texturePaths.values
-        declaredFiles.forEach { relative ->
-          val dependency = File(presetParent, relative).canonicalFile
-          require(dependency.path.startsWith(staging.canonicalPath + File.separator) && dependency.isFile) {
-            "Dependência ausente para ${file.name}: $relative"
-          }
-        }
-        InstalledPreset(
-          relativePath = file.relativeTo(staging).invariantSeparatorsPath,
-          format = preset.format,
-          passCount = preset.passes.size,
-          requiresSlangCompiler = preset.requiresSlangCompiler,
-        )
+      // Official RetroArch packs include reference-only presets and chains whose
+      // base presets may contain more passes than HakuX can currently execute.
+      // Installation must preserve those files instead of treating them as a
+      // standalone runtime preset. Resolve references only for library indexing.
+      val installed = presetFiles.mapNotNull { file ->
+        runCatching {
+          val passCount = inspectPreset(file, staging, linkedSetOf(), 0)
+          InstalledPreset(
+            relativePath = file.relativeTo(staging).invariantSeparatorsPath,
+            format = if (file.extension.equals("slangp", ignoreCase = true))
+              RetroArchShaderPreset.Format.SLANG else RetroArchShaderPreset.Format.GLSL,
+            passCount = passCount,
+            requiresSlangCompiler = file.extension.equals("slangp", ignoreCase = true),
+          )
+        }.getOrNull()
       }
+      require(installed.isNotEmpty()) { "Nenhum preset RetroArch válido foi encontrado no pacote" }
 
       require(staging.renameTo(target)) { "Não foi possível finalizar a instalação do pacote" }
       return ImportResult(target, installed, count, total)
@@ -127,23 +126,82 @@ object RetroArchShaderStore {
       .filter { it.isFile && it.extension.lowercase() in setOf("glslp", "slangp") }
       .mapNotNull { file ->
         runCatching {
-          val preset = RetroArchPresetParser.parse(file.name, file.readText(Charsets.UTF_8))
-          val root = libraryRoot.canonicalFile
-          val canonical = file.canonicalFile
-          require(canonical.path.startsWith(root.path + File.separator))
-          val base = file.parentFile ?: libraryRoot
-          (preset.passes.map { it.shaderPath } + preset.texturePaths.values).forEach { relative ->
-            val dependency = File(base, relative).canonicalFile
-            require(dependency.path.startsWith(root.path + File.separator) && dependency.isFile)
-          }
+          val passCount = inspectPreset(file, libraryRoot, linkedSetOf(), 0)
           InstalledPreset(
             relativePath = file.relativeTo(libraryRoot).invariantSeparatorsPath,
-            format = preset.format,
-            passCount = preset.passes.size,
-            requiresSlangCompiler = preset.requiresSlangCompiler,
+            format = if (file.extension.equals("slangp", ignoreCase = true))
+              RetroArchShaderPreset.Format.SLANG else RetroArchShaderPreset.Format.GLSL,
+            passCount = passCount,
+            requiresSlangCompiler = file.extension.equals("slangp", ignoreCase = true),
           )
         }.getOrNull()
       }.toList()
+  }
+
+  /**
+   * Inspects an installable preset independently of the runtime parser's
+   * execution limits. RetroArch #reference chains are resolved relative to
+   * each preset file; .params references are intentionally not shader passes.
+   */
+  private fun inspectPreset(file: File, packageRoot: File, active: MutableSet<String>, depth: Int): Int {
+    require(depth <= 16) { "Cadeia #reference excede 16 níveis: ${file.name}" }
+    val root = packageRoot.canonicalFile
+    val canonical = file.canonicalFile
+    require(canonical.path.startsWith(root.path + File.separator) && canonical.isFile) {
+      "Referência de preset fora do pacote: ${file.name}"
+    }
+    require(active.add(canonical.path)) { "Ciclo de #reference detectado em ${file.name}" }
+    try {
+      require(canonical.length() in 1..(1024L * 1024L)) { "Preset vazio ou grande demais: ${file.name}" }
+      val lines = canonical.readLines(Charsets.UTF_8)
+      val declared = lines.firstNotNullOfOrNull { line ->
+        Regex("""^\\s*shaders\\s*=\\s*(\\d+)\\s*$""", RegexOption.IGNORE_CASE)
+          .matchEntire(line)?.groupValues?.get(1)?.toIntOrNull()
+      }
+      val shaderEntries = lines.mapNotNull { line ->
+        Regex("""^\\s*shader(\\d+)\\s*=\\s*(.*?)\\s*$""", RegexOption.IGNORE_CASE)
+          .matchEntire(line)?.let { match ->
+            val raw = match.groupValues[2].trim().removeSurrounding("\"")
+            match.groupValues[1].toIntOrNull()?.let { it to raw }
+          }
+      }.toMap()
+      val directCount = declared ?: ((shaderEntries.keys.maxOrNull() ?: -1) + 1)
+      require(directCount in 0..256) { "Quantidade de passes inválida em ${file.name}" }
+      if (directCount > 0) {
+        for (index in 0 until directCount) {
+          val relative = shaderEntries[index]
+            ?: throw IllegalArgumentException("Preset ${file.name} sem shader$index")
+          require(relative.isNotBlank() && !relative.startsWith('/') &&
+            !Regex("^[A-Za-z]:").containsMatchIn(relative)) {
+            "Caminho de shader inválido em ${file.name}: $relative"
+          }
+          val dependency = File(canonical.parentFile, relative).canonicalFile
+          require(dependency.path.startsWith(root.path + File.separator) && dependency.isFile) {
+            "Shader ausente para ${file.name}: $relative"
+          }
+        }
+      }
+      val references = lines.mapNotNull { line ->
+        Regex("""^\\s*#reference\\s+"([^"]+)"\\s*$""", RegexOption.IGNORE_CASE)
+          .matchEntire(line)?.groupValues?.get(1)
+      }.filter { it.substringAfterLast('.', "").lowercase() in setOf("glslp", "slangp") }
+      val inheritedCount = references.sumOf { reference ->
+        require(!reference.startsWith('/') && !Regex("^[A-Za-z]:").containsMatchIn(reference)) {
+          "Caminho #reference absoluto em ${file.name}"
+        }
+        val target = File(canonical.parentFile, reference).canonicalFile
+        require(target.path.startsWith(root.path + File.separator) && target.isFile) {
+          "Preset referenciado não encontrado em ${file.name}: $reference"
+        }
+        inspectPreset(target, root, active, depth + 1)
+      }
+      require(directCount > 0 || inheritedCount > 0) {
+        "Preset sem passes nem preset-base referenciado: ${file.name}"
+      }
+      return directCount + inheritedCount
+    } finally {
+      active.remove(canonical.path)
+    }
   }
 
   private fun normalizeEntryPath(raw: String): String {
