@@ -2,6 +2,7 @@
 #define HW_XBOX_HLE_SHADER_RETROARCH_VK_H
 
 #include "hw/xbox/hle/shader/retroarch_runtime.h"
+#include "hw/xbox/hle/shader/retroarch_spirv.h"
 #include "hw/xbox/hle/vk/vkdev.h"
 
 #define HLE_RA_TARGET_MAX_PIXELS (16384u * 16384u)
