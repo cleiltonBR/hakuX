@@ -2,18 +2,6 @@
 #include <spirv_reflect.h>
 #include <string.h>
 
-static bool reflected_count(SpvReflectResult (*enumerate)(const SpvReflectShaderModule *,
-                                                           uint32_t *, void **),
-                            const SpvReflectShaderModule *module,
-                            uint32_t *out_count)
-{
-    uint32_t count = 0;
-    const SpvReflectResult result = enumerate(module, &count, NULL);
-    if (result != SPV_REFLECT_RESULT_SUCCESS) return false;
-    *out_count = count;
-    return true;
-}
-
 static bool descriptor_count(const SpvReflectShaderModule *module, uint32_t *count)
 {
     uint32_t n = 0;

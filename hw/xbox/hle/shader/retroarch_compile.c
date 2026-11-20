@@ -1,3 +1,4 @@
+#include "hw/xbox/hle/base.h"
 #include "hw/xbox/hle/shader/retroarch_runtime.h"
 #include "hw/xbox/hle/shader/glsl_compile.h"
 #include "hw/xbox/hle/shader/retroarch_spirv.h"
