@@ -13,7 +13,9 @@ typedef struct HleRaProgram {
 } HleRaProgram;
 
 /* Loads a .glslp and every referenced pass source. Shader paths are resolved
- * relative to the preset directory without following symlinks or escaping it. */
+ * relative to the preset directory without following symlinks or escaping it.
+ * `out` must be zero-initialized or contain a previously loaded HleRaProgram;
+ * on success its previous contents are released before replacement. */
 bool hle_ra_program_load(const char *preset_path, HleRaProgram *out,
                          char *error, size_t error_size);
 void hle_ra_program_unload(HleRaProgram *program);

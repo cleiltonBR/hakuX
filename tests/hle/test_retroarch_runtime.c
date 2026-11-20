@@ -44,6 +44,11 @@ int main(void)
     assert(program.preset.pass_count == 1);
     assert(program.source_lengths[0] == strlen("#version 450\nvoid main(){}\n"));
     assert(strstr(program.sources[0], "void main") != NULL);
+
+    /* Replacing a loaded preset must release the previous pass buffers. */
+    assert(hle_ra_program_load(preset, &program, error, sizeof(error)));
+    assert(program.preset.pass_count == 1);
+    assert(program.sources[0] != NULL);
     hle_ra_program_unload(&program);
 
     assert(symlink(outside, linkpath) == 0);

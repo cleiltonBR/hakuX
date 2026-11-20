@@ -147,6 +147,7 @@ bool hle_ra_program_load(const char *preset_path, HleRaProgram *out,
         }
     }
     close(root);
+    hle_ra_program_unload(out);
     *out = loaded;
     if (error && error_size) error[0] = 0;
     return true;
