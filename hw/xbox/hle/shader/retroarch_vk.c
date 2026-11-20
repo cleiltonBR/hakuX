@@ -385,6 +385,10 @@ bool hle_ra_pass_gpu_create(const HleRaProgram *program, unsigned pass_index,
                 info.descriptors[i].count) goto done;
             pool_sizes[slot].descriptorCount += info.descriptors[i].count;
         }
+        for (uint32_t i = 0; i < pool_size_count; ++i) {
+            if (pool_sizes[i].descriptorCount > UINT32_MAX / HLE_RA_FRAME_SLOTS) goto done;
+            pool_sizes[i].descriptorCount *= HLE_RA_FRAME_SLOTS;
+        }
         VkDescriptorPoolCreateInfo pool_info = {
             .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
             .maxSets = created.set_count * HLE_RA_FRAME_SLOTS,
@@ -551,7 +555,7 @@ done:
 }
 
 bool hle_ra_pass_gpu_update_input(const HleRaProgram *program, unsigned pass_index,
-                                  const HleRaTarget *input, HleRaPassGpu *pass)
+                                  const HleRaTarget *input, unsigned frame_slot, HleRaPassGpu *pass)
 {
     if (!program || !input || !input->view || !pass || !pass->sampler ||
         pass_index >= program->preset.pass_count || frame_slot >= HLE_RA_FRAME_SLOTS) return false;
