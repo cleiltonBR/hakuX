@@ -28,6 +28,7 @@ set(HLE_PURE_SOURCES
   ${REPO_ROOT}/hw/xbox/hle/shader/vsh.c
   ${REPO_ROOT}/hw/xbox/hle/shader/psh.c
   ${REPO_ROOT}/hw/xbox/hle/shader/retroarch_preset.c
+  ${REPO_ROOT}/hw/xbox/hle/shader/retroarch_runtime.c
   ${REPO_ROOT}/hw/xbox/hle/pb/pusher.c
   ${REPO_ROOT}/native/core/cheats.c
   ${NC_DEPS}/root/subprojects/nv2a_vsh_cpu/src/nv2a_vsh_disassembler.c
@@ -53,6 +54,7 @@ hle_test(test_vsh)
 hle_test(test_ffhw)
 hle_test(test_psh)
 hle_test(test_retroarch_preset)
+hle_test(test_retroarch_runtime)
 hle_test(test_apu_hrtf)
 hle_test(test_cheats)
 hle_test(test_vkcompat)
