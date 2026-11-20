@@ -57,6 +57,27 @@ class RetroArchShaderStoreTest {
     assertFalse(File(temporary.root, "missing").exists())
   }
 
+  @Test fun installsReferenceOnlyMegaBezelPresetWithBaseChainAboveRuntimePassLimit() {
+    val baseShaders = (0 until 40).joinToString("\\n") { index ->
+      "shader$index = shaders/pass$index.slang"
+    }
+    val files = mutableListOf(
+      "bezel/Presets/MBZ__0__SMOOTH-ADV.slangp" to
+        "#reference \\"Root_Presets/base.slangp\\"\\n#reference \\"../../resource/params/base.params\\"",
+      "bezel/Presets/Root_Presets/base.slangp" to "shaders = 40\\n$baseShaders",
+      "bezel/resource/params/base.params" to "# parameters",
+    )
+    (0 until 40).forEach { index ->
+      files += "bezel/shaders/pass$index.slang" to "void main() {}"
+    }
+    val result = RetroArchShaderStore.importZip(
+      ByteArrayInputStream(zip(*files.toTypedArray())), "Mega Bezel.zip", temporary.root,
+    )
+    val wrapper = result.presets.single { it.relativePath.endsWith("MBZ__0__SMOOTH-ADV.slangp") }
+    assertEquals(40, wrapper.passCount)
+    assertTrue(File(result.directory, "bezel/Presets/Root_Presets/base.slangp").isFile)
+  }
+
   private fun zip(vararg files: Pair<String, String>): ByteArray {
     val output = ByteArrayOutputStream()
     ZipOutputStream(output).use { zip ->
