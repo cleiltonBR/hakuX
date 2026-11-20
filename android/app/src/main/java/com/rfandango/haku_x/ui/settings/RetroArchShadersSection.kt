@@ -45,7 +45,7 @@ internal fun RetroArchShadersSection(prefs: AppPrefs) {
       operation = "Baixando $displayName…"
       val result = runCatching {
         withContext(Dispatchers.IO) {
-          RetroArchShaderStore.downloadOfficialPack(repository, displayName, library)
+          RetroArchShaderDownload.download(repository, displayName, library)
         }
       }
       busy = false
