@@ -27,11 +27,11 @@ int main(void)
     char temp[] = "/tmp/hakux-ra-XXXXXX";
     char *dir = mkdtemp(temp);
     assert(dir);
-    char preset[512], shader[512], nested_shader[512], nested[512], linkpath[512], outside[512];
+    char preset[512], shader[512], nested_shader[512], include_shader[512], nested[512], linkpath[512], outside[512];
     snprintf(preset, sizeof(preset), "%s/test.glslp", dir);
     snprintf(shader, sizeof(shader), "%s/pass0.glsl", dir);
     snprintf(nested, sizeof(nested), "%s/nested", dir);
-    snprintf(nested_shader, sizeof(nested_shader), "%s/pass0.glsl", nested);
+    snprintf(nested_shader, sizeof(nested_shader), "%s/pass0.glsl", nested);\n    snprintf(include_shader, sizeof(include_shader), "%s/common.glsl", nested);
     snprintf(linkpath, sizeof(linkpath), "%s/linked.glsl", dir);
     snprintf(outside, sizeof(outside), "%s-outside.glsl", dir);
     assert(mkdir(nested, 0700) == 0);
@@ -72,7 +72,7 @@ int main(void)
 
     unlink(linkpath);
     unlink(shader);
-    unlink(nested_shader);
+    unlink(nested_shader);\n    unlink(include_shader);
     unlink(outside);
     unlink(preset);
     rmdir(nested);

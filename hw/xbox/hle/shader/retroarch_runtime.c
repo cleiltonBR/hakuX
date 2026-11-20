@@ -38,7 +38,7 @@ void hle_ra_program_unload(HleRaProgram *program)
 {
     if (!program) return;
     for (unsigned i = 0; i < HLE_RA_MAX_PASSES; ++i) { free(program->sources[i]); program->sources[i] = NULL; program->source_lengths[i] = 0; }
-    if (program->source_root_fd >= 0) close(program->source_root_fd);
+    if (program->source_root_fd > STDERR_FILENO) close(program->source_root_fd);
     program->source_root_fd = -1; memset(&program->preset, 0, sizeof(program->preset));
 }
 bool hle_ra_program_load(const char *preset_path, HleRaProgram *out, char *error, size_t error_size)
@@ -92,6 +92,6 @@ void hle_ra_include_cache_finalize(HleRaIncludeCache *cache)
 {
     if (!cache) return;
     for (unsigned i = 0; i < cache->count; ++i) { free(cache->entries[i].name); free(cache->entries[i].data); }
-    if (cache->root_fd >= 0) close(cache->root_fd);
+    if (cache->root_fd > STDERR_FILENO) close(cache->root_fd);
     memset(cache, 0, sizeof(*cache)); cache->root_fd = -1;
 }
