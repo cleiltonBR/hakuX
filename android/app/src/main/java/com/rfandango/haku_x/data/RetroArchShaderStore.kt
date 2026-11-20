@@ -12,9 +12,9 @@ import java.util.zip.ZipInputStream
  * imply that its shader language/backend is supported by the renderer.
  */
 object RetroArchShaderStore {
-  private const val MAX_ENTRIES = 2_000
+  private const val MAX_ENTRIES = 8_000
   private const val MAX_ENTRY_BYTES = 64L * 1024 * 1024
-  private const val MAX_TOTAL_BYTES = 256L * 1024 * 1024
+  private const val MAX_TOTAL_BYTES = 512L * 1024 * 1024
 
   data class InstalledPreset(
     val relativePath: String,
