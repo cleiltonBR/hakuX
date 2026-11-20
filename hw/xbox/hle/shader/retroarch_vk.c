@@ -274,6 +274,8 @@ void hle_ra_pass_gpu_destroy(HleRaPassGpu *pass)
 {
     if (!pass) return;
     if (g_hvk.dev) {
+        if (pass->pipeline)
+            g_hvk.t.vkDestroyPipeline(g_hvk.dev, pass->pipeline, NULL);
         if (pass->pipeline_layout)
             g_hvk.t.vkDestroyPipelineLayout(g_hvk.dev, pass->pipeline_layout, NULL);
         for (unsigned i = 0; i < ARRAY_SIZE(pass->set_layouts); ++i) {
@@ -287,9 +289,9 @@ void hle_ra_pass_gpu_destroy(HleRaPassGpu *pass)
 }
 
 bool hle_ra_pass_gpu_create(const HleRaProgram *program, unsigned pass_index,
-                            HleRaPassGpu *out)
+                            const HleRaTarget *target, HleRaPassGpu *out)
 {
-    if (!program || !out || !g_hvk.dev ||
+    if (!program || !target || !target->render_pass || !out || !g_hvk.dev ||
         pass_index >= program->preset.pass_count) return false;
 
     size_t word_count = 0;
@@ -368,6 +370,94 @@ bool hle_ra_pass_gpu_create(const HleRaProgram *program, unsigned pass_index,
     if (g_hvk.t.vkCreatePipelineLayout(g_hvk.dev, &pipeline_info, NULL,
                                        &created.pipeline_layout) != VK_SUCCESS)
         goto done;
+
+    /* Full-screen triangle: no vertex buffers or guest vertex state. */
+    static const char vertex_source[] =
+        "#version 450\\n"
+        "layout(location=0) out vec2 v_uv;\\n"
+        "void main(){\\n"
+        " vec2 p=vec2((gl_VertexIndex<<1)&2,gl_VertexIndex&2);\\n"
+        " v_uv=p*0.5; gl_Position=vec4(p*2.0-1.0,0.0,1.0);\\n"
+        "}\\n";
+    size_t vertex_word_count = 0;
+    uint32_t *vertex_words = hle_glsl_compile(HLE_SHADER_VERTEX, vertex_source,
+                                               &vertex_word_count);
+    if (!vertex_words) goto done;
+    VkShaderModule vertex_module = VK_NULL_HANDLE;
+    VkShaderModuleCreateInfo vertex_module_info = {
+        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize = vertex_word_count * sizeof(*vertex_words),
+        .pCode = vertex_words,
+    };
+    VkResult vertex_result = g_hvk.t.vkCreateShaderModule(
+        g_hvk.dev, &vertex_module_info, NULL, &vertex_module);
+    g_free(vertex_words);
+    if (vertex_result != VK_SUCCESS) goto done;
+
+    VkPipelineShaderStageCreateInfo stages[2] = {
+        { .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+          .stage = VK_SHADER_STAGE_VERTEX_BIT, .module = vertex_module,
+          .pName = "main" },
+        { .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+          .stage = VK_SHADER_STAGE_FRAGMENT_BIT, .module = created.fragment,
+          .pName = "main" },
+    };
+    VkPipelineVertexInputStateCreateInfo vertex_input = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+    };
+    VkPipelineInputAssemblyStateCreateInfo assembly = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+        .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+    };
+    VkPipelineViewportStateCreateInfo viewport = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+        .viewportCount = 1, .scissorCount = 1,
+    };
+    VkPipelineRasterizationStateCreateInfo raster = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+        .polygonMode = VK_POLYGON_MODE_FILL,
+        .cullMode = VK_CULL_MODE_NONE,
+        .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
+        .lineWidth = 1.0f,
+    };
+    VkPipelineMultisampleStateCreateInfo multisample = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+        .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
+    };
+    VkPipelineColorBlendAttachmentState blend_attachment = {
+        .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+                          VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
+    };
+    VkPipelineColorBlendStateCreateInfo blend = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+        .attachmentCount = 1, .pAttachments = &blend_attachment,
+    };
+    VkDynamicState dynamic_states[] = {
+        VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR,
+    };
+    VkPipelineDynamicStateCreateInfo dynamic = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+        .dynamicStateCount = ARRAY_SIZE(dynamic_states),
+        .pDynamicStates = dynamic_states,
+    };
+    VkGraphicsPipelineCreateInfo graphics = {
+        .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+        .stageCount = ARRAY_SIZE(stages), .pStages = stages,
+        .pVertexInputState = &vertex_input,
+        .pInputAssemblyState = &assembly,
+        .pViewportState = &viewport,
+        .pRasterizationState = &raster,
+        .pMultisampleState = &multisample,
+        .pColorBlendState = &blend,
+        .pDynamicState = &dynamic,
+        .layout = created.pipeline_layout,
+        .renderPass = target->render_pass,
+        .subpass = 0,
+    };
+    VkResult pipeline_result = g_hvk.t.vkCreateGraphicsPipelines(
+        g_hvk.dev, VK_NULL_HANDLE, 1, &graphics, NULL, &created.pipeline);
+    g_hvk.t.vkDestroyShaderModule(g_hvk.dev, vertex_module, NULL);
+    if (pipeline_result != VK_SUCCESS) goto done;
 
     hle_ra_pass_gpu_destroy(out);
     *out = created;

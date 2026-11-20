@@ -18,6 +18,7 @@ typedef struct HleRaTarget {
 
 typedef struct HleRaPassGpu {
     VkShaderModule fragment;
+    VkPipeline pipeline;
     VkDescriptorSetLayout set_layouts[8];
     VkPipelineLayout pipeline_layout;
     uint32_t set_count;
@@ -43,7 +44,7 @@ void hle_ra_targets_destroy(HleRaTargets *targets);
  * pipeline layouts. Unsupported descriptor layouts fail closed. The output
  * must be zero-initialized or hold a previously created pass. */
 bool hle_ra_pass_gpu_create(const HleRaProgram *program, unsigned pass_index,
-                            HleRaPassGpu *out);
+                            const HleRaTarget *target, HleRaPassGpu *out);
 void hle_ra_pass_gpu_destroy(HleRaPassGpu *pass);
 
 /* Record a supported layout transition in cb and update the tracked layout.
