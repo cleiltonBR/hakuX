@@ -37,6 +37,7 @@
 #include "hw/xbox/hle/vk/swapchain.h"
 #include <math.h>
 #include "hw/xbox/hle/vk/nis_coefficients.h"
+#include "hw/xbox/hle/shader/retroarch_vk.h"
 #include "hw/xbox/hle/vk/lsfg_native.h"
 #include "nis_shader_sources.h"
 
@@ -3059,6 +3060,102 @@ static VkPipeline pipeline(VkShaderModule fs, VkFormat fmt, const char *name)
 
 /* ---- setup ---- */
 
+/* Runtime owner for the selected RetroArch preset. It shares the presenter's
+ * command buffer and queue; no second submit or independent render thread. */
+typedef struct HleRaPresenter {
+    HleRaProgram program;
+    HleRaTargets targets;
+    HleRaPassGpu passes[HLE_RA_MAX_PASSES];
+    char *path;
+    uint32_t source_w, source_h, viewport_w, viewport_h;
+    bool loaded, ready, rejected;
+} HleRaPresenter;
+static HleRaPresenter g_ra;
+
+static void ra_presenter_drop_gpu(void)
+{
+    if (hle_vk_lost()) {
+        memset(&g_ra.targets, 0, sizeof(g_ra.targets));
+        memset(g_ra.passes, 0, sizeof(g_ra.passes));
+    } else {
+        idle();
+        for (unsigned i = 0; i < HLE_RA_MAX_PASSES; ++i)
+            hle_ra_pass_gpu_destroy(&g_ra.passes[i]);
+        hle_ra_targets_destroy(&g_ra.targets);
+    }
+    g_ra.ready = false;
+    g_ra.source_w = g_ra.source_h = 0;
+    g_ra.viewport_w = g_ra.viewport_h = 0;
+}
+
+static void ra_presenter_reset(void)
+{
+    ra_presenter_drop_gpu();
+    hle_ra_program_unload(&g_ra.program);
+    g_free(g_ra.path);
+    g_ra.path = NULL;
+    g_ra.loaded = false;
+    g_ra.rejected = false;
+}
+
+static bool ra_presenter_load(void)
+{
+    const char *path = getenv("HAKUX_RETROARCH_PRESET");
+    if (!path || !*path) {
+        if (g_ra.loaded || g_ra.path) ra_presenter_reset();
+        return false;
+    }
+    if (g_ra.path && !strcmp(g_ra.path, path))
+        return g_ra.loaded && !g_ra.rejected;
+    ra_presenter_reset();
+    g_ra.path = g_strdup(path);
+    char error[192];
+    if (!g_ra.path || !hle_ra_program_load(path, &g_ra.program, error, sizeof(error))) {
+        hle_log("hakuX-retroarch", "preset load failed: %s", g_ra.path ? error : "out of memory");
+        g_ra.rejected = true;
+        return false;
+    }
+    g_ra.loaded = true;
+    hle_log("hakuX-retroarch", "loaded %u pass(es): %s", g_ra.program.preset.pass_count, path);
+    return true;
+}
+
+static bool ra_presenter_prepare(uint32_t sw, uint32_t sh, uint32_t vw, uint32_t vh)
+{
+    if (!ra_presenter_load() || !sw || !sh || !vw || !vh) return false;
+    if (g_ra.ready && g_ra.source_w == sw && g_ra.source_h == sh &&
+        g_ra.viewport_w == vw && g_ra.viewport_h == vh) return true;
+    ra_presenter_drop_gpu();
+    if (!hle_ra_targets_create(&g_ra.program, sw, sh, vw, vh, &g_ra.targets)) goto fail;
+    for (unsigned i = 0; i < g_ra.program.preset.pass_count; ++i)
+        if (!hle_ra_pass_gpu_create(&g_ra.program, i, &g_ra.targets.passes[i], &g_ra.passes[i])) goto fail;
+    g_ra.source_w = sw; g_ra.source_h = sh;
+    g_ra.viewport_w = vw; g_ra.viewport_h = vh;
+    g_ra.ready = true;
+    hle_log("hakuX-retroarch", "Vulkan executor ready: %u pass(es), %ux%u -> %ux%u",
+            g_ra.program.preset.pass_count, sw, sh, vw, vh);
+    return true;
+fail:
+    for (unsigned i = 0; i < HLE_RA_MAX_PASSES; ++i) hle_ra_pass_gpu_destroy(&g_ra.passes[i]);
+    hle_ra_targets_destroy(&g_ra.targets);
+    g_ra.rejected = true;
+    hle_log("hakuX-retroarch", "preset unsupported by current executor; native filters retained");
+    return false;
+}
+
+static bool ra_presenter_record(VkCommandBuffer cb, VkImageView *source)
+{
+    if (!source || !*source || !g_ra.ready) return false;
+    VkImageView input = *source;
+    for (unsigned i = 0; i < g_ra.program.preset.pass_count; ++i) {
+        if (!hle_ra_pass_gpu_record(cb, &g_ra.program, i, input,
+                                    &g_ra.targets.passes[i], &g_ra.passes[i])) return false;
+        input = g_ra.targets.passes[i].view;
+    }
+    *source = input;
+    return true;
+}
+
 static bool init(void)
 {
     volkLoadDeviceTable(&g_ps.t, g_hvk.dev);
@@ -3967,6 +4064,13 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
             src = g_ps.fx_view;
             fxaa_done = true;
         }
+    }
+    /* RetroArch runs on the real frame (or FXAA result), before NIS/FSR,
+     * inside this same presentation command buffer. */
+    if (g_ps.have && ra_presenter_prepare(g_ps.f.w, g_ps.f.h, ww, wh)) {
+        VkImageView ra_source = src;
+        if (ra_presenter_record(cb, &ra_source)) src = ra_source;
+        else hle_log("hakuX-retroarch", "pass recording failed; native source retained");
     }
     bool nis_done = false;
     bool nis_sharpen_only = false;
