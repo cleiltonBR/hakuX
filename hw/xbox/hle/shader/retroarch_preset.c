@@ -24,7 +24,7 @@ bool hle_ra_preset_parse(const char *text,size_t length,HleRaPreset *out,char *e
   if(strlen(line)>RA_LINE_MAX){fail(error,error_size,"preset line too long");goto bad;}
   char *p=trim(line);if(!*p||*p=='#'||*p==';')continue;char *eq=strchr(p,'=');if(!eq)continue;*eq++=0;
   char *key=trim(p),*value=trim(eq);size_t n=strlen(value);if(n>=2&&value[0]=='"'&&value[n-1]=='"'){value[n-1]=0;++value;}
-  if(!strcmp(key,"shaders")){char *end=NULL;unsigned long v=strtoul(value,&end,10);if(end==value||*trim(end)||v<1||v>HLE_RA_MAX_PASSES){fail(error,error_size,"shader pass count outside 1..32");goto bad;}declared=(unsigned)v;has_count=true;continue;}
+  if(!strcmp(key,"shaders")){char *end=NULL;unsigned long v=strtoul(value,&end,10);if(end==value||*trim(end)||v<1||v>HLE_RA_MAX_PASSES){fail(error,error_size,"shader pass count outside 1..64");goto bad;}declared=(unsigned)v;has_count=true;continue;}
   if(!strncmp(key,"shader",6)&&isdigit((unsigned char)key[6])){
    char *end=NULL;unsigned long ix=strtoul(key+6,&end,10);
    if(*end||ix>=HLE_RA_MAX_PASSES||!safe_path(value)||strlen(value)>=HLE_RA_PATH_MAX){fail(error,error_size,"invalid shader path or pass index");goto bad;}
