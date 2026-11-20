@@ -1,3 +1,4 @@
+#include "hw/xbox/hle/base.h"
 #include "hw/xbox/hle/shader/retroarch_vk.h"
 #include "hw/xbox/hle/shader/retroarch_spirv.h"
 #include <spirv_reflect.h>
@@ -266,7 +267,7 @@ bool hle_ra_pass_gpu_create(const HleRaProgram *program, unsigned pass_index,
 
     uint32_t max_set = 0;
     for (uint32_t i = 0; i < info.descriptor_count; ++i) {
-        if (info.descriptors[i].set >= ARRAY_SIZE(created.set_layouts) ||
+        if (info.descriptors[i].set >= 8u ||
             !info.descriptors[i].count) goto done;
         if (info.descriptors[i].set > max_set) max_set = info.descriptors[i].set;
     }

@@ -37,7 +37,8 @@ bool hle_ra_targets_create(const HleRaProgram *program,
 void hle_ra_targets_destroy(HleRaTargets *targets);
 
 /* Compile one preset fragment pass and create its reflected descriptor and
- * pipeline layouts. Unsupported descriptor layouts fail closed. */
+ * pipeline layouts. Unsupported descriptor layouts fail closed. The output
+ * must be zero-initialized or hold a previously created pass. */
 bool hle_ra_pass_gpu_create(const HleRaProgram *program, unsigned pass_index,
                             HleRaPassGpu *out);
 void hle_ra_pass_gpu_destroy(HleRaPassGpu *pass);
