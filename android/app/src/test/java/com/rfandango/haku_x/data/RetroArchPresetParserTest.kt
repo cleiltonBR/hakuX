@@ -45,7 +45,7 @@ class RetroArchPresetParserTest {
   @Test fun infersPassesWhenPresetDeclaresZeroButContainsShaderEntries() {
     val preset = RetroArchPresetParser.parse(
       "zero-count.glslp",
-      "shaders = 0\\nshader0 = shaders/valid.glsl",
+      "shaders = 0\nshader0 = shaders/valid.glsl",
     )
     assertEquals(1, preset.passes.size)
     assertEquals("shaders/valid.glsl", preset.passes.single().shaderPath)
