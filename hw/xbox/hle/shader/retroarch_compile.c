@@ -1,5 +1,6 @@
 #include "hw/xbox/hle/shader/retroarch_runtime.h"
 #include "hw/xbox/hle/shader/glsl_compile.h"
+#include "hw/xbox/hle/shader/retroarch_spirv.h"
 
 /* Compile one already-loaded preset pass. Include data is retained until
  * glslang has finished preprocessing, parsing and SPIR-V generation. */
@@ -20,6 +21,12 @@ uint32_t *hle_ra_program_compile_pass(const HleRaProgram *program,
         stage, program->sources[pass_index], hle_ra_include_resolve,
         &includes, nwords);
     hle_ra_include_cache_finalize(&includes);
+    HleRaSpirvInfo reflection;
+    if (spirv && !hle_ra_spirv_inspect(spirv, *nwords, stage, &reflection)) {
+        g_free(spirv);
+        *nwords = 0;
+        return NULL;
+    }
     return spirv;
 }
 
