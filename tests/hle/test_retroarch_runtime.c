@@ -27,14 +27,16 @@ int main(void)
     char temp[] = "/tmp/hakux-ra-XXXXXX";
     char *dir = mkdtemp(temp);
     assert(dir);
-    char preset[512], shader[512], nested[512], linkpath[512], outside[512];
+    char preset[512], shader[512], nested_shader[512], nested[512], linkpath[512], outside[512];
     snprintf(preset, sizeof(preset), "%s/test.glslp", dir);
     snprintf(shader, sizeof(shader), "%s/pass0.glsl", dir);
     snprintf(nested, sizeof(nested), "%s/nested", dir);
+    snprintf(nested_shader, sizeof(nested_shader), "%s/pass0.glsl", nested);
     snprintf(linkpath, sizeof(linkpath), "%s/linked.glsl", dir);
     snprintf(outside, sizeof(outside), "%s-outside.glsl", dir);
     assert(mkdir(nested, 0700) == 0);
     write_text(shader, "#version 450\nvoid main(){}\n");
+    write_text(nested_shader, "#version 450\nvoid main(){ /* nested */ }\n");
     write_text(outside, "outside");
     write_text(preset, "shaders=1\nshader0=pass0.glsl\n");
 
@@ -49,6 +51,17 @@ int main(void)
     assert(hle_ra_program_load(preset, &program, error, sizeof(error)));
     assert(program.preset.pass_count == 1);
     assert(program.sources[0] != NULL);
+
+    /* Relative paths may use safe subdirectories. */
+    write_text(preset, "shaders=1\nshader0=nested/pass0.glsl\n");
+    assert(hle_ra_program_load(preset, &program, error, sizeof(error)));
+    assert(strstr(program.sources[0], "nested") != NULL);
+
+    /* A failed replacement must leave the last valid program intact. */
+    write_text(preset, "shaders=1\nshader0=../hakux-ra-outside.glsl\n");
+    assert(!hle_ra_program_load(preset, &program, error, sizeof(error)));
+    assert(program.preset.pass_count == 1);
+    assert(strstr(program.sources[0], "nested") != NULL);
     hle_ra_program_unload(&program);
 
     assert(symlink(outside, linkpath) == 0);
@@ -59,6 +72,7 @@ int main(void)
 
     unlink(linkpath);
     unlink(shader);
+    unlink(nested_shader);
     unlink(outside);
     unlink(preset);
     rmdir(nested);
