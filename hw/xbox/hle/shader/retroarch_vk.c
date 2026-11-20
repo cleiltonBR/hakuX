@@ -276,6 +276,8 @@ void hle_ra_pass_gpu_destroy(HleRaPassGpu *pass)
     if (g_hvk.dev) {
         if (pass->pipeline)
             g_hvk.t.vkDestroyPipeline(g_hvk.dev, pass->pipeline, NULL);
+        if (pass->descriptor_pool)
+            g_hvk.t.vkDestroyDescriptorPool(g_hvk.dev, pass->descriptor_pool, NULL);
         if (pass->pipeline_layout)
             g_hvk.t.vkDestroyPipelineLayout(g_hvk.dev, pass->pipeline_layout, NULL);
         for (unsigned i = 0; i < ARRAY_SIZE(pass->set_layouts); ++i) {
@@ -344,6 +346,43 @@ bool hle_ra_pass_gpu_create(const HleRaProgram *program, unsigned pass_index,
         };
         if (g_hvk.t.vkCreateDescriptorSetLayout(g_hvk.dev, &layout_info, NULL,
                                                  &created.set_layouts[set]) != VK_SUCCESS)
+            goto done;
+    }
+
+    if (info.descriptor_count) {
+        VkDescriptorPoolSize pool_sizes[6] = {0};
+        uint32_t pool_size_count = 0;
+        for (uint32_t i = 0; i < info.descriptor_count; ++i) {
+            VkDescriptorType type;
+            if (!ra_vk_descriptor_type(info.descriptors[i].type, &type)) goto done;
+            uint32_t slot = 0;
+            while (slot < pool_size_count && pool_sizes[slot].type != type) ++slot;
+            if (slot == pool_size_count) {
+                if (pool_size_count >= ARRAY_SIZE(pool_sizes)) goto done;
+                pool_sizes[slot].type = type;
+                ++pool_size_count;
+            }
+            if (UINT32_MAX - pool_sizes[slot].descriptorCount <
+                info.descriptors[i].count) goto done;
+            pool_sizes[slot].descriptorCount += info.descriptors[i].count;
+        }
+        VkDescriptorPoolCreateInfo pool_info = {
+            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+            .maxSets = created.set_count,
+            .poolSizeCount = pool_size_count,
+            .pPoolSizes = pool_sizes,
+        };
+        if (g_hvk.t.vkCreateDescriptorPool(g_hvk.dev, &pool_info, NULL,
+                                           &created.descriptor_pool) != VK_SUCCESS)
+            goto done;
+        VkDescriptorSetAllocateInfo set_info = {
+            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+            .descriptorPool = created.descriptor_pool,
+            .descriptorSetCount = created.set_count,
+            .pSetLayouts = created.set_layouts,
+        };
+        if (g_hvk.t.vkAllocateDescriptorSets(g_hvk.dev, &set_info,
+                                              created.descriptor_sets) != VK_SUCCESS)
             goto done;
     }
 

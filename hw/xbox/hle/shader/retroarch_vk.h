@@ -19,6 +19,8 @@ typedef struct HleRaTarget {
 typedef struct HleRaPassGpu {
     VkShaderModule fragment;
     VkPipeline pipeline;
+    VkDescriptorPool descriptor_pool;
+    VkDescriptorSet descriptor_sets[8];
     VkDescriptorSetLayout set_layouts[8];
     VkPipelineLayout pipeline_layout;
     uint32_t set_count;
