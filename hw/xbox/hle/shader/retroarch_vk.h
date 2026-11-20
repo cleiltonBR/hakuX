@@ -19,6 +19,7 @@ typedef struct HleRaTarget {
 typedef struct HleRaPassGpu {
     VkShaderModule fragment;
     VkPipeline pipeline;
+    VkSampler sampler;
     VkDescriptorPool descriptor_pool;
     VkDescriptorSet descriptor_sets[8];
     VkDescriptorSetLayout set_layouts[8];
@@ -48,6 +49,10 @@ void hle_ra_targets_destroy(HleRaTargets *targets);
 bool hle_ra_pass_gpu_create(const HleRaProgram *program, unsigned pass_index,
                             const HleRaTarget *target, HleRaPassGpu *out);
 void hle_ra_pass_gpu_destroy(HleRaPassGpu *pass);
+/* Bind the preceding pass output (or source image) to reflected sampled-image
+ * descriptors. Unsupported buffer/storage descriptors fail closed. */
+bool hle_ra_pass_gpu_update_input(const HleRaProgram *program, unsigned pass_index,
+                                  const HleRaTarget *input, HleRaPassGpu *pass);
 
 /* Record a supported layout transition in cb and update the tracked layout.
  * Call before rendering into a target or sampling it; never inside a render pass. */

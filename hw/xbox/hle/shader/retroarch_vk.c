@@ -276,6 +276,8 @@ void hle_ra_pass_gpu_destroy(HleRaPassGpu *pass)
     if (g_hvk.dev) {
         if (pass->pipeline)
             g_hvk.t.vkDestroyPipeline(g_hvk.dev, pass->pipeline, NULL);
+        if (pass->sampler)
+            g_hvk.t.vkDestroySampler(g_hvk.dev, pass->sampler, NULL);
         if (pass->descriptor_pool)
             g_hvk.t.vkDestroyDescriptorPool(g_hvk.dev, pass->descriptor_pool, NULL);
         if (pass->pipeline_layout)
@@ -386,6 +388,23 @@ bool hle_ra_pass_gpu_create(const HleRaProgram *program, unsigned pass_index,
             goto done;
     }
 
+    VkSamplerCreateInfo sampler_info = {
+        .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+        .magFilter = program->preset.passes[pass_index].filter_linear
+                         ? VK_FILTER_LINEAR : VK_FILTER_NEAREST,
+        .minFilter = program->preset.passes[pass_index].filter_linear
+                         ? VK_FILTER_LINEAR : VK_FILTER_NEAREST,
+        .mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
+        .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+        .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+        .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+        .minLod = 0.0f, .maxLod = 0.0f,
+        .maxAnisotropy = 1.0f,
+    };
+    if (g_hvk.t.vkCreateSampler(g_hvk.dev, &sampler_info, NULL,
+                                &created.sampler) != VK_SUCCESS)
+        goto done;
+
     VkPushConstantRange ranges[HLE_RA_SPIRV_MAX_PUSH_CONSTANTS];
     for (uint32_t i = 0; i < info.push_constant_count; ++i) {
         const HleRaSpirvPushConstant *p = &info.push_constants[i];
@@ -412,12 +431,13 @@ bool hle_ra_pass_gpu_create(const HleRaProgram *program, unsigned pass_index,
 
     /* Full-screen triangle: no vertex buffers or guest vertex state. */
     static const char vertex_source[] =
-        "#version 450\\n"
-        "layout(location=0) out vec2 v_uv;\\n"
-        "void main(){\\n"
-        " vec2 p=vec2((gl_VertexIndex<<1)&2,gl_VertexIndex&2);\\n"
-        " v_uv=p*0.5; gl_Position=vec4(p*2.0-1.0,0.0,1.0);\\n"
-        "}\\n";
+        "#version 450\n"
+        "#extension GL_ARB_separate_shader_objects : enable\n"
+        "layout(location=0) out vec2 v_uv;\n"
+        "void main(){\n"
+        " vec2 p=vec2((gl_VertexIndex<<1)&2,gl_VertexIndex&2);\n"
+        " v_uv=p*0.5; gl_Position=vec4(p*2.0-1.0,0.0,1.0);\n"
+        "}\n";
     size_t vertex_word_count = 0;
     uint32_t *vertex_words = hle_glsl_compile(HLE_SHADER_VERTEX, vertex_source,
                                                &vertex_word_count);
@@ -508,3 +528,63 @@ done:
     g_free(words);
     return ok;
 }
+
+bool hle_ra_pass_gpu_update_input(const HleRaProgram *program, unsigned pass_index,
+                                  const HleRaTarget *input, HleRaPassGpu *pass)
+{
+    if (!program || !input || !input->view || !pass || !pass->sampler ||
+        pass_index >= program->preset.pass_count ||
+        input->layout != VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+        return false;
+
+    size_t word_count = 0;
+    uint32_t *words = hle_ra_program_compile_pass(program, pass_index,
+                                                   HLE_SHADER_FRAGMENT,
+                                                   &word_count);
+    if (!words) return false;
+    HleRaSpirvInfo info;
+    bool ok = hle_ra_spirv_inspect(words, word_count, HLE_SHADER_FRAGMENT, &info);
+    g_free(words);
+    if (!ok) return false;
+
+    VkWriteDescriptorSet writes[HLE_RA_SPIRV_MAX_DESCRIPTORS];
+    VkDescriptorImageInfo images[HLE_RA_SPIRV_MAX_DESCRIPTORS];
+    uint32_t write_count = 0;
+    for (uint32_t i = 0; i < info.descriptor_count; ++i) {
+        const HleRaSpirvDescriptor *d = &info.descriptors[i];
+        VkDescriptorType type;
+        if (!ra_vk_descriptor_type(d->type, &type) || d->count != 1 ||
+            d->set >= pass->set_count ||
+            !pass->descriptor_sets[d->set])
+            return false;
+        if (type != VK_DESCRIPTOR_TYPE_SAMPLER &&
+            type != VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE &&
+            type != VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
+            return false;
+
+        VkDescriptorImageInfo image = {
+            .sampler = type == VK_DESCRIPTOR_TYPE_SAMPLER ||
+                       type == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER
+                           ? pass->sampler : VK_NULL_HANDLE,
+            .imageView = type == VK_DESCRIPTOR_TYPE_SAMPLER
+                             ? VK_NULL_HANDLE : input->view,
+            .imageLayout = type == VK_DESCRIPTOR_TYPE_SAMPLER
+                               ? VK_IMAGE_LAYOUT_UNDEFINED
+                               : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        };
+        images[write_count] = image;
+        writes[write_count] = (VkWriteDescriptorSet) {
+            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .dstSet = pass->descriptor_sets[d->set],
+            .dstBinding = d->binding,
+            .descriptorCount = 1,
+            .descriptorType = type,
+            .pImageInfo = &images[write_count],
+        };
+        ++write_count;
+    }
+    if (write_count)
+        g_hvk.t.vkUpdateDescriptorSets(g_hvk.dev, write_count, writes, 0, NULL);
+    return true;
+}
+
