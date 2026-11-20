@@ -38,12 +38,17 @@ bool hle_ra_preset_parse(const char *text,size_t length,HleRaPreset *out,char *e
   char *p=trim(line);if(!*p||*p=='#'||*p==';')continue;char *eq=strchr(p,'=');if(!eq)continue;*eq++=0;
   char *key=trim(p),*value=trim(eq);size_t n=strlen(value);if(n>=2&&value[0]=='"'&&value[n-1]=='"'){value[n-1]=0;++value;}
   char *end=NULL;unsigned long ix;
-  if(!strncmp(key,"filter_linear",13)&&isdigit((unsigned char)key[13])){ix=strtoul(key+13,&end,10);if(*end||ix>=declared)continue;parsed.passes[ix].filter_linear=!strcmp(value,"true")||!strcmp(value,"1");}
+  if(!strncmp(key,"filter_linear",13)&&isdigit((unsigned char)key[13])){ix=strtoul(key+13,&end,10);if(*end||ix>=declared)continue;if(!strcmp(value,"true")||!strcmp(value,"1"))parsed.passes[ix].filter_linear=true;else if(!strcmp(value,"false")||!strcmp(value,"0"))parsed.passes[ix].filter_linear=false;else{fail(error,error_size,"invalid filter_linear value");goto bad;}}
   else if(!strncmp(key,"frame_count",11)&&isdigit((unsigned char)key[11])){ix=strtoul(key+11,&end,10);if(*end||ix>=declared)continue;unsigned long v=strtoul(value,&end,10);if(end==value||*trim(end)||v<1||v>RA_FRAMES_MAX){fail(error,error_size,"frame_count outside 1..32");goto bad;}parsed.passes[ix].frame_count=(unsigned)v;}
   else if(!strncmp(key,"scale_type",10)&&isdigit((unsigned char)key[10])){ix=strtoul(key+10,&end,10);if(*end||ix>=declared)continue;if(!strcmp(value,"source"))parsed.passes[ix].scale_type=HLE_RA_SCALE_SOURCE;else if(!strcmp(value,"absolute"))parsed.passes[ix].scale_type=HLE_RA_SCALE_ABSOLUTE;else if(!strcmp(value,"viewport"))parsed.passes[ix].scale_type=HLE_RA_SCALE_VIEWPORT;else{fail(error,error_size,"unsupported scale_type");goto bad;}}
-  else if(!strncmp(key,"scale",5)&&isdigit((unsigned char)key[5])){ix=strtoul(key+5,&end,10);if(*end||ix>=declared)continue;if(!number(value,&parsed.passes[ix].scale_x)){fail(error,error_size,"invalid scale value");goto bad;}parsed.passes[ix].scale_y=parsed.passes[ix].scale_x;}
+  else if(!strncmp(key,"scale",5)&&isdigit((unsigned char)key[5])){
+   ix=strtoul(key+5,&end,10);if(ix>=declared)continue;
+   if(!strcmp(end,"_x")){if(!number(value,&parsed.passes[ix].scale_x)){fail(error,error_size,"invalid horizontal scale");goto bad;}}
+   else if(!strcmp(end,"_y")){if(!number(value,&parsed.passes[ix].scale_y)){fail(error,error_size,"invalid vertical scale");goto bad;}}
+   else if(!*end){float v;if(!number(value,&v)){fail(error,error_size,"invalid scale value");goto bad;}parsed.passes[ix].scale_x=v;parsed.passes[ix].scale_y=v;}
+  }
  }
- for(unsigned i=0;i<declared;i++){if(!values[i]){fail(error,error_size,"preset has a missing shader pass");goto bad;}strcpy(parsed.passes[i].shader,values[i]);if(!parsed.passes[i].frame_count)parsed.passes[i].frame_count=1;if(parsed.passes[i].scale_type==HLE_RA_SCALE_ABSOLUTE&&!parsed.passes[i].scale_x){fail(error,error_size,"absolute scale requires scaleN");goto bad;}if(!parsed.passes[i].scale_y)parsed.passes[i].scale_y=parsed.passes[i].scale_x;}
+ for(unsigned i=0;i<declared;i++){if(!values[i]){fail(error,error_size,"preset has a missing shader pass");goto bad;}strcpy(parsed.passes[i].shader,values[i]);if(!parsed.passes[i].frame_count)parsed.passes[i].frame_count=1;if(parsed.passes[i].scale_type==HLE_RA_SCALE_ABSOLUTE&&(!parsed.passes[i].scale_x||!parsed.passes[i].scale_y)){fail(error,error_size,"absolute scale requires scaleN or both scaleN_x and scaleN_y");goto bad;}if(!parsed.passes[i].scale_x)parsed.passes[i].scale_x=parsed.passes[i].scale_y;if(!parsed.passes[i].scale_y)parsed.passes[i].scale_y=parsed.passes[i].scale_x;}
  for(unsigned i=0;i<HLE_RA_MAX_PASSES;i++)free(values[i]);free(copy);*out=parsed;if(error&&error_size)error[0]=0;return true;
 bad:for(unsigned i=0;i<HLE_RA_MAX_PASSES;i++)free(values[i]);free(copy);return false;
 }
