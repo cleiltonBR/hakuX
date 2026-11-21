@@ -36,7 +36,7 @@ static int open_relative_file(int root, const char *path)
     close(dir); free(copy); return result;
 }
 
-#define RA_REFERENCE_MAX_DEPTH 16u
+#define RA_REFERENCE_MAX_DEPTH 16u /* bounded inheritance chain */
 #define RA_EXPANDED_MAX (1024u * 1024u)
 static bool ra_append(char **dst, size_t *used, const char *data, size_t length)
 {
