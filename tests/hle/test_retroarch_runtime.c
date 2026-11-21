@@ -77,16 +77,16 @@ int main(void)
     assert(mkdir(presets, 0700) == 0);
     assert(mkdir(roots, 0700) == 0);
     assert(mkdir(shaders, 0700) == 0);
-    write_text(wrapper, "#reference \\"Root_Presets/base.slangp\\"\\n#reference \\"../../resource/param_values/base/auto-settings.params\\"\\n");
-    write_text(base, "shaders=1\\nshader0=shaders/pass.slang\\n");
-    write_text(base_shader, "#version 450\\nvoid main(){}\\n");
+    write_text(wrapper, "#reference \"Root_Presets/base.slangp\"\n#reference \"../../resource/param_values/base/auto-settings.params\"\n");
+    write_text(base, "shaders=1\nshader0=shaders/pass.slang\n");
+    write_text(base_shader, "#version 450\nvoid main(){}\n");
     assert(hle_ra_program_load(wrapper, &program, error, sizeof(error)));
     assert(program.preset.pass_count == 1);
     assert(strstr(program.preset.passes[0].shader, "Root_Presets/shaders/pass.slang") != NULL);
     assert(strstr(program.sources[0], "void main") != NULL);
     hle_ra_program_unload(&program);
     /* Circular #reference chains are rejected instead of recursing forever. */
-    write_text(base, "#reference \\"wrapper.slangp\\"\\n");
+    write_text(base, "#reference \"wrapper.slangp\"\n");
     assert(!hle_ra_program_load(wrapper, &program, error, sizeof(error)));
     unlink(base_shader);
     unlink(base);
