@@ -86,7 +86,7 @@ int main(void)
     assert(strstr(program.sources[0], "void main") != NULL);
     hle_ra_program_unload(&program);
     /* Circular #reference chains are rejected instead of recursing forever. */
-    write_text(base, "#reference \"wrapper.slangp\"\n");
+    write_text(base, "#reference \"../wrapper.slangp\"\n");
     assert(!hle_ra_program_load(wrapper, &program, error, sizeof(error)));
     unlink(base_shader);
     unlink(base);
