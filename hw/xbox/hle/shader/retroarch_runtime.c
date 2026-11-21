@@ -134,15 +134,7 @@ static bool ra_expand_preset(int root, const char *relative_path,
             }
             continue;
         }
-        char *eq = strchr(trimmed, '='                char normalized[RA_PATH_MAX];
-                if (!ra_normalize_relative(relative_path, reference,
-                                           normalized, sizeof(normalized)) ||
-                    !ra_expand_preset(root, normalized, expanded,
-                                      expanded_length, active, depth + 1))
-                    ok = false;
-            }
-            continue; /* .params and other reference assets are not passes. */
-        }
+        char *eq = strchr(trimmed, '=');
         char *eq = strchr(trimmed, '=');
         if (eq) {
             char *key_end = eq;
@@ -324,17 +316,6 @@ bool hle_ra_program_load_from_root(const char *library_root,
     if (error && error_size) error[0] = 0;
     return true;
 }
-)) continue;
-            if (ra_is_preset_reference(reference)) {
-                char normalized[RA_PATH_MAX];
-                if (!ra_normalize_relative(relative_path, reference,
-                                           normalized, sizeof(normalized)) ||
-                    !ra_expand_preset(root, normalized, expanded,
-                                      expanded_length, active, depth + 1))
-                    ok = false;
-            }
-            continue; /* .params and other reference assets are not passes. */
-        }
         char *eq = strchr(trimmed, '=');
         if (eq) {
             char *key_end = eq;
