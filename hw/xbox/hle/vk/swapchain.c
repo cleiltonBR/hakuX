@@ -59,7 +59,7 @@ typedef struct PsFrame {
     VkCommandPool pool;
     VkCommandBuffer cb;
     VkSemaphore acquired;       /* its swapchain image is ready */
-    VkDescriptorSet set[3];     /* the window pass's, FXAA's */
+    VkDescriptorSet set[3];     /* window, FXAA, and EASU/intermediate passes */
     VkDescriptorSet nis_set;
     uint64_t value;             /* its last submit's on the timeline */
     bool ramp_stale;            /* its share of the ramp buffer is behind */
@@ -94,6 +94,7 @@ static struct {
     VkImageLayout nis_out_layout;
     bool nis_resources_ready;
     VkPipeline pipe[P_COUNT];
+    VkPipeline area_rgba_pipe; /* P_AREA for an RGBA8 intermediate (NIS + CAS) */
     VkFormat pipe_fmt;          /* the window pipelines' */
     PsFrame fr[PS_FRAMES];
     unsigned cur;
@@ -203,7 +204,8 @@ static const char k_fs_area[] =
     "      wsum += w;\n"
     "    }\n"
     "  }\n"
-    "  o = ramp(sum / wsum);\n"
+    "  vec3 area = sum / wsum;\n"
+    "  o = pc.extra.z > 0.5 ? vec4(area, 1.0) : ramp(area);\n"
     "}\n";
 /* FXAA 3.11 Quality as PCSX2 tunes it (edges only: no subpixel blur), into
  * a frame-sized image: no ramp yet. */
@@ -861,6 +863,7 @@ static bool init(void)
     }
     g_ps.pipe[P_FXAA] = pipeline(g_ps.fs[P_FXAA], VK_FORMAT_R8G8B8A8_UNORM);
     g_ps.pipe[P_EASU] = pipeline(g_ps.fs[P_EASU], VK_FORMAT_R8G8B8A8_UNORM);
+    g_ps.area_rgba_pipe = pipeline(g_ps.fs[P_AREA], VK_FORMAT_R8G8B8A8_UNORM);
     hle_log("hakuX-hle-back", "present: NIS compute pipeline %s", nis_ready ? "ready (coefficients and compute resources uploaded)" : "unavailable (existing filters retained)");
     hle_log("hakuX-hle-back", "present: ready (shaders: bilinear %d, averaging %d, SGSR %d, FXAA %d)",
             g_ps.fs[P_BILINEAR] != VK_NULL_HANDLE, g_ps.fs[P_AREA] != VK_NULL_HANDLE,
@@ -1259,7 +1262,7 @@ static bool fxaa_target(uint32_t w, uint32_t h)
     return true;
 }
 
-/* FSR's EASU target: the frame scaled up to its place in the window. */
+/* RGBA8 intermediate for FSR EASU and the NIS+CAS area-downscale pass. */
 static bool fsr_target(uint32_t w, uint32_t h)
 {
     if (g_ps.fs_img && g_ps.fs_w == w && g_ps.fs_h == h) {
@@ -1294,7 +1297,7 @@ static bool fsr_target(uint32_t w, uint32_t h)
     if (mt < 0 || T.vkAllocateMemory(g_hvk.dev, &mai, NULL, &g_ps.fs_mem) != VK_SUCCESS ||
         T.vkBindImageMemory(g_hvk.dev, g_ps.fs_img, g_ps.fs_mem, 0) != VK_SUCCESS ||
         T.vkCreateImageView(g_hvk.dev, &vci, NULL, &g_ps.fs_view) != VK_SUCCESS) {
-        hle_log("hakuX-hle-back", "present: no %ux%u FSR image: FSR off", w, h);
+        hle_log("hakuX-hle-back", "present: no %ux%u post-processing image: optional pass unavailable", w, h);
         T.vkDestroyImage(g_hvk.dev, g_ps.fs_img, NULL);
         g_ps.fs_img = VK_NULL_HANDLE;
         /* Keep the EASU pipeline: allocation may succeed on a later frame
@@ -1544,6 +1547,7 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
     }
     bool nis_done = false;
     bool nis_sharpen_only = false;
+    bool nis_cas_after_area = false;
     nis_status(1, nis ? 1 : 0);
     nis_status(2, 0);
     nis_status(3, 0);
@@ -1632,6 +1636,40 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
         }
     }
 #endif
+    /* In the 1:1 NIS path, a later downscale must retain the area filter.
+     * When CAS is also enabled, render that area result at the final content
+     * size into an RGBA8 intermediate, without applying the gamma ramp. RCAS
+     * then sharpens the resampled image and applies the ramp exactly once. */
+    if (g_ps.have && nis_done && nis_sharpen_only && cas && average &&
+        g_ps.area_rgba_pipe && g_ps.pipe[P_RCAS]) {
+        const float vw = sx * (float)ww, vh = sy * (float)wh;
+        const float rx = (float)g_ps.f.w / vw, ry = (float)g_ps.f.h / vh;
+        const uint32_t target_w = (uint32_t)(vw + 0.5f), target_h = (uint32_t)(vh + 0.5f);
+        if ((rx > 1.01f || ry > 1.01f) && target_w >= 2 && target_h >= 2 &&
+            fsr_target(target_w, target_h)) {
+            const float area_pc[12] = { -1.0f, -1.0f, 1.0f, 1.0f, rx, ry, 1.0f, 0.0f,
+                                        1.0f, 0.0f, 0.0f, 1.0f };
+            barrier(cb, g_ps.fs_img, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                    VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, 0,
+                    VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT);
+            rendering(cb, g_ps.fs_view, target_w, target_h, true);
+            quad(cb, f, 2, g_ps.area_rgba_pipe, src, area_pc, target_w, target_h);
+            T.vkCmdEndRendering(cb);
+            barrier(cb, g_ps.fs_img, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+                    VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+                    VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
+            src = g_ps.fs_view;
+            g_ps.fs_serial = 0; /* invalidate the FSR cache: this image now holds NIS+CAS input */
+            nis_cas_after_area = true;
+        } else if (rx > 1.01f || ry > 1.01f) {
+            static bool reported_nis_cas_intermediate;
+            if (!reported_nis_cas_intermediate) {
+                hle_log("hakuX-hle-back", "NIS+CAS: area intermediate unavailable; retaining area downscale without RCAS");
+                reported_nis_cas_intermediate = true;
+            }
+        }
+    }
     VkImage dst = g_ps.img[g_ps.idx];
     barrier(cb, dst, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
             VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, 0, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
@@ -1644,7 +1682,8 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
         const float rx = (float)g_ps.f.w / vw, ry = (float)g_ps.f.h / vh;
         unsigned p = P_BILINEAR;
         float pc[12] = { -sx, -sy, sx, sy, 0.0f, 0.0f, 0.0f, 0.0f, g_ps.rot[0], g_ps.rot[1], g_ps.rot[2], g_ps.rot[3] };
-        if ((!nis_done || nis_sharpen_only) && (rx > 1.01f || ry > 1.01f) && average && g_ps.pipe[P_AREA]) {
+        if (!nis_cas_after_area && (!nis_done || nis_sharpen_only) &&
+            (rx > 1.01f || ry > 1.01f) && average && g_ps.pipe[P_AREA]) {
             p = P_AREA;
             pc[4] = rx;
             pc[5] = ry;
