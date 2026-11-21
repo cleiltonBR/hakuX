@@ -135,7 +135,6 @@ static bool ra_expand_preset(int root, const char *relative_path,
             continue;
         }
         char *eq = strchr(trimmed, '=');
-        char *eq = strchr(trimmed, '=');
         if (eq) {
             char *key_end = eq;
             while (key_end > trimmed && (key_end[-1] == ' ' || key_end[-1] == '\t')) --key_end;
