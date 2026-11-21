@@ -21,6 +21,9 @@ typedef struct HleRaIncludeCache {
 /* out must be zero-initialized or contain a previously loaded program. */
 bool hle_ra_program_load(const char *preset_path, HleRaProgram *out,
                          char *error, size_t error_size);
+/* Load a preset relative to the shader-library root. */
+bool hle_ra_program_load_from_root(const char *library_root, const char *preset_relative_path,
+                                   HleRaProgram *out, char *error, size_t error_size);
 void hle_ra_program_unload(HleRaProgram *program);
 bool hle_ra_include_cache_init(HleRaIncludeCache *cache, const HleRaProgram *program);
 const char *hle_ra_include_resolve(void *ctx, const char *name, size_t *length);
