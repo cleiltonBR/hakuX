@@ -94,6 +94,38 @@ int main(void)
     rmdir(shaders);
     rmdir(roots);
     rmdir(presets);
+    /* Load the complete package relative to its root and inherit .params values. */
+    char package[512], root_presets[512], root_nested[512], root_resource[512], root_shaders[512];
+    char root_wrapper[512], root_base[512], root_params[512], root_pass[512];
+    snprintf(package, sizeof(package), "%s/package", dir);
+    snprintf(root_presets, sizeof(root_presets), "%s/presets", package);
+    snprintf(root_nested, sizeof(root_nested), "%s/Root", root_presets);
+    snprintf(root_resource, sizeof(root_resource), "%s/resource", package);
+    snprintf(root_shaders, sizeof(root_shaders), "%s/shaders", package);
+    snprintf(root_wrapper, sizeof(root_wrapper), "%s/wrapper.slangp", root_presets);
+    snprintf(root_base, sizeof(root_base), "%s/base.slangp", root_nested);
+    snprintf(root_params, sizeof(root_params), "%s/defaults.params", root_resource);
+    snprintf(root_pass, sizeof(root_pass), "%s/pass.slang", root_shaders);
+    assert(mkdir(package, 0700) == 0);
+    assert(mkdir(root_presets, 0700) == 0);
+    assert(mkdir(root_nested, 0700) == 0);
+    assert(mkdir(root_resource, 0700) == 0);
+    assert(mkdir(root_shaders, 0700) == 0);
+    write_text(root_wrapper, "#reference \"Root/base.slangp\"\\n#reference \"../resource/defaults.params\"\\n");
+    write_text(root_base, "shaders=1\\nshader0=../../shaders/pass.slang\\n");
+    write_text(root_params, "#reference \"$CORE$.params\"\\nHSM_TEST_PARAMETER = 0.75\\n");
+    write_text(root_pass, "#version 450\\nvoid main(){}\\n");
+    assert(hle_ra_program_load_from_root(package, "presets/wrapper.slangp",
+                                         &program, error, sizeof(error)));
+    assert(program.preset.pass_count == 1);
+    assert(program.preset.parameter_count == 1);
+    assert(!strcmp(program.preset.parameters[0].name, "HSM_TEST_PARAMETER"));
+    assert(!strcmp(program.preset.parameters[0].value, "0.75"));
+    hle_ra_program_unload(&program);
+    unlink(root_pass); unlink(root_params); unlink(root_base); unlink(root_wrapper);
+    rmdir(root_shaders); rmdir(root_resource); rmdir(root_nested); rmdir(root_presets);
+    rmdir(package);
+
     assert(symlink(outside, linkpath) == 0);
     write_text(preset, "shaders=1\nshader0=linked.glsl\n");
     assert(!hle_ra_program_load(preset, &program, error, sizeof(error)));
