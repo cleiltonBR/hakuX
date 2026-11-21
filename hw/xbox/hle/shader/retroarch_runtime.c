@@ -122,6 +122,199 @@ static bool ra_expand_preset(int root, const char *relative_path,
             if (!quote || !end) { ok = false; break; }
             *end = 0;
             const char *reference = quote + 1;
+            /* Defer core/driver-specific macro references to the frontend. */
+            if (strchr(reference, '
+                char normalized[RA_PATH_MAX];
+                if (!ra_normalize_relative(relative_path, reference,
+                                           normalized, sizeof(normalized)) ||
+                    !ra_expand_preset(root, normalized, expanded,
+                                      expanded_length, active, depth + 1))
+                    ok = false;
+            }
+            continue; /* .params and other reference assets are not passes. */
+        }
+        char *eq = strchr(trimmed, '=');
+        if (eq) {
+            char *key_end = eq;
+            while (key_end > trimmed && (key_end[-1] == ' ' || key_end[-1] == '\t')) --key_end;
+            char *key_start = trimmed;
+            while (key_start < key_end && (*key_start == ' ' || *key_start == '\t')) ++key_start;
+            if ((size_t)(key_end - key_start) > 6 &&
+                !strncmp(key_start, "shader", 6) && key_start[6] >= '0' &&
+                key_start[6] <= '9') {
+                char *value = eq + 1;
+                while (*value == ' ' || *value == '\t') ++value;
+                char *value_end = value + strlen(value);
+                while (value_end > value && (value_end[-1] == '\r' ||
+                       value_end[-1] == ' ' || value_end[-1] == '\t')) --value_end;
+                if (value < value_end && *value == '"' && value_end[-1] == '"') {
+                    ++value; --value_end;
+                }
+                char raw[RA_PATH_MAX], normalized[RA_PATH_MAX];
+                size_t n = (size_t)(value_end - value);
+                if (!n || n >= sizeof(raw)) { ok = false; break; }
+                memcpy(raw, value, n); raw[n] = 0;
+                if (!ra_normalize_relative(relative_path, raw,
+                                           normalized, sizeof(normalized))) {
+                    ok = false; break;
+                }
+                char rewritten[RA_PATH_MAX + 64];
+                int written = snprintf(rewritten, sizeof(rewritten), "%.*s = %s\n",
+                    (int)(key_end - trimmed), key_start, normalized);
+                if (written < 0 || (size_t)written >= sizeof(rewritten) ||
+                    !ra_append(expanded, expanded_length, rewritten, (size_t)written))
+                    ok = false;
+                continue;
+            }
+        }
+        size_t n = strlen(line);
+        if (!ra_append(expanded, expanded_length, line, n) ||
+            !ra_append(expanded, expanded_length, "\n", 1)) ok = false;
+    }
+    free(source);
+    return ok;
+}
+
+void hle_ra_program_unload(HleRaProgram *program)
+{
+    if (!program) return;
+    for (unsigned i = 0; i < HLE_RA_MAX_PASSES; ++i) { free(program->sources[i]); program->sources[i] = NULL; program->source_lengths[i] = 0; }
+    if (program->source_root_fd > STDERR_FILENO) close(program->source_root_fd);
+    program->source_root_fd = -1; memset(&program->preset, 0, sizeof(program->preset));
+}
+bool hle_ra_program_load(const char *preset_path, HleRaProgram *out, char *error, size_t error_size)
+{
+    if (!preset_path || !*preset_path || !out || strlen(preset_path) >= RA_PATH_MAX) { set_error(error, error_size, "invalid preset path"); return false; }
+    HleRaProgram loaded = { .source_root_fd = -1 }; char path[RA_PATH_MAX]; strcpy(path, preset_path);
+    char *slash = strrchr(path, '/'); const char *filename = path; const char *directory = ".";
+    if (slash) { *slash = 0; filename = slash + 1; directory = path[0] ? path : "/"; }
+    if (!*filename) { set_error(error, error_size, "preset filename is empty"); return false; }
+    int root = open(directory, O_RDONLY | O_CLOEXEC | O_DIRECTORY);
+    if (root < 0) { set_error(error, error_size, "cannot open preset directory"); return false; }
+    int preset_fd = openat(root, filename, O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK);
+    char *preset_text = NULL; size_t preset_length = 0;
+    bool ok = preset_fd >= 0 && read_fd(preset_fd, RA_PRESET_MAX, &preset_text, &preset_length);
+    if (preset_fd >= 0) close(preset_fd);
+    if (!ok) { close(root); set_error(error, error_size, "cannot read preset (regular file, max 256 KiB)"); return false; }
+    free(preset_text);
+    char *expanded_preset = NULL;
+    size_t expanded_length = 0;
+    char active[RA_REFERENCE_MAX_DEPTH][RA_PATH_MAX] = {{0}};
+    if (!ra_expand_preset(root, filename, &expanded_preset, &expanded_length,
+                          active, 0) ||
+        !hle_ra_preset_parse(expanded_preset, expanded_length,
+                             &loaded.preset, error, error_size)) {
+        free(expanded_preset);
+        close(root);
+        if (error && error_size && !error[0])
+            set_error(error, error_size, "cannot resolve preset #reference chain safely");
+        return false;
+    }
+    free(expanded_preset);
+    size_t total = 0;
+    for (unsigned i = 0; i < loaded.preset.pass_count; ++i) {
+        int fd = open_relative_file(root, loaded.preset.passes[i].shader);
+        if (fd < 0 || !read_fd(fd, HLE_RA_SOURCE_MAX, &loaded.sources[i], &loaded.source_lengths[i])) {
+            if (fd >= 0) close(fd); close(root); hle_ra_program_unload(&loaded);
+            set_error(error, error_size, "cannot read shader pass safely (max 256 KiB each)"); return false;
+        }
+        close(fd); total += loaded.source_lengths[i];
+        if (total > HLE_RA_TOTAL_SOURCE_MAX) { close(root); hle_ra_program_unload(&loaded); set_error(error, error_size, "shader sources exceed 2 MiB total"); return false; }
+    }
+    loaded.source_root_fd = dup(root); close(root);
+    if (loaded.source_root_fd < 0) { hle_ra_program_unload(&loaded); set_error(error, error_size, "cannot retain preset directory for includes"); return false; }
+    hle_ra_program_unload(out); *out = loaded; if (error && error_size) error[0] = 0; return true;
+}
+bool hle_ra_include_cache_init(HleRaIncludeCache *cache, const HleRaProgram *program)
+{
+    if (!cache || !program || program->source_root_fd < 0) return false;
+    memset(cache, 0, sizeof(*cache)); cache->root_fd = dup(program->source_root_fd); return cache->root_fd >= 0;
+}
+const char *hle_ra_include_resolve(void *ctx, const char *name, size_t *length)
+{
+    HleRaIncludeCache *cache = ctx; if (length) *length = 0;
+    if (!cache || cache->root_fd < 0 || !name || !*name || strlen(name) >= RA_PATH_MAX) return NULL;
+    for (unsigned i = 0; i < cache->count; ++i) if (!strcmp(cache->entries[i].name, name)) { if (length) *length = cache->entries[i].length; return cache->entries[i].data; }
+    if (cache->count >= HLE_RA_INCLUDE_MAX) return NULL;
+    int fd = open_relative_file(cache->root_fd, name); if (fd < 0) return NULL;
+    char *data = NULL; size_t size = 0; bool ok = read_fd(fd, HLE_RA_SOURCE_MAX, &data, &size); close(fd);
+    if (!ok || size > HLE_RA_TOTAL_SOURCE_MAX - cache->total_length) { free(data); return NULL; }
+    char *key = strdup(name); if (!key) { free(data); return NULL; }
+    HleRaIncludeEntry *entry = &cache->entries[cache->count++]; entry->name = key; entry->data = data; entry->length = size;
+    cache->total_length += size; if (length) *length = size; return data;
+}
+void hle_ra_include_cache_finalize(HleRaIncludeCache *cache)
+{
+    if (!cache) return;
+    for (unsigned i = 0; i < cache->count; ++i) { free(cache->entries[i].name); free(cache->entries[i].data); }
+    if (cache->root_fd > STDERR_FILENO) close(cache->root_fd);
+    memset(cache, 0, sizeof(*cache)); cache->root_fd = -1;
+}
+
+
+bool hle_ra_program_load_from_root(const char *library_root,
+                                   const char *preset_relative_path,
+                                   HleRaProgram *out, char *error,
+                                   size_t error_size)
+{
+    if (!library_root || !*library_root || !preset_relative_path ||
+        !*preset_relative_path || !out || strlen(preset_relative_path) >= RA_PATH_MAX) {
+        set_error(error, error_size, "invalid shader library root or preset path");
+        return false;
+    }
+    char normalized[RA_PATH_MAX];
+    if (!ra_normalize_relative("", preset_relative_path, normalized, sizeof(normalized))) {
+        set_error(error, error_size, "preset path must stay inside the shader library");
+        return false;
+    }
+    int root = open(library_root, O_RDONLY | O_CLOEXEC | O_DIRECTORY | O_NOFOLLOW);
+    if (root < 0) { set_error(error, error_size, "cannot open shader library root"); return false; }
+    HleRaProgram loaded = { .source_root_fd = -1 };
+    char *expanded = NULL;
+    size_t expanded_length = 0;
+    char active[RA_REFERENCE_MAX_DEPTH][RA_PATH_MAX] = {{0}};
+    if (!ra_expand_preset(root, normalized, &expanded, &expanded_length, active, 0) ||
+        !hle_ra_preset_parse(expanded, expanded_length, &loaded.preset, error, error_size)) {
+        free(expanded);
+        close(root);
+        if (error && error_size && !error[0])
+            set_error(error, error_size, "cannot resolve preset references inside shader library");
+        return false;
+    }
+    free(expanded);
+    size_t total = 0;
+    for (unsigned i = 0; i < loaded.preset.pass_count; ++i) {
+        int fd = open_relative_file(root, loaded.preset.passes[i].shader);
+        if (fd < 0 || !read_fd(fd, HLE_RA_SOURCE_MAX,
+                               &loaded.sources[i], &loaded.source_lengths[i])) {
+            if (fd >= 0) close(fd);
+            close(root);
+            hle_ra_program_unload(&loaded);
+            set_error(error, error_size, "cannot read shader pass safely from library root");
+            return false;
+        }
+        close(fd);
+        total += loaded.source_lengths[i];
+        if (total > HLE_RA_TOTAL_SOURCE_MAX) {
+            close(root);
+            hle_ra_program_unload(&loaded);
+            set_error(error, error_size, "shader sources exceed 2 MiB total");
+            return false;
+        }
+    }
+    loaded.source_root_fd = dup(root);
+    close(root);
+    if (loaded.source_root_fd < 0) {
+        hle_ra_program_unload(&loaded);
+        set_error(error, error_size, "cannot retain shader library root for includes");
+        return false;
+    }
+    hle_ra_program_unload(out);
+    *out = loaded;
+    if (error && error_size) error[0] = 0;
+    return true;
+}
+)) continue;
             if (ra_is_preset_reference(reference)) {
                 char normalized[RA_PATH_MAX];
                 if (!ra_normalize_relative(relative_path, reference,
