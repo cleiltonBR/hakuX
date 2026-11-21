@@ -123,8 +123,18 @@ static bool ra_expand_preset(int root, const char *relative_path,
             *end = 0;
             const char *reference = quote + 1;
             /* Defer core/driver-specific macro references to the frontend. */
-            if (strchr(reference, '
+            if (strchr(reference, 36)) continue;
+            if (ra_is_preset_reference(reference)) {
                 char normalized[RA_PATH_MAX];
+                if (!ra_normalize_relative(relative_path, reference,
+                                           normalized, sizeof(normalized)) ||
+                    !ra_expand_preset(root, normalized, expanded,
+                                      expanded_length, active, depth + 1))
+                    ok = false;
+            }
+            continue;
+        }
+        char *eq = strchr(trimmed, '='                char normalized[RA_PATH_MAX];
                 if (!ra_normalize_relative(relative_path, reference,
                                            normalized, sizeof(normalized)) ||
                     !ra_expand_preset(root, normalized, expanded,
