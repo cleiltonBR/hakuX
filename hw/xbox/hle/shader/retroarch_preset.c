@@ -22,7 +22,7 @@ bool hle_ra_preset_parse(const char *text,size_t length,HleRaPreset *out,char *e
  char *values[HLE_RA_MAX_PASSES]={0},*save=NULL;unsigned declared=0;bool has_count=false;
  for(char *line=strtok_r(copy,"\n",&save);line;line=strtok_r(NULL,"\n",&save)){
   if(strlen(line)>RA_LINE_MAX){fail(error,error_size,"preset line too long");goto bad;}
-  char *p=trim(line);if(!*p||*p=='#'||*p==';')continue;char *eq=strchr(p,'=');if(!eq)continue;*eq++=0;
+  char *p=trim(line);if(!*p||*p=='#'||*p==';'||(p[0]=='/'&&p[1]=='/'))continue;char *eq=strchr(p,'=');if(!eq)continue;*eq++=0;
   char *key=trim(p),*value=trim(eq);size_t n=strlen(value);if(n>=2&&value[0]=='"'&&value[n-1]=='"'){value[n-1]=0;++value;}
   if(!strcmp(key,"shaders")){char *end=NULL;unsigned long v=strtoul(value,&end,10);if(end==value||*trim(end)||v<1||v>HLE_RA_MAX_PASSES){fail(error,error_size,"shader pass count outside 1..64");goto bad;}declared=(unsigned)v;has_count=true;continue;}
   if(!strncmp(key,"shader",6)&&isdigit((unsigned char)key[6])){
@@ -46,6 +46,20 @@ bool hle_ra_preset_parse(const char *text,size_t length,HleRaPreset *out,char *e
    if(!strcmp(end,"_x")){if(!number(value,&parsed.passes[ix].scale_x)){fail(error,error_size,"invalid horizontal scale");goto bad;}}
    else if(!strcmp(end,"_y")){if(!number(value,&parsed.passes[ix].scale_y)){fail(error,error_size,"invalid vertical scale");goto bad;}}
    else if(!*end){float v;if(!number(value,&v)){fail(error,error_size,"invalid scale value");goto bad;}parsed.passes[ix].scale_x=v;parsed.passes[ix].scale_y=v;}
+  } else {
+   bool parameter_key = key[0] >= 'A' && key[0] <= 'Z';
+   for (const char *k = key; parameter_key && *k; ++k)
+    if (!( (*k >= 'A' && *k <= 'Z') || (*k >= '0' && *k <= '9') || *k == '_' )) parameter_key = false;
+   if (parameter_key && strlen(key) < HLE_RA_PARAMETER_NAME_MAX &&
+       strlen(value) < HLE_RA_PARAMETER_VALUE_MAX) {
+    unsigned slot = parsed.parameter_count;
+    for (unsigned i = 0; i < parsed.parameter_count; ++i)
+     if (!strcmp(parsed.parameters[i].name, key)) { slot = i; break; }
+    if (slot == HLE_RA_MAX_PARAMETERS) { fail(error,error_size,"too many shader parameter overrides"); goto bad; }
+    if (slot == parsed.parameter_count) ++parsed.parameter_count;
+    strcpy(parsed.parameters[slot].name, key);
+    strcpy(parsed.parameters[slot].value, value);
+   }
   }
  }
  for(unsigned i=0;i<declared;i++){if(!values[i]){fail(error,error_size,"preset has a missing shader pass");goto bad;}strcpy(parsed.passes[i].shader,values[i]);if(!parsed.passes[i].frame_count)parsed.passes[i].frame_count=1;if(parsed.passes[i].scale_type==HLE_RA_SCALE_ABSOLUTE&&(!parsed.passes[i].scale_x||!parsed.passes[i].scale_y)){fail(error,error_size,"absolute scale requires scaleN or both scaleN_x and scaleN_y");goto bad;}if(!parsed.passes[i].scale_x)parsed.passes[i].scale_x=parsed.passes[i].scale_y;if(!parsed.passes[i].scale_y)parsed.passes[i].scale_y=parsed.passes[i].scale_x;}
