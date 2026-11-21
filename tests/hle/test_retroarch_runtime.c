@@ -111,10 +111,10 @@ int main(void)
     assert(mkdir(root_nested, 0700) == 0);
     assert(mkdir(root_resource, 0700) == 0);
     assert(mkdir(root_shaders, 0700) == 0);
-    write_text(root_wrapper, "#reference \"Root/base.slangp\"\\n#reference \"../resource/defaults.params\"\\n");
-    write_text(root_base, "shaders=1\\nshader0=../../shaders/pass.slang\\n");
-    write_text(root_params, "#reference \"$CORE$.params\"\\nHSM_TEST_PARAMETER = 0.75\\n");
-    write_text(root_pass, "#version 450\\nvoid main(){}\\n");
+    write_text(root_wrapper, "#reference \"Root/base.slangp\"\n#reference \"../resource/defaults.params\"\n");
+    write_text(root_base, "shaders=1\nshader0=../../shaders/pass.slang\n");
+    write_text(root_params, "#reference \"$CORE$.params\"\nHSM_TEST_PARAMETER = 0.75\n");
+    write_text(root_pass, "#version 450\nvoid main(){}\n");
     assert(hle_ra_program_load_from_root(package, "presets/wrapper.slangp",
                                          &program, error, sizeof(error)));
     assert(program.preset.pass_count == 1);
