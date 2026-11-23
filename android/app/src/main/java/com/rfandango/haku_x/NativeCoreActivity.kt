@@ -1485,10 +1485,10 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
 
   /** Show the labels that identify the two sides of the SGSR1 A/B view. */
   private fun updateSgsrCompareLabels(enabled: Boolean) {
-    val layout = mLayout ?: return
+    val rootLayout = mLayout ?: return
     if (!enabled) {
-      sgsrCompareLeftView?.let { layout.removeView(it) }
-      sgsrCompareRightView?.let { layout.removeView(it) }
+      sgsrCompareLeftView?.let { rootLayout.removeView(it) }
+      sgsrCompareRightView?.let { rootLayout.removeView(it) }
       sgsrCompareLeftView = null
       sgsrCompareRightView = null
       return
@@ -1506,7 +1506,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
         if (alignRight) addRule(RelativeLayout.ALIGN_PARENT_RIGHT) else addRule(RelativeLayout.ALIGN_PARENT_LEFT)
         setMargins(18, 18, 18, 0)
       }
-      layout.addView(this, params)
+      rootLayout.addView(this, params)
     }
     if (sgsrCompareLeftView == null) sgsrCompareLeftView = makeLabel("DESATIVADO", false)
     if (sgsrCompareRightView == null) sgsrCompareRightView = makeLabel("ATIVADO", true)
