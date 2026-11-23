@@ -2656,7 +2656,7 @@ static const char k_fs_nve[] =
     "  float edge = smoothstep(0.012, 0.16, range);\n"
     "  float noiseGate = smoothstep(0.004, 0.035, abs(detail));\n"
     "  float highlightGate = 1.0 - smoothstep(0.22, 0.55, range);\n"
-    "  float amount = 0.72 * edge * noiseGate * (0.35 + 0.65 * highlightGate);\n"
+    "  float amount = 0.72 * clamp(pc.extra.z, 0.0, 1.0) * edge * noiseGate * (0.35 + 0.65 * highlightGate);\n"
     "  vec3 enhanced = c + (c - avg) * amount;\n"
     "  o = ramp(clamp(enhanced, 0.0, 1.0));\n"
     "}\n";
@@ -3888,7 +3888,7 @@ static void log_path(unsigned p, bool fxaa, bool nis, int upscale, bool use_fsr,
             fxaa ? " after FXAA" : "", vw, vh, path);
 }
 
-void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, bool cas, float cas_sharpness, bool nis, float nis_sharpness, uint64_t key)
+void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, bool cas, float cas_sharpness, bool nis, float nis_sharpness, float nve_sharpness, uint64_t key)
 {
     /* FSR destination dimensions are independent of NIS output dimensions. */
     nis_status(12, 0);
@@ -4149,8 +4149,9 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
             pc[6] = (float)g_ps.f.w;
             pc[7] = (float)g_ps.f.h;
         } else if (!nis_done && upscale == HLE_UPSCALE_NVE && g_ps.pipe[P_NVE]) {
-            /* NVE is an optional final spatial pass. NIS and FSR retain priority. */
+            /* NVE owns its independent sharpness control (0-100%). */
             p = P_NVE;
+            pc[6] = nve_sharpness;
         }
         quad(cb, f, 0, g_ps.pipe[p], src, pc, iw, ih);
         const bool final_rcas = cas && g_ps.pipe[P_RCAS] && p == P_RCAS;
