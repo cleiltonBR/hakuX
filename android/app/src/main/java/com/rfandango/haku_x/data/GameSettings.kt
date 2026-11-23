@@ -21,7 +21,6 @@ enum class GameSetting(val key: String) {
   CAS_SHARPNESS("cas_sharpness"),
   NIS("nis"),
   NIS_SHARPNESS("nis_sharpness"),
-  NVE_SHARPNESS("nve_sharpness"),
   LANGUAGE("language"),
   SCREEN_FORMAT("screen_format"),
   VIDEO_480P("480p"),
@@ -114,8 +113,8 @@ class RunSettings(private val app: AppPrefs, private val game: GameOverrides?) {
   val cas get() = bool(GameSetting.CAS, app.cas)
   val casSharpness get() = game?.get(GameSetting.CAS_SHARPNESS)?.toFloatOrNull()?.coerceIn(0.0f, 2.0f) ?: app.casSharpness
   val nis get() = bool(GameSetting.NIS, app.nis)
+  val sgsrCompare get() = app.sgsrCompare
   val nisSharpness get() = game?.get(GameSetting.NIS_SHARPNESS)?.toFloatOrNull()?.coerceIn(0.0f, 1.0f) ?: app.nisSharpness
-  val nveSharpness get() = game?.get(GameSetting.NVE_SHARPNESS)?.toFloatOrNull()?.coerceIn(0.0f, 1.0f) ?: app.nveSharpness
   val language get() = text(GameSetting.LANGUAGE, app.language)
   val screenFormat get() = text(GameSetting.SCREEN_FORMAT, app.screenFormat)
   val video480p get() = bool(GameSetting.VIDEO_480P, app.video480p)
