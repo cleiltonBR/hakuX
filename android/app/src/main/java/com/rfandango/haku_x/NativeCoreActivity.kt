@@ -1505,7 +1505,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
       "Intensidade CAS" to "%.1f".format(java.util.Locale.US, prefs.casSharpness),
       "NIS" to if (prefs.nis) "Ativado" else "Desativado",
       "Nitidez NIS" to "${(prefs.nisSharpness * 100).toInt()}%",
-      "Nitidez HakuX NVE" to "${(prefs.nveSharpness * 100).toInt()}%",
+      "Intensidade do aprimoramento NVE" to "${(prefs.nveSharpness * 100).toInt()}%",
     )
     showSeriesXMenu("Imagem e gráficos", entries) { which ->
       when (which) {
@@ -1574,12 +1574,18 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
         }
         8 -> {
           showSeriesXSlider(
-            "Nitidez HakuX NVE",
+            "Intensidade do aprimoramento NVE",
             (prefs.nveSharpness * 100f).toInt().coerceIn(0, 100),
             100,
-            { "$it%" },
-            startLabel = "0%",
-            endLabel = "100%",
+            { value -> when {
+                value == 0 -> "Original"
+                value <= 25 -> "$value% • suave"
+                value <= 50 -> "$value% • moderado"
+                value <= 75 -> "$value% • forte"
+                else -> "$value% • máximo"
+              } },
+            startLabel = "0% • Original",
+            endLabel = "100% • Máximo",
           ) {
             prefs.nveSharpness = it / 100f
             nativeSetNveSharpness(prefs.nveSharpness)
