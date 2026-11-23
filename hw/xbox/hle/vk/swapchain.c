@@ -83,7 +83,7 @@ typedef struct PsFrame {
     VkCommandBuffer cb;
     VkSemaphore acquired;       /* its swapchain image is ready */
     VkSemaphore lsfg_acquired[3]; /* extra swapchain images for generated frames */
-    VkDescriptorSet set[6];     /* window, FXAA, EASU and up to three generated-frame draws */
+    VkDescriptorSet set[8];     /* window, FXAA, EASU, A/B comparison and three generated-frame draws */
     /* One immutable descriptor set per dispatch recorded in this command buffer:
      * real frame plus up to three LSFG-generated frames. */
     VkDescriptorSet nis_set[4];
@@ -3095,14 +3095,14 @@ static bool init(void)
         .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO, .setLayoutCount = 1,
         .pSetLayouts = &g_ps.dsl, .pushConstantRangeCount = 1, .pPushConstantRanges = &pcr };
     VkDescriptorPoolSize ps[5] = {
-        { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, PS_FRAMES * 6 },
-        { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, PS_FRAMES * 10 },
+        { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, PS_FRAMES * 8 },
+        { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, PS_FRAMES * 12 },
         { VK_DESCRIPTOR_TYPE_SAMPLER, PS_FRAMES * 4 },
         { VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, PS_FRAMES * 12 },
         { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, PS_FRAMES * 4 }
     };
     VkDescriptorPoolCreateInfo pci = {
-        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO, .maxSets = PS_FRAMES * 10,
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO, .maxSets = PS_FRAMES * 12,
         .poolSizeCount = ARRAY_SIZE(ps), .pPoolSizes = ps };
     VkBufferCreateInfo bci = { .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, .size = PS_FRAMES * PS_RAMP,
                                .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT };
@@ -3131,9 +3131,9 @@ static bool init(void)
                                         .flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
                                         .queueFamilyIndex = g_hvk.qfam };
         VkSemaphoreCreateInfo si = { .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
-        VkDescriptorSetLayout l[6] = { g_ps.dsl, g_ps.dsl, g_ps.dsl, g_ps.dsl, g_ps.dsl, g_ps.dsl };
+        VkDescriptorSetLayout l[8] = { g_ps.dsl, g_ps.dsl, g_ps.dsl, g_ps.dsl, g_ps.dsl, g_ps.dsl, g_ps.dsl, g_ps.dsl };
         VkDescriptorSetAllocateInfo dai = { .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-                                            .descriptorPool = g_ps.dp, .descriptorSetCount = 6,
+                                            .descriptorPool = g_ps.dp, .descriptorSetCount = 8,
                                             .pSetLayouts = l };
         if (T.vkCreateCommandPool(g_hvk.dev, &cpi, NULL, &f->pool) != VK_SUCCESS ||
             T.vkCreateSemaphore(g_hvk.dev, &si, NULL, &f->acquired) != VK_SUCCESS ||
@@ -3813,6 +3813,34 @@ static void quad(VkCommandBuffer cb, PsFrame *f, unsigned set, VkPipeline p, VkI
     T.vkCmdDraw(cb, 4, 1, 0, 0);
 }
 
+/* Draw a full-frame image into one half of the output for the graphics A/B
+ * comparison. Separate descriptor sets keep both sampled images immutable
+ * until the command buffer has been submitted. */
+static void quad_compare(VkCommandBuffer cb, PsFrame *f, unsigned set, VkPipeline p,
+                         VkImageView src, const float pc[12], uint32_t w, uint32_t h,
+                         bool right)
+{
+    VkDescriptorImageInfo ii = { g_ps.smp, src, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
+    VkDescriptorBufferInfo bi = { g_ps.ubo, (VkDeviceSize)(f - g_ps.fr) * PS_RAMP, 768 };
+    VkWriteDescriptorSet wr[2] = {
+        { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstSet = f->set[set], .dstBinding = 0,
+          .descriptorCount = 1, .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .pImageInfo = &ii },
+        { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstSet = f->set[set], .dstBinding = 1,
+          .descriptorCount = 1, .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .pBufferInfo = &bi } };
+    T.vkUpdateDescriptorSets(g_hvk.dev, 2, wr, 0, NULL);
+    const uint32_t middle = w / 2u;
+    const uint32_t x = right ? middle : 0u;
+    const uint32_t width = right ? w - middle : middle;
+    VkViewport vp = { (float)x, 0.0f, (float)width, (float)h, 0.0f, 1.0f };
+    VkRect2D sc = { { (int32_t)x, 0 }, { width, h } };
+    T.vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, p);
+    T.vkCmdSetViewport(cb, 0, 1, &vp);
+    T.vkCmdSetScissor(cb, 0, 1, &sc);
+    T.vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, g_ps.pl, 0, 1, &f->set[set], 0, NULL);
+    T.vkCmdPushConstants(cb, g_ps.pl, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, 48, pc);
+    T.vkCmdDraw(cb, 4, 1, 0, 0);
+}
+
 static void rendering(VkCommandBuffer cb, VkImageView v, uint32_t w, uint32_t h, bool clear)
 {
     VkRenderingAttachmentInfo ca = {
@@ -3978,11 +4006,10 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
     }
     bool nis_done = false;
     bool nis_sharpen_only = false;
-    /* The SGSR1 A/B view owns the frame while active, so NIS cannot replace it. */
-    const float compare_vw = sx * (float)ww, compare_vh = sy * (float)wh;
-    const bool sgsr_compare_active = sgsr_compare && upscale == HLE_UPSCALE_SGSR && g_ps.have &&
-        ((float)g_ps.f.w < compare_vw * 0.5f * 0.99f || (float)g_ps.f.h < compare_vh * 0.99f);
-    const bool use_nis = nis && !sgsr_compare_active;
+    /* Keep the unprocessed source so the left half can show the baseline. */
+    const VkImageView compare_src = src;
+    const bool compare_active = sgsr_compare && g_ps.have && iw >= 2u;
+    const bool use_nis = nis;
     nis_status(1, use_nis ? 1 : 0);
     nis_status(2, 0);
     nis_status(3, 0);
@@ -4131,9 +4158,25 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
             pc[4] = 1.0f / (float)g_ps.f.w;
             pc[5] = 1.0f / (float)g_ps.f.h;
             pc[6] = (float)g_ps.f.w;
-            pc[7] = sgsr_compare_active ? -(float)g_ps.f.h : (float)g_ps.f.h;
+            pc[7] = (float)g_ps.f.h;
         }
-        quad(cb, f, 0, g_ps.pipe[p], src, pc, iw, ih);
+        if (compare_active) {
+            /* Left: original frame. Right: the selected active processing chain
+             * (NIS, FSR/RCAS, SGSR1 or CAS), using the same output geometry. */
+            quad_compare(cb, f, 3, g_ps.pipe[P_BILINEAR], compare_src, pc, iw, ih, false);
+            quad_compare(cb, f, 4, g_ps.pipe[p], src, pc, iw, ih, true);
+            VkClearAttachment divider = {
+                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .colorAttachment = 0,
+                .clearValue = { .color = { { 1.0f, 1.0f, 1.0f, 1.0f } } }
+            };
+            VkClearRect divider_rect = {
+                .rect = { { (int32_t)(iw / 2u) - 1, 0 }, { 2u, ih } },
+                .baseArrayLayer = 0, .layerCount = 1
+            };
+            T.vkCmdClearAttachments(cb, 1, &divider, 1, &divider_rect);
+        } else {
+            quad(cb, f, 0, g_ps.pipe[p], src, pc, iw, ih);
+        }
         const bool final_rcas = cas && g_ps.pipe[P_RCAS] && p == P_RCAS;
         const bool fsr_rcas = use_fsr && final_rcas;
         nis_status(8, nis_done ? (nis_sharpen_only ? 4 : 3) :
@@ -4192,7 +4235,7 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
             generated_pc[4] = rx;
             generated_pc[5] = ry;
         }
-        quad(cb, f, 3u + i, g_ps.pipe[generated_pipeline], generated_view,
+        quad(cb, f, 5u + i, g_ps.pipe[generated_pipeline], generated_view,
              generated_pc, iw, ih);
         T.vkCmdEndRendering(cb);
         barrier(cb, generated_dst, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
