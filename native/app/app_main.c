@@ -7,7 +7,7 @@
  *            "loadstate=", "scale=", "video=", "asyncpipe=", "mods=", ...),
  *            and the window's: "aspect=auto|4:3|16:9|stretch" the picture's
  *            shape, "fxaa=0|1" FXAA over each frame and
- *            "upscale=bilinear|sgsr|fsr" how a frame smaller than its place on
+ *            "upscale=bilinear|sgsr|fsr|nve" how a frame smaller than its place on
  *            screen is scaled up; "padinput=sdl" the legacy input (the first
  *            SDL gamepad as player 1); "vkdriver=" the custom Vulkan driver
  *            (vkdriver.c)
@@ -164,7 +164,7 @@ EXPORT JNIEXPORT void JNICALL Java_com_rfandango_haku_1x_NativeCoreActivity_nati
 /* Runtime presentation controls from NativeCoreActivity's gameplay menu. */
 EXPORT JNIEXPORT void JNICALL Java_com_rfandango_haku_1x_NativeCoreActivity_nativeSetUpscale(JNIEnv *env, jclass cls, jint mode)
 {
-    if (mode < NC_UPSCALE_BILINEAR || mode > NC_UPSCALE_FSR) return;
+    if (mode < NC_UPSCALE_BILINEAR || mode > NC_UPSCALE_NVE) return;
     nc_present_set_upscale(mode);
 }
 
@@ -593,7 +593,8 @@ EXPORT int SDL_main(int argc, char *argv[])
             nc_present_set_fxaa(atoi(argv[i] + 5) != 0);
         }
         if (!strncmp(argv[i], "upscale=", 8)) {
-            nc_present_set_upscale(!strcmp(argv[i] + 8, "fsr") ? NC_UPSCALE_FSR :
+            nc_present_set_upscale(!strcmp(argv[i] + 8, "nve") ? NC_UPSCALE_NVE :
+                                   !strcmp(argv[i] + 8, "fsr") ? NC_UPSCALE_FSR :
                                    !strcmp(argv[i] + 8, "sgsr") ? NC_UPSCALE_SGSR : NC_UPSCALE_BILINEAR);
         }
         if (!strncmp(argv[i], "cas=", 4)) {
