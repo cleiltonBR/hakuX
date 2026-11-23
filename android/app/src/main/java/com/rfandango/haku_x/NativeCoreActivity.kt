@@ -345,6 +345,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     args += "nis=${if (settings.nis) 1 else 0}"
     args += "nis_sharpness=${settings.nisSharpness}"
     args += "nve_sharpness=${settings.nveSharpness}"
+    args += "nve_compare=${if (getSharedPreferences("x1box_prefs", Context.MODE_PRIVATE).getBoolean(PREF_NVE_COMPARE, true)) 1 else 0}"
     /* LSFG shader resources are read from the user's private app-storage copy.
      * The DLL itself is never loaded as executable code. */
     val lsfgPrefs = AppPrefs(this)
@@ -1345,6 +1346,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
       getString(R.string.overlay_menu_controllers) to "Configurar jogadores e controles conectados",
       "Informações na tela" to "Escolha FPS, RAM, FSR, NIS, CAS e GPU",
       "Imagem e gráficos" to "FSR 1.0, CAS, NIS, resolução e filtros",
+      "Comparador NVE: " + if (getSharedPreferences("x1box_prefs", Context.MODE_PRIVATE).getBoolean(PREF_NVE_COMPARE, true)) "ATIVADO" else "DESATIVADO" to "Alternar comparação lado a lado: original à esquerda e NVE à direita",
       "LSFG • Geração de quadros" to "Multiplicador, desempenho e Flow Scale"
     )
     val actions = mutableListOf<() -> Unit>(
@@ -1353,6 +1355,13 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
       ::showPlayers,
       ::showRuntimeOverlayOptions,
       ::showRuntimeGraphics,
+      {
+        val comparePrefs = getSharedPreferences("x1box_prefs", Context.MODE_PRIVATE)
+        val enabled = !comparePrefs.getBoolean(PREF_NVE_COMPARE, true)
+        comparePrefs.edit().putBoolean(PREF_NVE_COMPARE, enabled).apply()
+        nativeSetNveCompare(enabled)
+        Toast.makeText(this, if (enabled) "Comparador NVE ativado" else "Comparador NVE desativado", Toast.LENGTH_SHORT).show()
+      },
       ::showRuntimeLsfg
     )
     if (states) {
@@ -1963,6 +1972,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     const val PREF_NIS = "nis_enabled"
     const val PREF_NIS_SHARPNESS = "nis_sharpness"
     const val PREF_NVE_SHARPNESS = "nve_sharpness"
+    const val PREF_NVE_COMPARE = "nve_compare"
     const val PREF_UPSCALE = "upscale_filter"
     const val PREF_ANISO = "anisotropy_enabled"
     const val PREF_ANISO_LEVEL = "anisotropy_level"
@@ -2058,6 +2068,10 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     /** Change HakuX NVE spatial sharpness while the game runs (0-1). */
     @JvmStatic
     external fun nativeSetNveSharpness(sharpness: Float)
+
+    /** Toggle the same-frame original/NVE split comparison while the game runs. */
+    @JvmStatic
+    external fun nativeSetNveCompare(enabled: Boolean)
 
     /** NIS GPU state: ready, enabled, executed, reason, input/output dimensions, final path. */
     @JvmStatic
