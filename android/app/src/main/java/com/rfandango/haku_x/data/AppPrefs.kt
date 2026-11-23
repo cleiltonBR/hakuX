@@ -181,6 +181,11 @@ class AppPrefs(context: Context) {
     get() = sp.getFloat(NativeCoreActivity.PREF_NIS_SHARPNESS, 0.5f).coerceIn(0.0f, 1.0f)
     set(value) = sp.edit { putFloat(NativeCoreActivity.PREF_NIS_SHARPNESS, value.coerceIn(0.0f, 1.0f)) }
 
+  /** HakuX NVE spatial filter sharpness, 0-100 percent. */
+  var nveSharpness: Float
+    get() = sp.getFloat(NativeCoreActivity.PREF_NVE_SHARPNESS, 0.5f).coerceIn(0.0f, 1.0f)
+    set(value) = sp.edit { putFloat(NativeCoreActivity.PREF_NVE_SHARPNESS, value.coerceIn(0.0f, 1.0f)) }
+
   /** How a picture smaller than the screen is scaled up: bilinear, SGSR or FSR. */
   var upscaleFilter: String
     get() = sp.getString(NativeCoreActivity.PREF_UPSCALE, NativeCoreActivity.UPSCALE_BILINEAR)
