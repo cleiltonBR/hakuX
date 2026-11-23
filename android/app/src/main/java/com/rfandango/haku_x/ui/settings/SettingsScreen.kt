@@ -125,6 +125,7 @@ fun SettingsScreen(
   var casSharpnessDialog by remember { mutableStateOf(false) }
   var nis by remember { mutableStateOf(prefs.nis) }
   var nisSharpness by remember { mutableStateOf(prefs.nisSharpness) }
+  var nveSharpness by remember { mutableStateOf(prefs.nveSharpness) }
   var nisSharpnessDialog by remember { mutableStateOf(false) }
   var upscale by remember { mutableStateOf(prefs.upscaleFilter) }
   var upscaleDialog by remember { mutableStateOf(false) }
@@ -520,6 +521,16 @@ fun SettingsScreen(
         summary = stringResource(R.string.settings_cas_desc) + " " + stringResource(R.string.settings_applies_next_start),
         checked = cas,
         onChange = { cas = it; prefs.cas = it },
+      )
+      GraphicsSlider(
+        title = "Nitidez HakuX NVE",
+        valueLabel = "${(nveSharpness * 100).toInt()}%",
+        value = nveSharpness * 100f,
+        valueRange = 0f..100f,
+        steps = 99,
+        startLabel = "0%",
+        endLabel = "100%",
+        onValueChange = { nveSharpness = it / 100f; prefs.nveSharpness = nveSharpness },
       )
       GraphicsSlider(
         title = stringResource(R.string.settings_cas_sharpness),
