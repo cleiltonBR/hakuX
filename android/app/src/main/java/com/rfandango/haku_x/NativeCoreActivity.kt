@@ -1346,7 +1346,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
       getString(R.string.overlay_menu_controllers) to "Configurar jogadores e controles conectados",
       "Informações na tela" to "Escolha FPS, RAM, FSR, NIS, CAS e GPU",
       "Imagem e gráficos" to "FSR 1.0, CAS, NIS, resolução e filtros",
-      "Comparador NVE: " + if (getSharedPreferences("x1box_prefs", Context.MODE_PRIVATE).getBoolean(PREF_NVE_COMPARE, true)) "ATIVADO" else "DESATIVADO" to "Alternar comparação lado a lado: original à esquerda e NVE à direita",
+      ("Comparador NVE: " + (if (getSharedPreferences("x1box_prefs", Context.MODE_PRIVATE).getBoolean(PREF_NVE_COMPARE, true)) "ATIVADO" else "DESATIVADO")) to "Alternar comparação lado a lado: original à esquerda e NVE à direita",
       "LSFG • Geração de quadros" to "Multiplicador, desempenho e Flow Scale"
     )
     val actions = mutableListOf<() -> Unit>(
