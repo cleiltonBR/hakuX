@@ -2584,9 +2584,17 @@ static const char k_fs_sgsr[] =
     "  float edgeThreshold = EdgeThreshold;\n"
     "  float edgeSharpness = EdgeSharpness;\n"
     "  vec4 ViewportInfo = pc.extra;\n"
+    "  bool compare = ViewportInfo.w < 0.0;\n"
+    "  ViewportInfo.w = abs(ViewportInfo.w);\n"
+    "  vec2 uv = v_uv;\n"
+    "  if (compare) {\n"
+    "    if (v_uv.x < 0.5) { o = ramp(textureLod(u_tex, vec2(v_uv.x * 2.0, v_uv.y), 0.0).rgb); return; }\n"
+    "    if (abs(v_uv.x - 0.5) < 0.0015) { o = vec4(1.0); return; }\n"
+    "    uv.x = (v_uv.x - 0.5) * 2.0;\n"
+    "  }\n"
     "  vec4 color;\n"
-    "  color.xyz = textureLod(u_tex, v_uv, 0.0).xyz;\n"
-    "  vec2 imgCoord = ((v_uv * ViewportInfo.zw) + vec2(-0.5, 0.5));\n"
+    "  color.xyz = textureLod(u_tex, uv, 0.0).xyz;\n"
+    "  vec2 imgCoord = ((uv * ViewportInfo.zw) + vec2(-0.5, 0.5));\n"
     "  vec2 imgCoordPixel = floor(imgCoord);\n"
     "  vec2 coord = (imgCoordPixel * ViewportInfo.xy);\n"
     "  vec2 pl = (imgCoord + (-imgCoordPixel));\n"
@@ -3858,7 +3866,7 @@ static void log_path(unsigned p, bool fxaa, bool nis, int upscale, bool use_fsr,
             fxaa ? " after FXAA" : "", vw, vh, path);
 }
 
-void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, bool cas, float cas_sharpness, bool nis, float nis_sharpness, uint64_t key)
+void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, bool cas, float cas_sharpness, bool nis, float nis_sharpness, bool sgsr_compare, uint64_t key)
 {
     /* FSR destination dimensions are independent of NIS output dimensions. */
     nis_status(12, 0);
@@ -3970,8 +3978,9 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
     }
     bool nis_done = false;
     bool nis_sharpen_only = false;
-    /* The selected image filter owns the final presentation path. NIS is optional. */
-    const bool use_nis = nis;
+    /* The SGSR1 A/B view owns the frame while active, so NIS cannot replace it. */
+    const bool sgsr_compare_active = sgsr_compare && upscale == HLE_UPSCALE_SGSR;
+    const bool use_nis = nis && !sgsr_compare_active;
     nis_status(1, use_nis ? 1 : 0);
     nis_status(2, 0);
     nis_status(3, 0);
@@ -4120,7 +4129,7 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
             pc[4] = 1.0f / (float)g_ps.f.w;
             pc[5] = 1.0f / (float)g_ps.f.h;
             pc[6] = (float)g_ps.f.w;
-            pc[7] = (float)g_ps.f.h;
+            pc[7] = sgsr_compare_active ? -(float)g_ps.f.h : (float)g_ps.f.h;
         }
         quad(cb, f, 0, g_ps.pipe[p], src, pc, iw, ih);
         const bool final_rcas = cas && g_ps.pipe[P_RCAS] && p == P_RCAS;
