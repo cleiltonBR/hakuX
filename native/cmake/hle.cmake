@@ -63,11 +63,6 @@ add_library(hakux_hle STATIC
   ${NC_HLE}/shader/ff_gen.c
   ${NC_HLE}/shader/ffhw.c
   ${NC_HLE}/shader/glsl_compile.c
-  ${NC_HLE}/shader/retroarch_preset.c
-  ${NC_HLE}/shader/retroarch_runtime.c
-  ${NC_HLE}/shader/retroarch_compile.c
-  ${NC_HLE}/shader/retroarch_spirv.c
-  ${NC_HLE}/shader/retroarch_vk.c
   ${NC_HLE}/shader/psh.c
   ${NC_HLE}/shader/vsh.c
   ${NC_HLE}/tex/xdk_res.c
