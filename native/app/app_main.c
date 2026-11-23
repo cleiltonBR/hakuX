@@ -185,6 +185,11 @@ EXPORT JNIEXPORT void JNICALL Java_com_rfandango_haku_1x_NativeCoreActivity_nati
     nc_present_set_nve_sharpness(sharpness);
 }
 
+EXPORT JNIEXPORT void JNICALL Java_com_rfandango_haku_1x_NativeCoreActivity_nativeSetNveCompare(JNIEnv *env, jclass cls, jboolean enabled)
+{
+    nc_present_set_nve_compare(enabled != JNI_FALSE);
+}
+
 EXPORT JNIEXPORT void JNICALL Java_com_rfandango_haku_1x_NativeCoreActivity_nativeSetRenderScale(JNIEnv *env, jclass cls, jint scale)
 {
     nc_hle_set_render_scale(scale);
@@ -613,6 +618,7 @@ EXPORT int SDL_main(int argc, char *argv[])
     bool nis_enabled = false;
     float nis_sharpness = 0.5f;
     float nve_sharpness = 0.5f;
+    bool nve_compare = true;
     const char *lsfg_dll_path = NULL;
     int lsfg_multiplier = 2, lsfg_performance = 1, lsfg_flow_scale = 100;
     for (int i = 3; i < argc; i++) {
@@ -655,6 +661,7 @@ EXPORT int SDL_main(int argc, char *argv[])
         if (!strncmp(argv[i], "nis=", 4)) nis_enabled = atoi(argv[i] + 4) != 0;
         if (!strncmp(argv[i], "nis_sharpness=", 14)) nis_sharpness = strtof(argv[i] + 14, NULL);
         if (!strncmp(argv[i], "nve_sharpness=", 14)) nve_sharpness = strtof(argv[i] + 14, NULL);
+        if (!strncmp(argv[i], "nve_compare=", 12)) nve_compare = atoi(argv[i] + 12) != 0;
 #ifdef CONFIG_VULKAN
         if (!strncmp(argv[i], "lsfg_dll=", 9)) lsfg_dll_path = argv[i] + 9;
         if (!strncmp(argv[i], "lsfg_multiplier=", 16)) lsfg_multiplier = atoi(argv[i] + 16);
@@ -679,6 +686,7 @@ EXPORT int SDL_main(int argc, char *argv[])
     }
     nc_present_set_nis(nis_enabled, nis_sharpness);
     nc_present_set_nve_sharpness(nve_sharpness);
+    nc_present_set_nve_compare(nve_compare);
     nc_present_set_lsfg(lsfg_dll_path, lsfg_multiplier, lsfg_performance != 0, lsfg_flow_scale);
     nc_options_apply(&opt);
     nc_present_set_widescreen(opt.video >= 0 && (opt.video & NC_VIDEO_WIDESCREEN));
