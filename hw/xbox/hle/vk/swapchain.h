@@ -39,7 +39,7 @@ bool hle_present_frame(uint32_t *w, uint32_t *h);
  * gamma ramp, and presented. fxaa: FXAA over each new frame first; average:
  * false samples a frame larger than its place bilinearly too (comparisons).
  * key: what hle_present_unchanged compares next. */
-void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, bool cas, float cas_sharpness, bool nis, float nis_sharpness, float nve_sharpness, uint64_t key);
+void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, bool cas, float cas_sharpness, bool nis, float nis_sharpness, float nve_sharpness, bool nve_compare, uint64_t key);
 /* GPU overlay: ready, NIS enabled/executed, failure, input/output dimensions,
  * selected path, CAS enabled/strength, and whether RCAS actually ran. */
 void hle_present_nis_status(int status[14]);
