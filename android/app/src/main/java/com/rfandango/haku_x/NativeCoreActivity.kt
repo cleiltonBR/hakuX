@@ -773,8 +773,8 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
   /** FSR/RCAS controls applied immediately to the running Vulkan presenter. */
   private fun showRuntimeGraphics() {
     val prefs = AppPrefs(this)
-    val modes = listOf(UPSCALE_BILINEAR, UPSCALE_SGSR, UPSCALE_FSR)
-    val modeNames = arrayOf("Bilinear", "SGSR", "FidelityFX FSR 1.0")
+    val modes = listOf(UPSCALE_BILINEAR, UPSCALE_SGSR, UPSCALE_FSR, UPSCALE_NVE)
+    val modeNames = arrayOf("Bilinear", "SGSR", "FidelityFX FSR 1.0", "HakuX NVE (experimental)")
     fun refresh() {
       val current = modes.indexOf(prefs.upscaleFilter).coerceAtLeast(0)
       nativeSetUpscale(current)
@@ -1238,6 +1238,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     const val UPSCALE_BILINEAR = "bilinear"
     const val UPSCALE_SGSR = "sgsr"
     const val UPSCALE_FSR = "fsr"
+    const val UPSCALE_NVE = "nve"
 
     /** fps, average frame time (ms), last frame time (ms), 1 if push-buffer decoding renders. */
     @JvmStatic
@@ -1307,7 +1308,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     @JvmStatic
     external fun nativeGetRumble(player: Int): Int
 
-    /** Change the running presenter's upscaling filter: 0 bilinear, 1 SGSR, 2 FSR. */
+    /** Change the running presenter's filter: 0 bilinear, 1 SGSR, 2 FSR, 3 HakuX NVE. */
     @JvmStatic
     external fun nativeSetUpscale(mode: Int)
 
