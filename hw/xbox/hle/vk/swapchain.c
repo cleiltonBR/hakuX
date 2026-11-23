@@ -2672,6 +2672,9 @@ static const char k_fs_nve[] =
     "  vec3 neighborhoodMin = min(c, min(min(min(nw, n), min(ne, w)), min(min(e, sw), min(s, se))));\n"
     "  vec3 neighborhoodMax = max(c, max(max(max(nw, n), max(ne, w)), max(max(e, sw), max(s, se))));\n"
     "  enhanced = clamp(enhanced, max(vec3(0.0), neighborhoodMin - vec3(0.035)), min(vec3(1.0), neighborhoodMax + vec3(0.035)));\n"
+    "  /* Diagnostic A/B: left is the untouched source; right is NVE. */\n"
+    "  if (pc.extra.w > 0.5 && v_uv.x < 0.5) { o = ramp(c); return; }\n"
+    "  if (pc.extra.w > 0.5 && abs(v_uv.x - 0.5) < 0.0015) { o = vec4(1.0); return; }\n"
     "  o = ramp(clamp(enhanced, 0.0, 1.0));\n"
     "}\n";
     
@@ -4172,6 +4175,7 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
             pc[4] = rx;
             pc[5] = ry;
             pc[6] = nve_sharpness;
+            pc[7] = 1.0f; /* temporary same-frame A/B validation */
         }
         quad(cb, f, 0, g_ps.pipe[p], src, pc, iw, ih);
         const bool final_rcas = cas && g_ps.pipe[P_RCAS] && p == P_RCAS;
