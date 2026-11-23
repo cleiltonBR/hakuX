@@ -4002,7 +4002,10 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
     }
     bool nis_done = false;
     bool nis_sharpen_only = false;
-    nis_status(1, nis ? 1 : 0);
+    /* The selected image filter owns the final presentation path. NIS is a
+     * separate optional mode; do not let its global toggle silently bypass NVE. */
+    const bool use_nis = nis && upscale != HLE_UPSCALE_NVE;
+    nis_status(1, use_nis ? 1 : 0);
     nis_status(2, 0);
     nis_status(3, 0);
     nis_status(4, g_ps.have ? (int)g_ps.f.w : 0);
@@ -4013,7 +4016,7 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
     nis_status(9, cas ? 1 : 0);
     nis_status(10, (int)(cas_sharpness * 100.0f + 0.5f));
     nis_status(11, 0);
-    if (g_ps.have && nis) {
+    if (g_ps.have && use_nis) {
         const float nw = sx * (float)ww, nh = sy * (float)wh;
         const uint32_t target_w = (uint32_t)(nw + 0.5f), target_h = (uint32_t)(nh + 0.5f);
         const bool requires_downscale = target_w <= g_ps.f.w || target_h <= g_ps.f.h;
