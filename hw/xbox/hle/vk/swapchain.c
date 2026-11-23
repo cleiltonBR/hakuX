@@ -4176,8 +4176,10 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
         quad(cb, f, 0, g_ps.pipe[p], src, pc, iw, ih);
         const bool final_rcas = cas && g_ps.pipe[P_RCAS] && p == P_RCAS;
         const bool fsr_rcas = use_fsr && final_rcas;
+        /* NVE needs its own overlay code; otherwise it falls through to Bilinear. */
         nis_status(8, nis_done ? (nis_sharpen_only ? 4 : 3) :
                    fsr_easu ? (fsr_rcas ? 6 : 5) : fsr_rcas ? 7 : use_fsr ? 8 :
+                   p == P_NVE ? 9 : upscale == HLE_UPSCALE_NVE ? 10 :
                    p == P_AREA ? 1 : p == P_SGSR ? 2 : 0);
         nis_status(11, final_rcas ? 1 : 0);
         log_path(p, fxaa_done, nis_done, upscale, use_fsr, fsr_easu, final_rcas,
