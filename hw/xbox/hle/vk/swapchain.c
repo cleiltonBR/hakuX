@@ -2633,6 +2633,7 @@ static const char k_fs_sgsr[] =
     "}\n";
 
 /* HakuX NVE 2.0 stage 1: multi-scale, edge-directed spatial reconstruction.
+ * Keep the diagnostic A/B path identical for both halves of the source frame.
  * Separates fine texture response from broader structure and edge response.
  * Uses only the presented color image; it does not invent texture or use AI/ML. */
 static const char k_fs_nve[] =
