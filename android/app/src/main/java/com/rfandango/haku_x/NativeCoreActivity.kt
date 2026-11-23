@@ -1346,7 +1346,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
       getString(R.string.overlay_menu_controllers) to "Configurar jogadores e controles conectados",
       "Informações na tela" to "Escolha FPS, RAM, FSR, NIS, CAS e GPU",
       "Imagem e gráficos" to "FSR 1.0, CAS, NIS, resolução e filtros",
-      ("Comparador SGSR1: " + (if (AppPrefs(this).sgsrCompare) "ATIVADO" else "DESATIVADO")) to "Esquerda: DESATIVADO • Direita: ATIVADO",
+      ("Comparador SGSR1: " + (if (AppPrefs(this).sgsrCompare) "ATIVADO" else "DESATIVADO")) to "Selecione SGSR1 • Esquerda: DESATIVADO • Direita: ATIVADO",
       "LSFG • Geração de quadros" to "Multiplicador, desempenho e Flow Scale"
     )
     val actions = mutableListOf<() -> Unit>(
@@ -1516,7 +1516,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
   private fun showRuntimeGraphics() {
     val prefs = AppPrefs(this)
     val modes = listOf(UPSCALE_BILINEAR, UPSCALE_SGSR, UPSCALE_FSR)
-    val modeNames = listOf("Bilinear", "SGSR 1", "FidelityFX FSR 1.0")
+    val modeNames = listOf("Bilinear", "SGSR1", "FidelityFX FSR 1.0")
     fun refresh() {
       nativeSetUpscale(modes.indexOf(prefs.upscaleFilter).coerceAtLeast(0))
       nativeSetCas(prefs.cas, prefs.casSharpness)
