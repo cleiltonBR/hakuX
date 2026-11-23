@@ -98,7 +98,6 @@ fun SetupScreen(onDone: () -> Unit) {
         NativeCoreActivity.UPSCALE_BILINEAR to "Bilinear",
         NativeCoreActivity.UPSCALE_SGSR to "SGSR",
         NativeCoreActivity.UPSCALE_FSR to "FidelityFX FSR 1.0",
-        NativeCoreActivity.UPSCALE_NVE to "HakuX NVE (experimental)",
       )
       Text(
         "Escolha o filtro usado para ampliar a imagem do jogo. Você também poderá alterá-lo no menu rápido e nas configurações.",
