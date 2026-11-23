@@ -28,7 +28,7 @@ void nc_present_set_widescreen(bool on);
 void nc_present_set_fxaa(bool on);
 /* A frame smaller than its place in the window: scaled up bilinearly, or by
  * Snapdragon Game Super Resolution (a larger one is always averaged down). */
-enum { NC_UPSCALE_BILINEAR, NC_UPSCALE_SGSR, NC_UPSCALE_FSR };   /* swapchain.h HLE_UPSCALE_*'s */
+enum { NC_UPSCALE_BILINEAR, NC_UPSCALE_SGSR, NC_UPSCALE_FSR, NC_UPSCALE_NVE };   /* swapchain.h HLE_UPSCALE_*'s */
 void nc_present_set_upscale(int mode);
 /* RCAS (FSR's Contrast Adaptive Sharpening), only on the FSR path. */
 void nc_present_set_cas(bool on);
