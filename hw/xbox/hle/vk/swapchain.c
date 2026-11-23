@@ -55,7 +55,7 @@
 #endif
 
 /* P_RCAS draws into the window (its format), P_EASU into an RGBA8 image */
-enum { P_BILINEAR, P_AREA, P_SGSR, P_RCAS, P_FXAA, P_EASU, P_COUNT };
+enum { P_BILINEAR, P_AREA, P_SGSR, P_RCAS, P_NVE, P_FXAA, P_EASU, P_COUNT };
 
 typedef struct LsfgAlphaImage {
     VkImage image;
@@ -2632,6 +2632,35 @@ static const char k_fs_sgsr[] =
     "  o = ramp(color.xyz);\n"
     "}\n";
 
+/* HakuX NVE v0: edge-aware spatial detail reconstruction.
+ * Deterministic GPU filter; this prototype is not a trained neural network.
+ * Flat regions are protected and sharpening is reduced at strong edges. */
+static const char k_fs_nve[] =
+    "void main() {\n"
+    "  vec2 px = 1.0 / vec2(textureSize(u_tex, 0));\n"
+    "  vec3 c = textureLod(u_tex, v_uv, 0.0).rgb;\n"
+    "  vec3 n = textureLod(u_tex, v_uv + vec2(0.0, -px.y), 0.0).rgb;\n"
+    "  vec3 s = textureLod(u_tex, v_uv + vec2(0.0,  px.y), 0.0).rgb;\n"
+    "  vec3 e = textureLod(u_tex, v_uv + vec2( px.x, 0.0), 0.0).rgb;\n"
+    "  vec3 w = textureLod(u_tex, v_uv + vec2(-px.x, 0.0), 0.0).rgb;\n"
+    "  vec3 avg = (n + s + e + w) * 0.25;\n"
+    "  float lc = dot(c, vec3(0.2126, 0.7152, 0.0722));\n"
+    "  float ln = dot(n, vec3(0.2126, 0.7152, 0.0722));\n"
+    "  float ls = dot(s, vec3(0.2126, 0.7152, 0.0722));\n"
+    "  float le = dot(e, vec3(0.2126, 0.7152, 0.0722));\n"
+    "  float lw = dot(w, vec3(0.2126, 0.7152, 0.0722));\n"
+    "  float lo = min(lc, min(min(ln, ls), min(le, lw)));\n"
+    "  float hi = max(lc, max(max(ln, ls), max(le, lw)));\n"
+    "  float range = hi - lo;\n"
+    "  float detail = lc - dot(avg, vec3(0.2126, 0.7152, 0.0722));\n"
+    "  float edge = smoothstep(0.012, 0.16, range);\n"
+    "  float noiseGate = smoothstep(0.004, 0.035, abs(detail));\n"
+    "  float highlightGate = 1.0 - smoothstep(0.22, 0.55, range);\n"
+    "  float amount = 0.72 * edge * noiseGate * (0.35 + 0.65 * highlightGate);\n"
+    "  vec3 enhanced = c + (c - avg) * amount;\n"
+    "  o = ramp(clamp(enhanced, 0.0, 1.0));\n"
+    "}\n";
+
 static const char k_fs_easu[] =
     "// FidelityFX Super Resolution 1.0, EASU. Copyright (c) 2021 Advanced Micro\n"
     "// Devices, Inc. (MIT license). extra = 1/w, 1/h, w, h of the input frame.\n"
@@ -3148,8 +3177,8 @@ static bool init(void)
     g_ps.nis_resources_ready = nis_ready;
     nis_status(0, nis_ready ? 1 : 0);
     g_ps.vs = module(HLE_SHADER_VERTEX, k_vs, "");
-    static const char *const body[P_COUNT] = { k_fs_bilinear, k_fs_area, k_fs_sgsr, k_fs_rcas, k_fs_fxaa,
-                                                k_fs_easu };
+    static const char *const body[P_COUNT] = { k_fs_bilinear, k_fs_area, k_fs_sgsr, k_fs_rcas, k_fs_nve,
+                                                k_fs_fxaa, k_fs_easu };
     for (unsigned i = 0; i < P_COUNT; i++) {
         g_ps.fs[i] = module(HLE_SHADER_FRAGMENT, k_fs_head, body[i]);
     }
@@ -3384,7 +3413,7 @@ static bool make_swapchain(uint32_t w, uint32_t h)
             g_ps.lsfg_extra_budget, g_ps.lsfg_multiplier);
     g_ps.stale = false;
     if (fmt.format != g_ps.pipe_fmt) {
-        static const char *const names[P_FXAA] = { "bilinear", "area", "SGSR", "FSR RCAS" };
+        static const char *const names[P_FXAA] = { "bilinear", "area", "SGSR", "FSR RCAS", "HakuX NVE" };
         for (unsigned i = 0; i < P_FXAA; i++) {
             if (g_ps.pipe[i]) {
                 T.vkDestroyPipeline(g_hvk.dev, g_ps.pipe[i], NULL);
@@ -3852,6 +3881,7 @@ static void log_path(unsigned p, bool fxaa, bool nis, int upscale, bool use_fsr,
         : upscale == HLE_UPSCALE_FSR && p == P_AREA ? "averaged down (FSR bypassed)"
         : p == P_AREA ? "averaged down"
         : p == P_RCAS ? "FSR 1.0 (RCAS)"
+        : p == P_NVE ? "HakuX NVE spatial"
         : p == P_SGSR ? "scaled up by SGSR"
         : "bilinear";
     hle_log("hakuX-hle-back", "present: %ux%u%s into %ux%u: %s", s_w, s_h,
@@ -4086,7 +4116,7 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
             p = P_RCAS;
             pc[4] = exp2f(-cas_sharpness);
         } else if (!nis_done && cas && upscale != HLE_UPSCALE_SGSR &&
-                   upscale != HLE_UPSCALE_FSR && g_ps.pipe[P_RCAS]) {
+                   upscale != HLE_UPSCALE_FSR && upscale != HLE_UPSCALE_NVE && g_ps.pipe[P_RCAS]) {
             /* CAS/RCAS must also run when selected without NIS or FSR.
              * In this path it is the final presentation filter, rather than
              * silently falling back to bilinear with the CAS toggle ignored. */
@@ -4118,6 +4148,9 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
             pc[5] = 1.0f / (float)g_ps.f.h;
             pc[6] = (float)g_ps.f.w;
             pc[7] = (float)g_ps.f.h;
+        } else if (!nis_done && upscale == HLE_UPSCALE_NVE && g_ps.pipe[P_NVE]) {
+            /* NVE is an optional final spatial pass. NIS and FSR retain priority. */
+            p = P_NVE;
         }
         quad(cb, f, 0, g_ps.pipe[p], src, pc, iw, ih);
         const bool final_rcas = cas && g_ps.pipe[P_RCAS] && p == P_RCAS;
