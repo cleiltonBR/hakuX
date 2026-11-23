@@ -5,9 +5,12 @@ import android.widget.Toast
 import java.io.File
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -22,6 +25,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.rfandango.haku_x.R
+import com.rfandango.haku_x.NativeCoreActivity
 import com.rfandango.haku_x.data.AppPrefs
 import com.rfandango.haku_x.data.LosslessDllStore
 import com.rfandango.haku_x.data.Storage
@@ -40,6 +44,8 @@ fun SetupScreen(onDone: () -> Unit) {
   val context = LocalContext.current
   val prefs = remember { AppPrefs(context) }
   var folder by remember { mutableStateOf(prefs.gamesFolderUri) }
+  var upscale by remember { mutableStateOf(prefs.upscaleFilter) }
+  var upscaleMenuExpanded by remember { mutableStateOf(false) }
   var lsfgDll by remember { mutableStateOf(prefs.lsfgDllPath) }
   var lsfgMultiplier by remember { mutableStateOf(prefs.lsfgMultiplier.toFloat()) }
   var lsfgPerformance by remember { mutableStateOf(if (prefs.lsfgPerformanceMode) 1f else 0f) }
@@ -85,6 +91,39 @@ fun SetupScreen(onDone: () -> Unit) {
       )
       OutlinedButton(onClick = { pickFolder.launch(folder) }) {
         Text(stringResource(R.string.setup_pick_disc))
+      }
+    }
+    OnboardingCard("Filtro de imagem") {
+      val modes = listOf(
+        NativeCoreActivity.UPSCALE_BILINEAR to "Bilinear",
+        NativeCoreActivity.UPSCALE_SGSR to "SGSR",
+        NativeCoreActivity.UPSCALE_FSR to "FidelityFX FSR 1.0",
+        NativeCoreActivity.UPSCALE_NVE to "HakuX NVE (experimental)",
+      )
+      Text(
+        "Escolha o filtro usado para ampliar a imagem do jogo. Você também poderá alterá-lo no menu rápido e nas configurações.",
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
+      Box {
+        OutlinedButton(onClick = { upscaleMenuExpanded = true }) {
+          Text(modes.firstOrNull { it.first == upscale }?.second ?: "Bilinear")
+        }
+        DropdownMenu(
+          expanded = upscaleMenuExpanded,
+          onDismissRequest = { upscaleMenuExpanded = false },
+        ) {
+          modes.forEach { (value, label) ->
+            DropdownMenuItem(
+              text = { Text(label) },
+              onClick = {
+                upscale = value
+                prefs.upscaleFilter = value
+                upscaleMenuExpanded = false
+              },
+            )
+          }
+        }
       }
     }
     OnboardingCard("Lossless Scaling · Frame Generation") {
