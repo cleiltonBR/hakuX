@@ -3979,7 +3979,9 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
     bool nis_done = false;
     bool nis_sharpen_only = false;
     /* The SGSR1 A/B view owns the frame while active, so NIS cannot replace it. */
-    const bool sgsr_compare_active = sgsr_compare && upscale == HLE_UPSCALE_SGSR;
+    const float compare_vw = sx * (float)ww, compare_vh = sy * (float)wh;
+    const bool sgsr_compare_active = sgsr_compare && upscale == HLE_UPSCALE_SGSR && g_ps.have &&
+        ((float)g_ps.f.w < compare_vw * 0.99f || (float)g_ps.f.h < compare_vh * 0.99f);
     const bool use_nis = nis && !sgsr_compare_active;
     nis_status(1, use_nis ? 1 : 0);
     nis_status(2, 0);
