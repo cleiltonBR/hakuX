@@ -2638,11 +2638,13 @@ static const char k_fs_sgsr[] =
 static const char k_fs_nve[] =
     "void main() {\n"
     "  vec2 px = 1.0 / vec2(textureSize(u_tex, 0));\n"
+    "  vec2 radius = max(vec2(1.0), pc.extra.xy * 0.5);\n"
+    "  vec2 stepUV = px * radius;\n"
     "  vec3 c = textureLod(u_tex, v_uv, 0.0).rgb;\n"
-    "  vec3 n = textureLod(u_tex, v_uv + vec2(0.0, -px.y), 0.0).rgb;\n"
-    "  vec3 s = textureLod(u_tex, v_uv + vec2(0.0,  px.y), 0.0).rgb;\n"
-    "  vec3 e = textureLod(u_tex, v_uv + vec2( px.x, 0.0), 0.0).rgb;\n"
-    "  vec3 w = textureLod(u_tex, v_uv + vec2(-px.x, 0.0), 0.0).rgb;\n"
+    "  vec3 n = textureLod(u_tex, v_uv + vec2(0.0, -stepUV.y), 0.0).rgb;\n"
+    "  vec3 s = textureLod(u_tex, v_uv + vec2(0.0,  stepUV.y), 0.0).rgb;\n"
+    "  vec3 e = textureLod(u_tex, v_uv + vec2( stepUV.x, 0.0), 0.0).rgb;\n"
+    "  vec3 w = textureLod(u_tex, v_uv + vec2(-stepUV.x, 0.0), 0.0).rgb;\n"
     "  vec3 avg = (n + s + e + w) * 0.25;\n"
     "  float lc = dot(c, vec3(0.2126, 0.7152, 0.0722));\n"
     "  float ln = dot(n, vec3(0.2126, 0.7152, 0.0722));\n"
@@ -4105,7 +4107,8 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
         const float rx = (float)g_ps.f.w / vw, ry = (float)g_ps.f.h / vh;
         unsigned p = P_BILINEAR;
         float pc[12] = { -sx, -sy, sx, sy, 0.0f, 0.0f, 0.0f, 0.0f, g_ps.rot[0], g_ps.rot[1], g_ps.rot[2], g_ps.rot[3] };
-        if ((!nis_done || nis_sharpen_only) && (rx > 1.01f || ry > 1.01f) && average && g_ps.pipe[P_AREA]) {
+        if (upscale != HLE_UPSCALE_NVE && (!nis_done || nis_sharpen_only) &&
+            (rx > 1.01f || ry > 1.01f) && average && g_ps.pipe[P_AREA]) {
             p = P_AREA;
             pc[4] = rx;
             pc[5] = ry;
@@ -4151,6 +4154,8 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
         } else if (!nis_done && upscale == HLE_UPSCALE_NVE && g_ps.pipe[P_NVE]) {
             /* NVE owns its independent sharpness control (0-100%). */
             p = P_NVE;
+            pc[4] = rx;
+            pc[5] = ry;
             pc[6] = nve_sharpness;
         }
         quad(cb, f, 0, g_ps.pipe[p], src, pc, iw, ih);
