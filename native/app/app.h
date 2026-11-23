@@ -35,7 +35,7 @@ void nc_present_set_cas(bool on);
 void nc_present_set_cas_sharpness(float sharpness);
 /* NVIDIA Image Scaling: independent toggle and SDK sharpness, 0-100%. */
 void nc_present_set_nis(bool on, float sharpness);
-/* Compare SGSR1 against the unfiltered bilinear image, left OFF / right ON. */
+/* Compare the unprocessed image on the left with the selected graphics filters on the right. */
 void nc_present_set_sgsr_compare(bool enabled);
 /* Lossless Scaling shader resources and generation tuning, loaded once Vulkan is ready. */
 void nc_present_set_lsfg(const char *path, int multiplier, bool performance, int flow_scale);
