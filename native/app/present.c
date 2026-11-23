@@ -29,8 +29,6 @@ static bool g_cas;
 static float g_cas_sharpness = 0.2f;
 static _Atomic bool g_nis;
 static _Atomic float g_nis_sharpness = 0.5f;
-static _Atomic float g_nve_sharpness = 0.5f;
-static _Atomic bool g_nve_compare = true;
 static char *g_lsfg_dll_path;
 static int g_lsfg_multiplier = 2, g_lsfg_flow_scale = 100;
 static bool g_lsfg_performance, g_lsfg_load_attempted;
@@ -41,7 +39,7 @@ static uint64_t g_win_presented, g_win_start_ns, g_last_present_ns, g_seen_prese
 static float g_fps, g_avg_ms, g_last_ms;
 
 /* debug.hakux.present, for comparisons on the device (read every 64
- * refreshes): "fxaa" / "nofxaa", "nve" / "sgsr" / "fsr" / "bilinear" (the upscaling),
+ * refreshes): "fxaa" / "nofxaa", "sgsr" / "fsr" / "bilinear" (the upscaling),
  * "noaverage" (a larger frame sampled bilinearly); otherwise the settings. */
 static struct {
     int fxaa, upscale;      /* -1: the setting's */
@@ -52,7 +50,6 @@ bool nc_present_init(void)
 {
     hle_disp_gamma_by_consumer(true); /* before the core starts: frames come without it */
     nc_log("hakuX-app", "present: Vulkan; FXAA %s, upscaling %s", g_fxaa ? "on" : "off",
-           g_upscale == NC_UPSCALE_NVE ? "HakuX NVE" :
            g_upscale == NC_UPSCALE_SGSR ? "SGSR" : g_upscale == NC_UPSCALE_FSR ? "FSR 1.0" : "bilinear");
     return true;
 }
@@ -87,18 +84,6 @@ void nc_present_set_nis(bool on, float sharpness)
      * the enable flag before reading the associated runtime setting. */
     atomic_store_explicit(&g_nis_sharpness, sharpness, memory_order_relaxed);
     atomic_store_explicit(&g_nis, on, memory_order_release);
-}
-
-void nc_present_set_nve_compare(bool enabled)
-{
-    atomic_store_explicit(&g_nve_compare, enabled, memory_order_release);
-}
-
-void nc_present_set_nve_sharpness(float sharpness)
-{
-    if (sharpness < 0.0f) sharpness = 0.0f;
-    if (sharpness > 1.0f) sharpness = 1.0f;
-    atomic_store_explicit(&g_nve_sharpness, sharpness, memory_order_release);
 }
 
 void nc_present_set_lsfg(const char *path, int multiplier, bool performance, int flow_scale)
@@ -199,7 +184,7 @@ static void debug_poll(void)
     char v[PROP_VALUE_MAX] = "";
     hle_prop_get("debug.hakux.present", v);
     g_dbg.fxaa = strstr(v, "nofxaa") ? 0 : strstr(v, "fxaa") ? 1 : -1;
-    g_dbg.upscale = strstr(v, "nve") ? NC_UPSCALE_NVE : strstr(v, "fsr") ? NC_UPSCALE_FSR :
+    g_dbg.upscale = strstr(v, "fsr") ? NC_UPSCALE_FSR :
                      strstr(v, "sgsr") ? NC_UPSCALE_SGSR : strstr(v, "bilinear") ? NC_UPSCALE_BILINEAR : -1;
     g_dbg.average = !strstr(v, "noaverage");
 }
@@ -255,16 +240,13 @@ bool nc_present_frame(struct ANativeWindow *win)
      * concurrently from Android's UI thread. */
     const bool nis = atomic_load_explicit(&g_nis, memory_order_acquire);
     const float nis_sharpness = atomic_load_explicit(&g_nis_sharpness, memory_order_relaxed);
-    const float nve_sharpness = atomic_load_explicit(&g_nve_sharpness, memory_order_acquire);
-    const bool nve_compare = atomic_load_explicit(&g_nve_compare, memory_order_acquire);
     const bool fxaa = g_dbg.fxaa < 0 ? g_fxaa : g_dbg.fxaa != 0;
     const int upscale = g_dbg.upscale < 0 ? g_upscale : g_dbg.upscale;
     /* what places and filters the frame, beside it and the window */
     const uint64_t key = (uint64_t)fxaa | (uint64_t)upscale << 1 | (uint64_t)g_dbg.average << 4 |
                          (uint64_t)g_widescreen << 5 | (uint64_t)(uint32_t)g_aspect << 8 |
                          (uint64_t)g_cas << 16 | (uint64_t)(uint32_t)(g_cas_sharpness * 1000.0f) << 17 |
-                         (uint64_t)nis << 30 | (uint64_t)(uint32_t)(nis_sharpness * 1000.0f) << 31 |
-                         (uint64_t)(uint32_t)(nve_sharpness * 1000.0f) << 41 | (uint64_t)nve_compare << 42;
+                         (uint64_t)nis << 30 | (uint64_t)(uint32_t)(nis_sharpness * 1000.0f) << 31 |;
     if (hle_present_unchanged(win, key)) {
         nc_dev_nv2a_display_pickup(now_ns()); /* it looked: the vblank keeps clear of it */
         wait_next_vsync();
@@ -281,6 +263,6 @@ bool nc_present_frame(struct ANativeWindow *win)
         place(fw, fh, ww, wh, &sx, &sy);
         __atomic_store_n(&g_shown, true, __ATOMIC_RELAXED);
     }
-    hle_present_end(sx, sy, fxaa, upscale, g_dbg.average, g_cas, g_cas_sharpness, nis, nis_sharpness, nve_sharpness, nve_compare, key);
+    hle_present_end(sx, sy, fxaa, upscale, g_dbg.average, g_cas, g_cas_sharpness, nis, nis_sharpness, key);
     return true;
 }

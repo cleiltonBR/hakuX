@@ -147,8 +147,6 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
             6 -> "FSR 1.0 (EASU + RCAS)"
             5 -> "FSR 1.0 (EASU)"
             4 -> "não aplicado"
-            9 -> "HakuX NVE (ativo)"
-            10 -> "HakuX NVE indisponível • fallback Bilinear"
             3 -> "NIS"
             2 -> "SGSR"
             1 -> "redução"
@@ -344,8 +342,6 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     args += "cas_sharpness=${settings.casSharpness}"
     args += "nis=${if (settings.nis) 1 else 0}"
     args += "nis_sharpness=${settings.nisSharpness}"
-    args += "nve_sharpness=${settings.nveSharpness}"
-    args += "nve_compare=${if (getSharedPreferences("x1box_prefs", Context.MODE_PRIVATE).getBoolean(PREF_NVE_COMPARE, true)) 1 else 0}"
     /* LSFG shader resources are read from the user's private app-storage copy.
      * The DLL itself is never loaded as executable code. */
     val lsfgPrefs = AppPrefs(this)
@@ -1346,7 +1342,6 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
       getString(R.string.overlay_menu_controllers) to "Configurar jogadores e controles conectados",
       "Informações na tela" to "Escolha FPS, RAM, FSR, NIS, CAS e GPU",
       "Imagem e gráficos" to "FSR 1.0, CAS, NIS, resolução e filtros",
-      ("Comparador NVE: " + (if (getSharedPreferences("x1box_prefs", Context.MODE_PRIVATE).getBoolean(PREF_NVE_COMPARE, true)) "ATIVADO" else "DESATIVADO")) to "Alternar comparação lado a lado: original à esquerda e NVE à direita",
       "LSFG • Geração de quadros" to "Multiplicador, desempenho e Flow Scale"
     )
     val actions = mutableListOf<() -> Unit>(
@@ -1355,13 +1350,6 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
       ::showPlayers,
       ::showRuntimeOverlayOptions,
       ::showRuntimeGraphics,
-      {
-        val comparePrefs = getSharedPreferences("x1box_prefs", Context.MODE_PRIVATE)
-        val enabled = !comparePrefs.getBoolean(PREF_NVE_COMPARE, true)
-        comparePrefs.edit().putBoolean(PREF_NVE_COMPARE, enabled).apply()
-        nativeSetNveCompare(enabled)
-        Toast.makeText(this, if (enabled) "Comparador NVE ativado" else "Comparador NVE desativado", Toast.LENGTH_SHORT).show()
-      },
       ::showRuntimeLsfg
     )
     if (states) {
@@ -1486,13 +1474,12 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
   /** FSR/RCAS controls applied immediately to the running Vulkan presenter. */
   private fun showRuntimeGraphics() {
     val prefs = AppPrefs(this)
-    val modes = listOf(UPSCALE_BILINEAR, UPSCALE_SGSR, UPSCALE_FSR, UPSCALE_NVE)
-    val modeNames = listOf("Bilinear", "SGSR", "FidelityFX FSR 1.0", "HakuX NVE (experimental)")
+    val modes = listOf(UPSCALE_BILINEAR, UPSCALE_SGSR, UPSCALE_FSR)
+    val modeNames = listOf("Bilinear", "SGSR 1", "FidelityFX FSR 1.0")
     fun refresh() {
       nativeSetUpscale(modes.indexOf(prefs.upscaleFilter).coerceAtLeast(0))
       nativeSetCas(prefs.cas, prefs.casSharpness)
       nativeSetNis(prefs.nis, prefs.nisSharpness)
-      nativeSetNveSharpness(prefs.nveSharpness)
     }
     val scaleValues = (1..16).toList()
     val currentMode = modes.indexOf(prefs.upscaleFilter).coerceAtLeast(0)
@@ -1505,7 +1492,6 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
       "Intensidade CAS" to "%.1f".format(java.util.Locale.US, prefs.casSharpness),
       "NIS" to if (prefs.nis) "Ativado" else "Desativado",
       "Nitidez NIS" to "${(prefs.nisSharpness * 100).toInt()}%",
-      "Intensidade do aprimoramento NVE" to "${(prefs.nveSharpness * 100).toInt()}%",
     )
     showSeriesXMenu("Imagem e gráficos", entries) { which ->
       when (which) {
@@ -1572,26 +1558,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
             showRuntimeGraphics()
           }
         }
-        8 -> {
-          showSeriesXSlider(
-            "Intensidade do aprimoramento NVE",
-            (prefs.nveSharpness * 100f).toInt().coerceIn(0, 100),
-            100,
-            { value -> when {
-                value == 0 -> "Original"
-                value <= 25 -> "$value% • suave"
-                value <= 50 -> "$value% • moderado"
-                value <= 75 -> "$value% • forte"
-                else -> "$value% • máximo"
-              } },
-            startLabel = "0% • Original",
-            endLabel = "100% • Máximo",
-          ) {
-            prefs.nveSharpness = it / 100f
-            nativeSetNveSharpness(prefs.nveSharpness)
-            showRuntimeGraphics()
-          }
-        }
+
       }
     }
   }
@@ -1977,15 +1944,12 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     const val PREF_CAS_SHARPNESS = "cas_sharpness"
     const val PREF_NIS = "nis_enabled"
     const val PREF_NIS_SHARPNESS = "nis_sharpness"
-    const val PREF_NVE_SHARPNESS = "nve_sharpness"
-    const val PREF_NVE_COMPARE = "nve_compare"
     const val PREF_UPSCALE = "upscale_filter"
     const val PREF_ANISO = "anisotropy_enabled"
     const val PREF_ANISO_LEVEL = "anisotropy_level"
     const val UPSCALE_BILINEAR = "bilinear"
     const val UPSCALE_SGSR = "sgsr"
     const val UPSCALE_FSR = "fsr"
-    const val UPSCALE_NVE = "nve"
 
     /** fps, average frame time (ms), last frame time (ms), 1 if push-buffer decoding renders. */
     @JvmStatic
@@ -2070,14 +2034,6 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     /** Change NVIDIA Image Scaling while the game runs (sharpness 0-1). */
     @JvmStatic
     external fun nativeSetNis(enabled: Boolean, sharpness: Float)
-
-    /** Change HakuX NVE spatial sharpness while the game runs (0-1). */
-    @JvmStatic
-    external fun nativeSetNveSharpness(sharpness: Float)
-
-    /** Toggle the same-frame original/NVE split comparison while the game runs. */
-    @JvmStatic
-    external fun nativeSetNveCompare(enabled: Boolean)
 
     /** NIS GPU state: ready, enabled, executed, reason, input/output dimensions, final path. */
     @JvmStatic

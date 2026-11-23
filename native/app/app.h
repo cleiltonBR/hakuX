@@ -28,16 +28,13 @@ void nc_present_set_widescreen(bool on);
 void nc_present_set_fxaa(bool on);
 /* A frame smaller than its place in the window: scaled up bilinearly, or by
  * Snapdragon Game Super Resolution (a larger one is always averaged down). */
-enum { NC_UPSCALE_BILINEAR, NC_UPSCALE_SGSR, NC_UPSCALE_FSR, NC_UPSCALE_NVE };   /* swapchain.h HLE_UPSCALE_*'s */
+enum { NC_UPSCALE_BILINEAR, NC_UPSCALE_SGSR, NC_UPSCALE_FSR };   /* swapchain.h HLE_UPSCALE_*'s */
 void nc_present_set_upscale(int mode);
 /* RCAS (FSR's Contrast Adaptive Sharpening), only on the FSR path. */
 void nc_present_set_cas(bool on);
 void nc_present_set_cas_sharpness(float sharpness);
 /* NVIDIA Image Scaling: independent toggle and SDK sharpness, 0-100%. */
 void nc_present_set_nis(bool on, float sharpness);
-/* HakuX NVE spatial filter sharpness, 0-100%. */
-void nc_present_set_nve_sharpness(float sharpness);
-void nc_present_set_nve_compare(bool enabled);
 /* Lossless Scaling shader resources and generation tuning, loaded once Vulkan is ready. */
 void nc_present_set_lsfg(const char *path, int multiplier, bool performance, int flow_scale);
 /* Frames the title presented per second over the last half second, their

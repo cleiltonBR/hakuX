@@ -7,7 +7,7 @@
  *            "loadstate=", "scale2=", "video=", "asyncpipe=", "mods=", ...),
  *            and the window's: "aspect=auto|4:3|16:9|stretch" the picture's
  *            shape, "fxaa=0|1" FXAA over each frame and
- *            "upscale=bilinear|sgsr|fsr|nve" how a frame smaller than its place on
+ *            "upscale=bilinear|sgsr|fsr" how a frame smaller than its place on
  *            screen is scaled up; "padinput=sdl" the legacy input (the first
  *            SDL gamepad as player 1); "vkdriver=" the custom Vulkan driver
  *            (vkdriver.c)
@@ -165,7 +165,7 @@ EXPORT JNIEXPORT void JNICALL Java_com_rfandango_haku_1x_NativeCoreActivity_nati
 /* Runtime presentation controls from NativeCoreActivity's gameplay menu. */
 EXPORT JNIEXPORT void JNICALL Java_com_rfandango_haku_1x_NativeCoreActivity_nativeSetUpscale(JNIEnv *env, jclass cls, jint mode)
 {
-    if (mode < NC_UPSCALE_BILINEAR || mode > NC_UPSCALE_NVE) return;
+    if (mode < NC_UPSCALE_BILINEAR || mode > NC_UPSCALE_FSR) return;
     nc_present_set_upscale(mode);
 }
 
@@ -178,16 +178,6 @@ EXPORT JNIEXPORT void JNICALL Java_com_rfandango_haku_1x_NativeCoreActivity_nati
 EXPORT JNIEXPORT void JNICALL Java_com_rfandango_haku_1x_NativeCoreActivity_nativeSetNis(JNIEnv *env, jclass cls, jboolean enabled, jfloat sharpness)
 {
     nc_present_set_nis(enabled != JNI_FALSE, sharpness);
-}
-
-EXPORT JNIEXPORT void JNICALL Java_com_rfandango_haku_1x_NativeCoreActivity_nativeSetNveSharpness(JNIEnv *env, jclass cls, jfloat sharpness)
-{
-    nc_present_set_nve_sharpness(sharpness);
-}
-
-EXPORT JNIEXPORT void JNICALL Java_com_rfandango_haku_1x_NativeCoreActivity_nativeSetNveCompare(JNIEnv *env, jclass cls, jboolean enabled)
-{
-    nc_present_set_nve_compare(enabled != JNI_FALSE);
 }
 
 EXPORT JNIEXPORT void JNICALL Java_com_rfandango_haku_1x_NativeCoreActivity_nativeSetRenderScale(JNIEnv *env, jclass cls, jint scale)
@@ -617,8 +607,6 @@ EXPORT int SDL_main(int argc, char *argv[])
     nc_options_init(&opt);
     bool nis_enabled = false;
     float nis_sharpness = 0.5f;
-    float nve_sharpness = 0.5f;
-    bool nve_compare = true;
     const char *lsfg_dll_path = NULL;
     int lsfg_multiplier = 2, lsfg_performance = 1, lsfg_flow_scale = 100;
     for (int i = 3; i < argc; i++) {
@@ -648,8 +636,7 @@ EXPORT int SDL_main(int argc, char *argv[])
             nc_present_set_fxaa(atoi(argv[i] + 5) != 0);
         }
         if (!strncmp(argv[i], "upscale=", 8)) {
-            nc_present_set_upscale(!strcmp(argv[i] + 8, "nve") ? NC_UPSCALE_NVE :
-                                   !strcmp(argv[i] + 8, "fsr") ? NC_UPSCALE_FSR :
+            nc_present_set_upscale(!strcmp(argv[i] + 8, "fsr") ? NC_UPSCALE_FSR :
                                    !strcmp(argv[i] + 8, "sgsr") ? NC_UPSCALE_SGSR : NC_UPSCALE_BILINEAR);
         }
         if (!strncmp(argv[i], "cas=", 4)) {
@@ -660,8 +647,6 @@ EXPORT int SDL_main(int argc, char *argv[])
         }
         if (!strncmp(argv[i], "nis=", 4)) nis_enabled = atoi(argv[i] + 4) != 0;
         if (!strncmp(argv[i], "nis_sharpness=", 14)) nis_sharpness = strtof(argv[i] + 14, NULL);
-        if (!strncmp(argv[i], "nve_sharpness=", 14)) nve_sharpness = strtof(argv[i] + 14, NULL);
-        if (!strncmp(argv[i], "nve_compare=", 12)) nve_compare = atoi(argv[i] + 12) != 0;
 #ifdef CONFIG_VULKAN
         if (!strncmp(argv[i], "lsfg_dll=", 9)) lsfg_dll_path = argv[i] + 9;
         if (!strncmp(argv[i], "lsfg_multiplier=", 16)) lsfg_multiplier = atoi(argv[i] + 16);
@@ -685,8 +670,6 @@ EXPORT int SDL_main(int argc, char *argv[])
         }
     }
     nc_present_set_nis(nis_enabled, nis_sharpness);
-    nc_present_set_nve_sharpness(nve_sharpness);
-    nc_present_set_nve_compare(nve_compare);
     nc_present_set_lsfg(lsfg_dll_path, lsfg_multiplier, lsfg_performance != 0, lsfg_flow_scale);
     nc_options_apply(&opt);
     nc_present_set_widescreen(opt.video >= 0 && (opt.video & NC_VIDEO_WIDESCREEN));
