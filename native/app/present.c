@@ -246,7 +246,7 @@ bool nc_present_frame(struct ANativeWindow *win)
     const uint64_t key = (uint64_t)fxaa | (uint64_t)upscale << 1 | (uint64_t)g_dbg.average << 4 |
                          (uint64_t)g_widescreen << 5 | (uint64_t)(uint32_t)g_aspect << 8 |
                          (uint64_t)g_cas << 16 | (uint64_t)(uint32_t)(g_cas_sharpness * 1000.0f) << 17 |
-                         (uint64_t)nis << 30 | (uint64_t)(uint32_t)(nis_sharpness * 1000.0f) << 31 |;
+                         (uint64_t)nis << 30 | (uint64_t)(uint32_t)(nis_sharpness * 1000.0f) << 31;
     if (hle_present_unchanged(win, key)) {
         nc_dev_nv2a_display_pickup(now_ns()); /* it looked: the vblank keeps clear of it */
         wait_next_vsync();
