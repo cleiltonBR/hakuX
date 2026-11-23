@@ -342,6 +342,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     args += "cas_sharpness=${settings.casSharpness}"
     args += "nis=${if (settings.nis) 1 else 0}"
     args += "nis_sharpness=${settings.nisSharpness}"
+    args += "nve_sharpness=${settings.nveSharpness}"
     /* LSFG shader resources are read from the user's private app-storage copy.
      * The DLL itself is never loaded as executable code. */
     val lsfgPrefs = AppPrefs(this)
@@ -1480,6 +1481,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
       nativeSetUpscale(modes.indexOf(prefs.upscaleFilter).coerceAtLeast(0))
       nativeSetCas(prefs.cas, prefs.casSharpness)
       nativeSetNis(prefs.nis, prefs.nisSharpness)
+      nativeSetNveSharpness(prefs.nveSharpness)
     }
     val scaleValues = (1..16).toList()
     val currentMode = modes.indexOf(prefs.upscaleFilter).coerceAtLeast(0)
@@ -1492,6 +1494,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
       "Intensidade CAS" to "%.1f".format(java.util.Locale.US, prefs.casSharpness),
       "NIS" to if (prefs.nis) "Ativado" else "Desativado",
       "Nitidez NIS" to "${(prefs.nisSharpness * 100).toInt()}%",
+      "Nitidez HakuX NVE" to "${(prefs.nveSharpness * 100).toInt()}%",
     )
     showSeriesXMenu("Imagem e gráficos", entries) { which ->
       when (which) {
@@ -1555,6 +1558,20 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
           ) {
             prefs.nisSharpness = it / 100f
             refresh()
+            showRuntimeGraphics()
+          }
+        }
+        8 -> {
+          showSeriesXSlider(
+            "Nitidez HakuX NVE",
+            (prefs.nveSharpness * 100f).toInt().coerceIn(0, 100),
+            100,
+            { "$it%" },
+            startLabel = "0%",
+            endLabel = "100%",
+          ) {
+            prefs.nveSharpness = it / 100f
+            nativeSetNveSharpness(prefs.nveSharpness)
             showRuntimeGraphics()
           }
         }
@@ -1943,6 +1960,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     const val PREF_CAS_SHARPNESS = "cas_sharpness"
     const val PREF_NIS = "nis_enabled"
     const val PREF_NIS_SHARPNESS = "nis_sharpness"
+    const val PREF_NVE_SHARPNESS = "nve_sharpness"
     const val PREF_UPSCALE = "upscale_filter"
     const val PREF_ANISO = "anisotropy_enabled"
     const val PREF_ANISO_LEVEL = "anisotropy_level"
@@ -2034,6 +2052,10 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     /** Change NVIDIA Image Scaling while the game runs (sharpness 0-1). */
     @JvmStatic
     external fun nativeSetNis(enabled: Boolean, sharpness: Float)
+
+    /** Change HakuX NVE spatial sharpness while the game runs (0-1). */
+    @JvmStatic
+    external fun nativeSetNveSharpness(sharpness: Float)
 
     /** NIS GPU state: ready, enabled, executed, reason, input/output dimensions, final path. */
     @JvmStatic
