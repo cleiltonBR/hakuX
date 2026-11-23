@@ -2669,13 +2669,13 @@ static const char k_fs_nve[] =
     "  float strength = clamp(pc.extra.z, 0.0, 1.0);\n"
     "  float amount = 1.35 * strength * edgeGate * detailGate;\n"
     "  vec3 enhanced = c + (c - across) * amount;\n"
-    "  float lo = max(0.0, localMin - 0.035);\n"
-    "  float hi = min(1.0, localMax + 0.035);\n"
-    "  enhanced = clamp(enhanced, vec3(lo), vec3(hi));\n"
+    "  vec3 neighborhoodMin = min(c, min(min(min(nw, n), min(ne, w)), min(min(e, sw), min(s, se))));\n"
+    "  vec3 neighborhoodMax = max(c, max(max(max(nw, n), max(ne, w)), max(max(e, sw), max(s, se))));\n"
+    "  enhanced = clamp(enhanced, max(vec3(0.0), neighborhoodMin - vec3(0.035)), min(vec3(1.0), neighborhoodMax + vec3(0.035)));\n"
     "  o = ramp(clamp(enhanced, 0.0, 1.0));\n"
     "}\n";
     
-static const char k_fs_easu[]static const char k_fs_easu[] =
+static const char k_fs_easu[] =
     "// FidelityFX Super Resolution 1.0, EASU. Copyright (c) 2021 Advanced Micro\n"
     "// Devices, Inc. (MIT license). extra = 1/w, 1/h, w, h of the input frame.\n"
     "void tap(inout vec3 aC, inout float aW, vec2 off, vec2 dir, vec2 len, float lob, float clp, vec3 c) {\n"
