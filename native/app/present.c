@@ -21,9 +21,9 @@
 static int g_aspect = NC_ASPECT_AUTO;
 static bool g_widescreen;
 static bool g_fxaa;
-static int g_upscale = NC_UPSCALE_BILINEAR;
-static bool g_cas;
-static float g_cas_sharpness = 0.2f;
+static _Atomic int g_upscale = NC_UPSCALE_BILINEAR;
+static _Atomic bool g_cas;
+static _Atomic float g_cas_sharpness = 0.2f;
 static _Atomic bool g_nis;
 static _Atomic float g_nis_sharpness = 0.5f;
 static bool g_shown;
@@ -43,8 +43,9 @@ static struct {
 bool nc_present_init(void)
 {
     hle_disp_gamma_by_consumer(true); /* before the core starts: frames come without it */
+    const int upscale = atomic_load_explicit(&g_upscale, memory_order_relaxed);
     nc_log("hakuX-app", "present: Vulkan; FXAA %s, upscaling %s", g_fxaa ? "on" : "off",
-           g_upscale == NC_UPSCALE_SGSR ? "SGSR" : g_upscale == NC_UPSCALE_FSR ? "FSR 1.0" : "bilinear");
+           upscale == NC_UPSCALE_SGSR ? "SGSR" : upscale == NC_UPSCALE_FSR ? "FSR 1.0" : "bilinear");
     return true;
 }
 
@@ -55,19 +56,19 @@ void nc_present_set_fxaa(bool on)
 
 void nc_present_set_upscale(int mode)
 {
-    g_upscale = mode;
+    atomic_store_explicit(&g_upscale, mode, memory_order_relaxed);
 }
 
 void nc_present_set_cas(bool on)
 {
-    g_cas = on;
+    atomic_store_explicit(&g_cas, on, memory_order_release);
 }
 
 void nc_present_set_cas_sharpness(float sharpness)
 {
     if (sharpness < 0.0f) sharpness = 0.0f;
     if (sharpness > 2.0f) sharpness = 2.0f;
-    g_cas_sharpness = sharpness;
+    atomic_store_explicit(&g_cas_sharpness, sharpness, memory_order_relaxed);
 }
 
 void nc_present_set_nis(bool on, float sharpness)
@@ -206,11 +207,16 @@ bool nc_present_frame(struct ANativeWindow *win)
     const bool nis = atomic_load_explicit(&g_nis, memory_order_acquire);
     const float nis_sharpness = atomic_load_explicit(&g_nis_sharpness, memory_order_relaxed);
     const bool fxaa = g_dbg.fxaa < 0 ? g_fxaa : g_dbg.fxaa != 0;
-    const int upscale = g_dbg.upscale < 0 ? g_upscale : g_dbg.upscale;
+    const int configured_upscale = atomic_load_explicit(&g_upscale, memory_order_relaxed);
+    const int upscale = g_dbg.upscale < 0 ? configured_upscale : g_dbg.upscale;
+    /* CAS is also changed from the Android gameplay menu while this thread
+     * records Vulkan work. Acquire the enable flag after its sharpness value. */
+    const bool cas = atomic_load_explicit(&g_cas, memory_order_acquire);
+    const float cas_sharpness = atomic_load_explicit(&g_cas_sharpness, memory_order_relaxed);
     /* what places and filters the frame, beside it and the window */
     const uint64_t key = (uint64_t)fxaa | (uint64_t)upscale << 1 | (uint64_t)g_dbg.average << 4 |
                          (uint64_t)g_widescreen << 5 | (uint64_t)(uint32_t)g_aspect << 8 |
-                         (uint64_t)g_cas << 16 | (uint64_t)(uint32_t)(g_cas_sharpness * 1000.0f) << 17 |
+                         (uint64_t)cas << 16 | (uint64_t)(uint32_t)(cas_sharpness * 1000.0f) << 17 |
                          (uint64_t)nis << 30 | (uint64_t)(uint32_t)(nis_sharpness * 1000.0f) << 31;
     if (hle_present_unchanged(win, key)) {
         nc_dev_nv2a_display_pickup(now_ns()); /* it looked: the vblank keeps clear of it */
@@ -227,6 +233,6 @@ bool nc_present_frame(struct ANativeWindow *win)
         place(fw, fh, ww, wh, &sx, &sy);
         __atomic_store_n(&g_shown, true, __ATOMIC_RELAXED);
     }
-    hle_present_end(sx, sy, fxaa, upscale, g_dbg.average, g_cas, g_cas_sharpness, nis, nis_sharpness, key);
+    hle_present_end(sx, sy, fxaa, upscale, g_dbg.average, cas, cas_sharpness, nis, nis_sharpness, key);
     return true;
 }

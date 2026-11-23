@@ -170,8 +170,9 @@ EXPORT JNIEXPORT void JNICALL Java_com_rfandango_haku_1x_NativeCoreActivity_nati
 
 EXPORT JNIEXPORT void JNICALL Java_com_rfandango_haku_1x_NativeCoreActivity_nativeSetCas(JNIEnv *env, jclass cls, jboolean enabled, jfloat sharpness)
 {
-    nc_present_set_cas(enabled != JNI_FALSE);
+    /* Publish the strength before enabling CAS for the frame thread. */
     nc_present_set_cas_sharpness(sharpness);
+    nc_present_set_cas(enabled != JNI_FALSE);
 }
 
 EXPORT JNIEXPORT void JNICALL Java_com_rfandango_haku_1x_NativeCoreActivity_nativeSetNis(JNIEnv *env, jclass cls, jboolean enabled, jfloat sharpness)
