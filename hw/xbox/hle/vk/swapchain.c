@@ -3821,11 +3821,26 @@ static void quad_compare(VkCommandBuffer cb, PsFrame *f, unsigned set, VkPipelin
         { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstSet = f->set[set], .dstBinding = 1,
           .descriptorCount = 1, .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .pBufferInfo = &bi } };
     T.vkUpdateDescriptorSets(g_hvk.dev, 2, wr, 0, NULL);
-    const uint32_t middle = w / 2u;
-    const uint32_t x = right ? middle : 0u;
-    const uint32_t width = right ? w - middle : middle;
-    VkViewport vp = { (float)x, 0.0f, (float)width, (float)h, 0.0f, 1.0f };
-    VkRect2D sc = { { (int32_t)x, 0 }, { width, h } };
+    const bool quarter_turn = g_ps.rot[1] != 0.0f;
+    VkViewport vp;
+    VkRect2D sc;
+    if (!quarter_turn) {
+        const uint32_t middle = w / 2u;
+        const uint32_t x = right ? middle : 0u;
+        const uint32_t width = right ? w - middle : middle;
+        vp = (VkViewport){ (float)x, 0.0f, (float)width, (float)h, 0.0f, 1.0f };
+        sc = (VkRect2D){ { (int32_t)x, 0 }, { width, h } };
+    } else {
+        /* The swapchain is pre-rotated for portrait panels. Split its Y axis
+         * so the divider remains vertical after the 90/270 degree transform.
+         * ROTATE_90 reverses the side order; ROTATE_270 does not. */
+        const uint32_t middle = h / 2u;
+        const bool upper = g_ps.rot[1] < 0.0f ? right : !right;
+        const uint32_t y = upper ? 0u : middle;
+        const uint32_t height = upper ? middle : h - middle;
+        vp = (VkViewport){ 0.0f, (float)y, (float)w, (float)height, 0.0f, 1.0f };
+        sc = (VkRect2D){ { 0, (int32_t)y }, { w, height } };
+    }
     T.vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, p);
     T.vkCmdSetViewport(cb, 0, 1, &vp);
     T.vkCmdSetScissor(cb, 0, 1, &sc);
@@ -4162,8 +4177,11 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
                 .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .colorAttachment = 0,
                 .clearValue = { .color = { { 1.0f, 1.0f, 1.0f, 1.0f } } }
             };
+            const bool quarter_turn = g_ps.rot[1] != 0.0f;
             VkClearRect divider_rect = {
-                .rect = { { (int32_t)(iw / 2u) - 1, 0 }, { 2u, ih } },
+                .rect = quarter_turn
+                    ? (VkRect2D){ { 0, (int32_t)(ih / 2u) - 1 }, { iw, 2u } }
+                    : (VkRect2D){ { (int32_t)(iw / 2u) - 1, 0 }, { 2u, ih } },
                 .baseArrayLayer = 0, .layerCount = 1
             };
             T.vkCmdClearAttachments(cb, 1, &divider, 1, &divider_rect);
