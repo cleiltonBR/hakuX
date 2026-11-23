@@ -2632,38 +2632,50 @@ static const char k_fs_sgsr[] =
     "  o = ramp(color.xyz);\n"
     "}\n";
 
-/* HakuX NVE v0: edge-aware spatial detail reconstruction.
- * Deterministic GPU filter; this prototype is not a trained neural network.
- * Flat regions are protected and sharpening is reduced at strong edges. */
+/* HakuX NVE v1: directional, edge-adaptive spatial reconstruction.
+ * Uses a 3x3 neighborhood to estimate edge orientation, then sharpens across
+ * (not along) the edge. This is a deterministic spatial filter, not AI/ML. */
 static const char k_fs_nve[] =
     "void main() {\n"
-    "  vec2 px = 1.0 / vec2(textureSize(u_tex, 0));\n"
-    "  vec2 radius = max(vec2(1.0), pc.extra.xy * 0.5);\n"
-    "  vec2 stepUV = px * radius;\n"
-    "  vec3 c = textureLod(u_tex, v_uv, 0.0).rgb;\n"
-    "  vec3 n = textureLod(u_tex, v_uv + vec2(0.0, -stepUV.y), 0.0).rgb;\n"
-    "  vec3 s = textureLod(u_tex, v_uv + vec2(0.0,  stepUV.y), 0.0).rgb;\n"
-    "  vec3 e = textureLod(u_tex, v_uv + vec2( stepUV.x, 0.0), 0.0).rgb;\n"
-    "  vec3 w = textureLod(u_tex, v_uv + vec2(-stepUV.x, 0.0), 0.0).rgb;\n"
-    "  vec3 avg = (n + s + e + w) * 0.25;\n"
-    "  float lc = dot(c, vec3(0.2126, 0.7152, 0.0722));\n"
-    "  float ln = dot(n, vec3(0.2126, 0.7152, 0.0722));\n"
-    "  float ls = dot(s, vec3(0.2126, 0.7152, 0.0722));\n"
-    "  float le = dot(e, vec3(0.2126, 0.7152, 0.0722));\n"
-    "  float lw = dot(w, vec3(0.2126, 0.7152, 0.0722));\n"
-    "  float lo = min(lc, min(min(ln, ls), min(le, lw)));\n"
-    "  float hi = max(lc, max(max(ln, ls), max(le, lw)));\n"
-    "  float range = hi - lo;\n"
-    "  float detail = lc - dot(avg, vec3(0.2126, 0.7152, 0.0722));\n"
-    "  float edge = smoothstep(0.012, 0.16, range);\n"
-    "  float noiseGate = smoothstep(0.004, 0.035, abs(detail));\n"
-    "  float highlightGate = 1.0 - smoothstep(0.22, 0.55, range);\n"
-    "  float amount = 0.72 * clamp(pc.extra.z, 0.0, 1.0) * edge * noiseGate * (0.35 + 0.65 * highlightGate);\n"
-    "  vec3 enhanced = c + (c - avg) * amount;\n"
+    "  vec2 texel = 1.0 / vec2(textureSize(u_tex, 0));\n"
+    "  vec2 stepUV = texel * max(vec2(1.0), pc.extra.xy);\n"
+    "  vec3 c  = textureLod(u_tex, v_uv, 0.0).rgb;\n"
+    "  vec3 nw = textureLod(u_tex, v_uv + vec2(-stepUV.x, -stepUV.y), 0.0).rgb;\n"
+    "  vec3 n  = textureLod(u_tex, v_uv + vec2(0.0, -stepUV.y), 0.0).rgb;\n"
+    "  vec3 ne = textureLod(u_tex, v_uv + vec2( stepUV.x, -stepUV.y), 0.0).rgb;\n"
+    "  vec3 w  = textureLod(u_tex, v_uv + vec2(-stepUV.x, 0.0), 0.0).rgb;\n"
+    "  vec3 e  = textureLod(u_tex, v_uv + vec2( stepUV.x, 0.0), 0.0).rgb;\n"
+    "  vec3 sw = textureLod(u_tex, v_uv + vec2(-stepUV.x, stepUV.y), 0.0).rgb;\n"
+    "  vec3 s  = textureLod(u_tex, v_uv + vec2(0.0, stepUV.y), 0.0).rgb;\n"
+    "  vec3 se = textureLod(u_tex, v_uv + vec2( stepUV.x, stepUV.y), 0.0).rgb;\n"
+    "  const vec3 LUMA = vec3(0.2126, 0.7152, 0.0722);\n"
+    "  float lnw = dot(nw, LUMA), ln = dot(n, LUMA), lne = dot(ne, LUMA);\n"
+    "  float lw  = dot(w, LUMA),  lc = dot(c, LUMA), le  = dot(e, LUMA);\n"
+    "  float lsw = dot(sw, LUMA), ls = dot(s, LUMA), lse = dot(se, LUMA);\n"
+    "  float gx = (lne + 2.0 * le + lse) - (lnw + 2.0 * lw + lsw);\n"
+    "  float gy = (lsw + 2.0 * ls + lse) - (lnw + 2.0 * ln + lne);\n"
+    "  vec2 edgeNormal = vec2(gx, gy);\n"
+    "  float edgeStrength = length(edgeNormal);\n"
+    "  edgeNormal /= max(edgeStrength, 0.00001);\n"
+    "  vec2 offset = edgeNormal * stepUV;\n"
+    "  vec3 acrossA = textureLod(u_tex, v_uv - offset, 0.0).rgb;\n"
+    "  vec3 acrossB = textureLod(u_tex, v_uv + offset, 0.0).rgb;\n"
+    "  vec3 across = 0.5 * (acrossA + acrossB);\n"
+    "  float localMin = min(lc, min(min(min(lnw, ln), min(lne, lw)), min(min(le, lsw), min(ls, min(lse, lnw)))));\n"
+    "  float localMax = max(lc, max(max(max(lnw, ln), max(lne, lw)), max(max(le, lsw), max(ls, max(lse, lnw)))));\n"
+    "  float edgeGate = smoothstep(0.006, 0.075, edgeStrength);\n"
+    "  float detail = abs(lc - dot(across, LUMA));\n"
+    "  float detailGate = smoothstep(0.0015, 0.025, detail);\n"
+    "  float strength = clamp(pc.extra.z, 0.0, 1.0);\n"
+    "  float amount = 1.35 * strength * edgeGate * detailGate;\n"
+    "  vec3 enhanced = c + (c - across) * amount;\n"
+    "  float lo = max(0.0, localMin - 0.035);\n"
+    "  float hi = min(1.0, localMax + 0.035);\n"
+    "  enhanced = clamp(enhanced, vec3(lo), vec3(hi));\n"
     "  o = ramp(clamp(enhanced, 0.0, 1.0));\n"
     "}\n";
-
-static const char k_fs_easu[] =
+    
+static const char k_fs_easu[]static const char k_fs_easu[] =
     "// FidelityFX Super Resolution 1.0, EASU. Copyright (c) 2021 Advanced Micro\n"
     "// Devices, Inc. (MIT license). extra = 1/w, 1/h, w, h of the input frame.\n"
     "void tap(inout vec3 aC, inout float aW, vec2 off, vec2 dir, vec2 len, float lob, float clp, vec3 c) {\n"
