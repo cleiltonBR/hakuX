@@ -125,7 +125,6 @@ fun SettingsScreen(
   var casSharpnessDialog by remember { mutableStateOf(false) }
   var nis by remember { mutableStateOf(prefs.nis) }
   var nisSharpness by remember { mutableStateOf(prefs.nisSharpness) }
-  var nveSharpness by remember { mutableStateOf(prefs.nveSharpness) }
   var nisSharpnessDialog by remember { mutableStateOf(false) }
   var upscale by remember { mutableStateOf(prefs.upscaleFilter) }
   var upscaleDialog by remember { mutableStateOf(false) }
@@ -523,16 +522,6 @@ fun SettingsScreen(
         onChange = { cas = it; prefs.cas = it },
       )
       GraphicsSlider(
-        title = "Nitidez HakuX NVE",
-        valueLabel = "${(nveSharpness * 100).toInt()}%",
-        value = nveSharpness * 100f,
-        valueRange = 0f..100f,
-        steps = 99,
-        startLabel = "0%",
-        endLabel = "100%",
-        onValueChange = { nveSharpness = it / 100f; prefs.nveSharpness = nveSharpness },
-      )
-      GraphicsSlider(
         title = stringResource(R.string.settings_cas_sharpness),
         valueLabel = String.format(Locale.getDefault(), "%.1f", casSharpness),
         value = casSharpness * 10f,
@@ -798,7 +787,7 @@ internal fun scaleLabel(value: Int): String {
 
 internal val ASPECTS = listOf("auto", "4:3", "16:9", "stretch")
 
-internal val UPSCALERS = listOf(NativeCoreActivity.UPSCALE_BILINEAR, NativeCoreActivity.UPSCALE_SGSR, NativeCoreActivity.UPSCALE_FSR, NativeCoreActivity.UPSCALE_NVE)
+internal val UPSCALERS = listOf(NativeCoreActivity.UPSCALE_BILINEAR, NativeCoreActivity.UPSCALE_SGSR, NativeCoreActivity.UPSCALE_FSR)
 internal val FORMATS = listOf(AppPrefs.FORMAT_NORMAL, AppPrefs.FORMAT_LETTERBOX, AppPrefs.FORMAT_WIDESCREEN)
 internal val CABLES = listOf(AppPrefs.AV_HDTV, AppPrefs.AV_STANDARD, AppPrefs.AV_SVIDEO)
 internal val LANGUAGES = listOf(AppPrefs.LANG_AUTO) + AppPrefs.XBOX_LANGUAGES
@@ -874,7 +863,6 @@ internal fun cableLabel(value: String) = when (value) {
 internal fun upscaleLabel(value: String) = when (value) {
   NativeCoreActivity.UPSCALE_SGSR -> R.string.settings_upscale_sgsr
   NativeCoreActivity.UPSCALE_FSR -> R.string.settings_upscale_fsr
-  NativeCoreActivity.UPSCALE_NVE -> R.string.settings_upscale_nve
   else -> R.string.settings_upscale_bilinear
 }
 
