@@ -49,7 +49,7 @@
 #endif
 
 /* P_RCAS draws into the window (its format), P_EASU into an RGBA8 image */
-enum { P_BILINEAR, P_AREA, P_SGSR, P_RCAS, P_FXAA, P_EASU, P_COUNT };
+enum { P_BILINEAR, P_AREA, P_SGSR, P_RCAS, P_NVE, P_FXAA, P_EASU, P_COUNT };
 
 typedef struct PsFrame {
     VkCommandPool pool;
@@ -316,6 +316,35 @@ static const char k_fs_sgsr[] =
     "    color.z = clamp((color.z + deltaY), 0.0, 1.0);\n"
     "  }\n"
     "  o = ramp(color.xyz);\n"
+    "}\n";
+
+/* HakuX NVE v0: edge-aware spatial detail reconstruction.
+ * Deterministic GPU filter; this prototype is not a trained neural network.
+ * Flat regions are protected and sharpening is reduced at strong edges. */
+static const char k_fs_nve[] =
+    "void main() {\n"
+    "  vec2 px = 1.0 / vec2(textureSize(u_tex, 0));\n"
+    "  vec3 c = textureLod(u_tex, v_uv, 0.0).rgb;\n"
+    "  vec3 n = textureLod(u_tex, v_uv + vec2(0.0, -px.y), 0.0).rgb;\n"
+    "  vec3 s = textureLod(u_tex, v_uv + vec2(0.0,  px.y), 0.0).rgb;\n"
+    "  vec3 e = textureLod(u_tex, v_uv + vec2( px.x, 0.0), 0.0).rgb;\n"
+    "  vec3 w = textureLod(u_tex, v_uv + vec2(-px.x, 0.0), 0.0).rgb;\n"
+    "  vec3 avg = (n + s + e + w) * 0.25;\n"
+    "  float lc = dot(c, vec3(0.2126, 0.7152, 0.0722));\n"
+    "  float ln = dot(n, vec3(0.2126, 0.7152, 0.0722));\n"
+    "  float ls = dot(s, vec3(0.2126, 0.7152, 0.0722));\n"
+    "  float le = dot(e, vec3(0.2126, 0.7152, 0.0722));\n"
+    "  float lw = dot(w, vec3(0.2126, 0.7152, 0.0722));\n"
+    "  float lo = min(lc, min(min(ln, ls), min(le, lw)));\n"
+    "  float hi = max(lc, max(max(ln, ls), max(le, lw)));\n"
+    "  float range = hi - lo;\n"
+    "  float detail = lc - dot(avg, vec3(0.2126, 0.7152, 0.0722));\n"
+    "  float edge = smoothstep(0.012, 0.16, range);\n"
+    "  float noiseGate = smoothstep(0.004, 0.035, abs(detail));\n"
+    "  float highlightGate = 1.0 - smoothstep(0.22, 0.55, range);\n"
+    "  float amount = 0.72 * edge * noiseGate * (0.35 + 0.65 * highlightGate);\n"
+    "  vec3 enhanced = c + (c - avg) * amount;\n"
+    "  o = ramp(clamp(enhanced, 0.0, 1.0));\n"
     "}\n";
 
 static const char k_fs_easu[] =
@@ -588,8 +617,8 @@ static bool init(void)
         f->ramp_stale = true;
     }
     g_ps.vs = module(HLE_SHADER_VERTEX, k_vs, "");
-    static const char *const body[P_COUNT] = { k_fs_bilinear, k_fs_area, k_fs_sgsr, k_fs_rcas, k_fs_fxaa,
-                                                k_fs_easu };
+    static const char *const body[P_COUNT] = { k_fs_bilinear, k_fs_area, k_fs_sgsr, k_fs_rcas, k_fs_nve,
+                                                k_fs_fxaa, k_fs_easu };
     for (unsigned i = 0; i < P_COUNT; i++) {
         g_ps.fs[i] = module(HLE_SHADER_FRAGMENT, k_fs_head, body[i]);
     }
@@ -1077,7 +1106,7 @@ static void log_path(unsigned p, bool fxaa, uint32_t vw, uint32_t vh)
     s_vh = vh;
     hle_log("hakuX-hle-back", "present: %ux%u%s into %ux%u: %s", s_w, s_h, fxaa ? " after FXAA" : "", vw, vh,
             p == P_AREA ? "averaged down" : p == P_RCAS ? "FSR 1.0 (RCAS)" :
-            p == P_SGSR ? "scaled up by SGSR" : "bilinear");
+            p == P_SGSR ? "scaled up by SGSR" : p == P_NVE ? "HakuX NVE spatial" : "bilinear");
 }
 
 void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, bool cas, float cas_sharpness, uint64_t key)
@@ -1198,6 +1227,8 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
             } else {
                 p = P_BILINEAR; /* EASU or native-resolution FSR without sharpening */
             }
+        } else if (upscale == HLE_UPSCALE_NVE && g_ps.pipe[P_NVE]) {
+            p = P_NVE;
         } else if ((rx < 0.99f || ry < 0.99f) && upscale == HLE_UPSCALE_SGSR && g_ps.pipe[P_SGSR]) {
             p = P_SGSR;
             pc[4] = 1.0f / (float)g_ps.f.w;
