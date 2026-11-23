@@ -165,7 +165,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
           val sharpness = "%.2f".format(java.util.Locale.US, n[10] / 100.0)
           val status = mutableListOf<String>()
           if (fsrOn) status += if (path.startsWith("FSR")) "FILTRO: $path • ${n[12]}x${n[13]}" else "FILTRO: $path"
-          if (nisOn) status += "NIS: $nisState • ${n[4]}x${n[5]} → ${n[6]}x${n[7]}"
+          if (nisOn) status += if (n[1] == 1) "NIS: $nisState • ${n[4]}x${n[5]} → ${n[6]}x${n[7]}" else "NIS: OFF"
           if (casOn) status += "CAS: $casState • nitidez $sharpness"
           if (gpuOn) status += "GPU: ${if (n[0] == 1) "OK" else "INDISPONÍVEL"} • motivo: $reason"
           v.text = status.joinToString("\n")
