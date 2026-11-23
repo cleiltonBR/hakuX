@@ -41,7 +41,7 @@ bool nc_present_init(void)
 {
     hle_disp_gamma_by_consumer(true); /* before the core starts: frames come without it */
     nc_log("hakuX-app", "present: Vulkan; FXAA %s, upscaling %s", g_fxaa ? "on" : "off",
-           g_upscale == NC_UPSCALE_SGSR ? "SGSR" : g_upscale == NC_UPSCALE_FSR ? "FSR 1.0" : "bilinear");
+           g_upscale == NC_UPSCALE_SGSR ? "SGSR" : g_upscale == NC_UPSCALE_FSR ? "FSR 1.0" : g_upscale == NC_UPSCALE_NVE ? "HakuX NVE" : "bilinear");
     return true;
 }
 
@@ -131,7 +131,7 @@ static void debug_poll(void)
     char v[PROP_VALUE_MAX] = "";
     hle_prop_get("debug.hakux.present", v);
     g_dbg.fxaa = strstr(v, "nofxaa") ? 0 : strstr(v, "fxaa") ? 1 : -1;
-    g_dbg.upscale = strstr(v, "fsr") ? NC_UPSCALE_FSR : strstr(v, "sgsr") ? NC_UPSCALE_SGSR : strstr(v, "bilinear") ? NC_UPSCALE_BILINEAR : -1;
+    g_dbg.upscale = strstr(v, "nve") ? NC_UPSCALE_NVE : strstr(v, "fsr") ? NC_UPSCALE_FSR : strstr(v, "sgsr") ? NC_UPSCALE_SGSR : strstr(v, "bilinear") ? NC_UPSCALE_BILINEAR : -1;
     g_dbg.average = !strstr(v, "noaverage");
 }
 
