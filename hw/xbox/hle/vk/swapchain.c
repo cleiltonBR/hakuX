@@ -3911,7 +3911,7 @@ static void log_path(unsigned p, bool fxaa, bool nis, int upscale, bool use_fsr,
             fxaa ? " after FXAA" : "", vw, vh, path);
 }
 
-void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, bool cas, float cas_sharpness, bool nis, float nis_sharpness, float nve_sharpness, uint64_t key)
+void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, bool cas, float cas_sharpness, bool nis, float nis_sharpness, float nve_sharpness, bool nve_compare, uint64_t key)
 {
     /* FSR destination dimensions are independent of NIS output dimensions. */
     nis_status(12, 0);
@@ -4181,7 +4181,7 @@ void hle_present_end(float sx, float sy, bool fxaa, int upscale, bool average, b
             pc[4] = rx;
             pc[5] = ry;
             pc[6] = nve_sharpness;
-            pc[7] = 1.0f; /* temporary same-frame A/B validation */
+            pc[7] = nve_compare ? 1.0f : 0.0f; /* user-controlled same-frame A/B comparison */
         }
         quad(cb, f, 0, g_ps.pipe[p], src, pc, iw, ih);
         const bool final_rcas = cas && g_ps.pipe[P_RCAS] && p == P_RCAS;
