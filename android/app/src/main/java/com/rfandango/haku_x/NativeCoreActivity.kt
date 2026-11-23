@@ -424,7 +424,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     setupOnScreenController()
     setupFpsOverlay()
     setupShaderBuildLine()
-    updateSgsrCompareLabels(AppPrefs(this).sgsrCompare && AppPrefs(this).upscaleFilter == UPSCALE_SGSR)
+    updateSgsrCompareLabels(AppPrefs(this).sgsrCompare)
     if (intent.getBooleanExtra(EXTRA_RELAUNCH, false) || intent.hasExtra(EXTRA_LOADSTATE)) {
       showHeldFrame(intent.getStringExtra(EXTRA_LOADSTATE))
     }
@@ -1346,7 +1346,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
       getString(R.string.overlay_menu_controllers) to "Configurar jogadores e controles conectados",
       "Informações na tela" to "Escolha FPS, RAM, FSR, NIS, CAS e GPU",
       "Imagem e gráficos" to "FSR 1.0, CAS, NIS, resolução e filtros",
-      ("Comparador SGSR1: " + (if (AppPrefs(this).sgsrCompare) "ATIVADO" else "DESATIVADO")) to "Selecione SGSR1 • Esquerda: DESATIVADO • Direita: ATIVADO",
+      ("Comparador gráfico: " + (if (AppPrefs(this).sgsrCompare) "ATIVADO" else "DESATIVADO")) to "NIS, FSR 1.0, CAS/RCAS e SGSR1 • Esquerda: DESATIVADO • Direita: ATIVADO",
       "LSFG • Geração de quadros" to "Multiplicador, desempenho e Flow Scale"
     )
     val actions = mutableListOf<() -> Unit>(
@@ -1359,8 +1359,8 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
         val comparePrefs = AppPrefs(this)
         comparePrefs.sgsrCompare = !comparePrefs.sgsrCompare
         nativeSetSgsrCompare(comparePrefs.sgsrCompare)
-        updateSgsrCompareLabels(comparePrefs.sgsrCompare && comparePrefs.upscaleFilter == UPSCALE_SGSR)
-        Toast.makeText(this, if (comparePrefs.sgsrCompare) "Comparador SGSR1 ativado" else "Comparador SGSR1 desativado", Toast.LENGTH_SHORT).show()
+        updateSgsrCompareLabels(comparePrefs.sgsrCompare)
+        Toast.makeText(this, if (comparePrefs.sgsrCompare) "Comparador gráfico ativado" else "Comparador gráfico desativado", Toast.LENGTH_SHORT).show()
       },
       ::showRuntimeLsfg
     )
@@ -1483,7 +1483,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     render()
   }
 
-  /** Show the labels that identify the two sides of the SGSR1 A/B view. */
+  /** Show the labels that identify the two sides of the graphics A/B comparison. */
   private fun updateSgsrCompareLabels(enabled: Boolean) {
     val rootLayout = mLayout ?: return
     if (!enabled) {
@@ -1522,7 +1522,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
       nativeSetCas(prefs.cas, prefs.casSharpness)
       nativeSetNis(prefs.nis, prefs.nisSharpness)
       nativeSetSgsrCompare(prefs.sgsrCompare)
-      updateSgsrCompareLabels(prefs.sgsrCompare && prefs.upscaleFilter == UPSCALE_SGSR)
+      updateSgsrCompareLabels(prefs.sgsrCompare)
     }
     val scaleValues = (1..16).toList()
     val currentMode = modes.indexOf(prefs.upscaleFilter).coerceAtLeast(0)
@@ -2079,7 +2079,7 @@ class NativeCoreActivity : SDLActivity(), InputManager.InputDeviceListener {
     @JvmStatic
     external fun nativeSetNis(enabled: Boolean, sharpness: Float)
 
-    /** Toggle the SGSR1 same-frame comparison: bilinear left, SGSR1 right. */
+    /** Toggle the same-frame graphics comparison: unprocessed left, selected filters right. */
     @JvmStatic
     external fun nativeSetSgsrCompare(enabled: Boolean)
 
