@@ -116,6 +116,98 @@ object XisoConverter {
     return Result.Done(out!!, moved)
   }
 
+  /** Builds an XDVDFS image from an extracted SAF folder; source files remain untouched. */
+  fun convertFolder(context: Context, treeUri: Uri, progress: (Long, Long) -> Unit, cancelled: () -> Boolean): Result {
+    val rootDoc = DocumentFile.fromTreeUri(context, treeUri) ?: return Result.Failed("Não foi possível abrir a pasta selecionada")
+    if (!rootDoc.isDirectory) return Result.Failed("Selecione uma pasta de jogo")
+    var output: DocumentFile? = null
+    try {
+      var foundXbe = false
+      val root = Entry(ByteArray(0), ATTR_DIR, 0, 0, emptyList())
+      fun collect(folder: DocumentFile, target: Entry, depth: Int) {
+        if (depth > 64) throw IOException("A pasta contém muitos níveis de subpastas")
+        val children = ArrayList<Entry>()
+        val names = HashSet<String>()
+        for (doc in folder.listFiles()) {
+          if (cancelled()) throw CancelledException()
+          val name = doc.name ?: throw IOException("Um arquivo não possui nome")
+          if (name.endsWith(".xiso.iso", true)) continue
+          val encoded = name.toByteArray(Charsets.UTF_8)
+          if (encoded.isEmpty() || encoded.size > 42 || encoded.any { (it.toInt() and 255) < 32 }) throw IOException("Nome incompatível com XDVDFS: $name")
+          if (!names.add(name.uppercase(java.util.Locale.ROOT))) throw IOException("Nome duplicado: $name")
+          if (doc.isDirectory) {
+            val child = Entry(encoded, ATTR_DIR, 0, 0, emptyList())
+            collect(doc, child, depth + 1)
+            children.add(child)
+          } else {
+            val size = doc.length()
+            if (size < 0 || size > MASK) throw IOException("Tamanho inválido: $name")
+            if (depth == 0 && name.equals("default.xbe", true)) foundXbe = true
+            children.add(Entry(encoded, 0, 0, size, null, doc.uri))
+          }
+        }
+        target.children = children
+      }
+      collect(rootDoc, root, 0)
+      if (!foundXbe) throw IOException("Não encontrei default.xbe na raiz da pasta selecionada")
+      layout(root)
+      val safeName = (rootDoc.name ?: "Jogo").replace(Regex("[^A-Za-z0-9._ -]"), "_").trim().ifEmpty { "Jogo" }
+      val fileName = safeName + ".xiso.iso"
+      if (rootDoc.findFile(fileName) != null) throw IOException("$fileName já existe nesta pasta")
+      output = rootDoc.createFile("application/octet-stream", fileName) ?: throw IOException("Não foi possível criar $fileName")
+      val pfd = context.contentResolver.openFileDescriptor(output.uri, "w") ?: throw IOException("Não foi possível gravar $fileName")
+      pfd.use { descriptor ->
+        FileOutputStream(descriptor.fileDescriptor).use { stream ->
+          val writer = Writer(stream.channel)
+          writeHeader(writer, root, ByteArray(8))
+          val total = totalBytes(root)
+          var copied = 0L
+          emitFolder(writer, context, root) { count ->
+            copied += count
+            progress(copied, total)
+            if (cancelled()) throw CancelledException()
+          }
+          writer.zeros((IMAGE_MODULUS - writer.position % IMAGE_MODULUS) % IMAGE_MODULUS)
+          writer.flush()
+        }
+      }
+      return Result.Done(output!!, false)
+    } catch (_: CancelledException) {
+      output?.delete()
+      return Result.Cancelled
+    } catch (error: Exception) {
+      output?.delete()
+      return Result.Failed(error.message ?: error.toString())
+    }
+  }
+
+  private fun emitFolder(writer: Writer, context: Context, dir: Entry, copied: (Long) -> Unit) {
+    writer.seekTo(dir.outSector * SECTOR)
+    val table = ByteBuffer.allocate((nSectors(dir.tableSize.toLong()) * SECTOR).toInt()).order(ByteOrder.LITTLE_ENDIAN)
+    for (i in 0 until table.capacity()) table.put(i, 0xFF.toByte())
+    for (entry in dir.order) {
+      table.position(entry.offset)
+      table.putShort(((entry.left?.offset ?: 0) / 4).toShort())
+      table.putShort(((entry.right?.offset ?: 0) / 4).toShort())
+      table.putInt(entry.outSector.toInt())
+      table.putInt(if (entry.isDir) (nSectors(entry.tableSize.toLong()) * SECTOR).toInt() else entry.size.toInt())
+      table.put(entry.attributes.toByte())
+      table.put(entry.name.size.toByte())
+      table.put(entry.name)
+    }
+    table.position(0)
+    writer.put(table)
+    for (entry in dir.order) {
+      if (entry.isDir) continue
+      writer.seekTo(entry.outSector * SECTOR)
+      val source = context.contentResolver.openInputStream(entry.sourceUri ?: throw IOException("Arquivo de origem ausente"))
+        ?: throw IOException("Não foi possível ler um arquivo da pasta")
+      source.use { writer.copy(it, entry.size, copied) }
+      writer.fill((SECTOR - entry.size % SECTOR) % SECTOR, 0xFF.toByte())
+    }
+    for (entry in dir.order) if (entry.isDir) emitFolder(writer, context, entry, copied)
+  }
+
   private class CancelledException : Exception()
 
   /** A directory entry: the source's, then where it goes in the XISO. */
@@ -125,6 +217,7 @@ object XisoConverter {
     val sector: Long,
     val size: Long,
     var children: List<Entry>?,
+    val sourceUri: Uri? = null,
   ) {
     val isDir get() = attributes and ATTR_DIR != 0
     var outSector = 0L
@@ -298,6 +391,23 @@ object XisoConverter {
         at += k
         left -= k
         copied(k.toLong())
+      }
+    }
+
+    fun copy(input: java.io.InputStream, size: Long, copied: (Long) -> Unit) {
+      val bytes = ByteArray(1024 * 1024)
+      var remaining = size
+      while (remaining > 0) {
+        val wanted = minOf(bytes.size.toLong(), remaining).toInt()
+        var count = 0
+        while (count < wanted) {
+          val read = input.read(bytes, count, wanted - count)
+          if (read < 0) throw IOException("Um arquivo terminou antes do esperado")
+          if (read > 0) count += read
+        }
+        put(ByteBuffer.wrap(bytes, 0, count))
+        remaining -= count
+        copied(count.toLong())
       }
     }
 

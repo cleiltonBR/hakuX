@@ -23,6 +23,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.Slider
 import androidx.compose.material3.MaterialTheme
@@ -57,6 +60,7 @@ import com.rfandango.haku_x.data.Logs
 import com.rfandango.haku_x.data.LosslessDllStore
 import com.rfandango.haku_x.data.PreviousVersion
 import com.rfandango.haku_x.data.Storage
+import com.rfandango.haku_x.data.XisoConverter
 import com.rfandango.haku_x.data.Updates
 import com.rfandango.haku_x.ui.common.ActionItem
 import com.rfandango.haku_x.ui.common.ChoiceDialog
@@ -78,6 +82,7 @@ import java.io.File
 import java.util.Calendar
 import java.util.GregorianCalendar
 import java.util.Locale
+import java.util.concurrent.atomic.AtomicBoolean
 
 /** What the core reads at game start, plus the games folders the library scans. */
 @Composable
@@ -148,6 +153,8 @@ fun SettingsScreen(
   var themeDialog by remember { mutableStateOf(false) }
   val dark = appInDarkTheme()
   var selectedSettingsCategory by remember { mutableStateOf("graphics") }
+  var conversionProgress by remember { mutableStateOf<Pair<Long, Long>?>(null) }
+  var conversionCancel by remember { mutableStateOf<AtomicBoolean?>(null) }
 
   val pickFolder = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri: Uri? ->
     val old = replacing
@@ -158,6 +165,26 @@ fun SettingsScreen(
       folders = prefs.gamesFolders
       if (old != null && old !in folders) {
         Storage.releasePermission(context, old)
+      }
+    }
+  }
+  val pickFolderToConvert = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri: Uri? ->
+    if (uri != null) {
+      Storage.persistPermission(context, uri)
+      val cancel = AtomicBoolean(false)
+      conversionCancel = cancel
+      conversionProgress = 0L to 0L
+      scope.launch {
+        val result = withContext(Dispatchers.IO) {
+          XisoConverter.convertFolder(context, uri, { copied, total -> conversionProgress = copied to total }, { cancel.get() })
+        }
+        conversionCancel = null
+        conversionProgress = null
+        when (result) {
+          is XisoConverter.Result.Done -> snackbar.notify(scope, "XISO criado: " + (result.xiso.name ?: "jogo.xiso.iso"))
+          is XisoConverter.Result.Failed -> snackbar.notify(scope, "Falha na conversão: " + result.message)
+          XisoConverter.Result.Cancelled -> snackbar.notify(scope, "Conversão cancelada. A pasta original foi preservada.")
+        }
       }
     }
   }
@@ -197,6 +224,21 @@ fun SettingsScreen(
         )
       }
     }
+  }
+  conversionProgress?.let { values ->
+    val total = values.second
+    val fraction = if (total > 0L) (values.first.toFloat() / total.toFloat()).coerceIn(0f, 1f) else 0f
+    AlertDialog(
+      onDismissRequest = { conversionCancel?.set(true) },
+      title = { Text("Convertendo pasta para XISO") },
+      text = {
+        Column {
+          Text(if (total > 0L) "${(fraction * 100).toInt()}% · ${values.first / (1024 * 1024)} / ${total / (1024 * 1024)} MB" else "Preparando arquivos…")
+          LinearProgressIndicator(progress = { fraction }, modifier = Modifier.fillMaxWidth().padding(top = 12.dp))
+        }
+      },
+      confirmButton = { TextButton(onClick = { conversionCancel?.set(true) }) { Text("Cancelar") } },
+    )
   }
   SubScreen(title = stringResource(R.string.settings_title), onBack = onBack, snackbar = snackbar) { padding ->
     Column(Modifier.padding(padding).fillMaxSize()) {
@@ -273,6 +315,13 @@ fun SettingsScreen(
       ) {
         replacing = null
         pickFolder.launch(folders.lastOrNull())
+      }
+      ActionItem(
+        title = "Converter pasta para XISO",
+        summary = "Selecione uma pasta que contenha default.xbe. Cria um .xiso.iso sem mover ou apagar os arquivos originais.",
+        icon = Icons.Filled.Add,
+      ) {
+        pickFolderToConvert.launch(null)
       }
       SwitchItem(
         title = "Carregar capas 3D automaticamente",
