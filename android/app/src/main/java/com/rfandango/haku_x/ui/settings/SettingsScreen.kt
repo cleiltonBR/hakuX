@@ -103,6 +103,7 @@ fun SettingsScreen(
   // the xemu-based release left its data here: its migration can run again
   val previous by produceState(false) { value = withContext(Dispatchers.IO) { PreviousVersion(context).find() != null } }
   val scope = rememberCoroutineScope()
+  val snackbar = remember { SnackbarHostState() }
 
   var folders by remember { mutableStateOf(prefs.gamesFolders) }
   var textureDumpEnabled by remember { mutableStateOf(prefs.textureDumpEnabled) }
@@ -210,7 +211,6 @@ fun SettingsScreen(
         }
     }
   }
-  val snackbar = remember { SnackbarHostState() }
   /* The folder the logs' ZIP goes to (data/Logs.kt). */
   val pickLogsFolder = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri: Uri? ->
     if (uri != null) {
