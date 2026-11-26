@@ -76,6 +76,14 @@ jobs:
           test -s "$RUNNER_TEMP/nis_scaler.spv"
           spirv-val --target-env vulkan1.1 "$RUNNER_TEMP/nis_scaler.spv"
 
+      - name: Testar coeficientes, configuração e dispatch NIS (host)
+        run: |
+          c++ -std=c++17 -O2 -I"$GITHUB_WORKSPACE" \
+            "$GITHUB_WORKSPACE/tests/nis_coefficients_test.cpp" \
+            "$GITHUB_WORKSPACE/hw/xbox/hle/vk/nis_coefficients.cpp" \
+            -o "$RUNNER_TEMP/nis_coefficients_test"
+          "$RUNNER_TEMP/nis_coefficients_test"
+
       - name: Android SDK 36 + NDK 29
         run: |
           ANDROID_HOME="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
